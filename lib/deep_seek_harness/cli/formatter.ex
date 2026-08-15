@@ -96,14 +96,14 @@ defmodule DeepSeekHarness.CLI.Formatter do
   end
 
   def format_error(msg) do
-    "#{red()}#{bold()}[ERROR]#{reset()} #{msg}"
+    "#{red()}#{bold()}●#{reset()} #{msg}"
   end
 
   def format_success(msg) do
-    "#{green()}#{bold()}[SUCCESS]#{reset()} #{msg}"
+    "#{green()}#{bold()}●#{reset()} #{msg}"
   end
 
   def format_info(msg) do
-    "#{blue()}#{bold()}[INFO]#{reset()} #{msg}"
+    "#{blue()}#{bold()}●#{reset()} #{msg}"
   end
 end

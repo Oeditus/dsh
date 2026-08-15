@@ -34,9 +34,9 @@ defmodule DeepSeekHarness.FormatterTest do
     assert String.contains?(Formatter.format_user_prompt("main", "deepseek-chat"), "user@main [deepseek-chat]>")
     assert String.contains?(Formatter.format_user_prompt_str("test_prompt"), "test_prompt")
     assert String.contains?(Formatter.format_agent_response("Hello"), "DeepSeek >")
-    assert String.contains?(Formatter.format_error("Failed"), "[ERROR]")
-    assert String.contains?(Formatter.format_success("Done"), "[SUCCESS]")
-    assert String.contains?(Formatter.format_info("Notice"), "[INFO]")
+    assert String.contains?(Formatter.format_error("Failed"), "●")
+    assert String.contains?(Formatter.format_success("Done"), "●")
+    assert String.contains?(Formatter.format_info("Notice"), "●")
   end
 
   test "formats markdown string with marcli rendering" do
