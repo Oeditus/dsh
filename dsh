@@ -3,24 +3,69 @@
 # dsh -- DeepSeek Harness (DSH RAGE) CLI Launcher
 # Executable launcher for DeepSeek Harness OTP Release.
 #
+# Usage:
+#   ./dsh                      Auto-detect release (prod -> dev -> mix run)
+#   ./dsh --env prod           Explicitly launch production release
+#   ./dsh --env dev            Explicitly launch development release
+#   ./dsh --prod               Explicitly launch production release
+#   ./dsh --dev                Explicitly launch development release
+#
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TARGET_ENV="${DSH_ENV:-auto}"
+
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env)
+      TARGET_ENV="$2"
+      shift 2
+      ;;
+    --prod)
+      TARGET_ENV="prod"
+      shift
+      ;;
+    --dev)
+      TARGET_ENV="dev"
+      shift
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
 PROD_REL="$SCRIPT_DIR/_build/prod/rel/dsh/bin/dsh"
 DEV_REL="$SCRIPT_DIR/_build/dev/rel/dsh/bin/dsh"
 
-# Ensure release is compiled if missing
-if [[ ! -x "$PROD_REL" && ! -x "$DEV_REL" ]]; then
-  echo "[INFO] OTP release binary not found. Building release..."
-  (cd "$SCRIPT_DIR" && MIX_ENV=prod mix release dsh --overwrite)
-fi
+case "$TARGET_ENV" in
+  prod)
+    if [[ ! -x "$PROD_REL" ]]; then
+      echo "[INFO] Production OTP release binary not found. Assembling prod release..."
+      (cd "$SCRIPT_DIR" && MIX_ENV=prod mix release dsh --overwrite)
+    fi
+    exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+    ;;
 
-if [[ -x "$PROD_REL" ]]; then
-  exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "$@"
-elif [[ -x "$DEV_REL" ]]; then
-  exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "$@"
-else
-  cd "$SCRIPT_DIR"
-  exec mix run --no-halt -e "DeepSeekHarness.CLI.Main.main(System.argv())" -- "$@"
-fi
+  dev)
+    if [[ ! -x "$DEV_REL" ]]; then
+      echo "[INFO] Dev OTP release binary not found. Assembling dev release..."
+      (cd "$SCRIPT_DIR" && MIX_ENV=dev mix release dsh --overwrite)
+    fi
+    exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+    ;;
+
+  *)
+    if [[ -x "$PROD_REL" ]]; then
+      exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+    elif [[ -x "$DEV_REL" ]]; then
+      exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+    else
+      cd "$SCRIPT_DIR"
+      exec mix run --no-halt -e "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+    fi
+    ;;
+esac

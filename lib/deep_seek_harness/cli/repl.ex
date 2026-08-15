@@ -89,7 +89,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     case Session.compact_context(session_pid) do
       {:ok, summary} ->
         IO.puts(Formatter.format_success("Context successfully compressed!"))
-        md = "### 🗜️ Compressed Context Summary\n" <> summary
+        md = "### Compressed Context Summary\n" <> summary
         IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
 
       {:error, err} ->
@@ -156,7 +156,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     stats = Session.get_token_stats(session_pid)
 
     md = """
-    ### 📊 Session Token & Cost Statistics
+    ### Session Token & Cost Statistics
     - **Estimated Context Tokens**: `#{stats.estimated_prompt_tokens}`
     - **Completion Tokens**: `#{stats.tracked_completion_tokens}`
     - **Total Session Tokens**: `#{stats.total_tokens}`
@@ -187,10 +187,10 @@ defmodule DeepSeekHarness.CLI.Repl do
       if Enum.empty?(skills) do
         "*No skills discovered in `.dsh/skills` or `~/.dsh/skills`.*"
       else
-        Enum.map_join(skills, "\n", fn s -> "- 🎯 **`#{s.name}`** [`#{Path.basename(s.path)}`]: #{s.description}" end)
+        Enum.map_join(skills, "\n", fn s -> "- **`#{s.name}`** [`#{Path.basename(s.path)}`]: #{s.description}" end)
       end
 
-    md = "### 🎯 Discovered Skills (#{length(skills)})\n\n#{skill_rows}"
+    md = "### Discovered Skills (#{length(skills)})\n\n#{skill_rows}"
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
   end
@@ -224,7 +224,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     case Session.spawn_subagent(session_pid, prompt) do
       {:ok, result} ->
-        md = "### 🤖 Subagent Completed Result\n" <> result
+        md = "### Subagent Completed Result\n" <> result
         IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
 
       {:error, err} ->
@@ -240,7 +240,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     tools_rows =
       Enum.map_join(tools, "\n", fn t -> "- **`#{t.name}`**: #{t.description}" end)
 
-    md = "### 🛠️ Registered Tools (#{length(tools)})\n\n#{tools_rows}"
+    md = "### Registered Tools (#{length(tools)})\n\n#{tools_rows}"
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
   end
@@ -375,7 +375,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     info = Session.get_info(session_pid)
 
     md = """
-    ### ⚙️ Active Session Status
+    ### Active Session Status
     - **Session ID**: `#{info.session_id}`
     - **Actor PID**: `#{inspect(info.pid)}`
     - **Model**: `#{info.model}`
@@ -394,7 +394,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     data = NodeManager.list_nodes()
 
     md = """
-    ### 🌐 Distributed Erlang Node Cluster
+    ### Distributed Erlang Node Cluster
     - **Local Node**: `#{data.self}`
     - **Node Alive?**: `#{data.alive?}`
     - **Connected Nodes**: `#{inspect(data.connected)}`
@@ -462,16 +462,16 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     md =
       if Enum.empty?(servers) do
-        "### 🔌 Connected MCP Servers (0)\n*No MCP servers connected. Use `/mcp add <name> <cmd> [args...]`, `/mcp load`, or `/ragex`.*"
+        "### Connected MCP Servers (0)\n*No MCP servers connected. Use `/mcp add <name> <cmd> [args...]`, `/mcp load`, or `/ragex`.*"
       else
         server_blocks =
           Enum.map(servers, fn s ->
             tools_list = Enum.map_join(s.tools, "\n", fn t -> "  - `#{t}`" end)
-            "#### 📦 #{s.name} (`#{s.command} #{Enum.join(s.args, " ")}`)\n**Registered Tools (#{s.tools_count}):**\n#{tools_list}"
+            "#### #{s.name} (`#{s.command} #{Enum.join(s.args, " ")}`)\n**Registered Tools (#{s.tools_count}):**\n#{tools_list}"
           end)
           |> Enum.join("\n\n")
 
-        "### 🔌 Connected MCP Servers (#{length(servers)})\n\n" <> server_blocks
+        "### Connected MCP Servers (#{length(servers)})\n\n" <> server_blocks
       end
 
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")

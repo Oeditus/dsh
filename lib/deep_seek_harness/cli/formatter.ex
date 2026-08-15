@@ -92,7 +92,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
 
   def format_agent_response(content) do
     rendered = format_markdown(content)
-    "#{cyan()}#{bold()}🤖 DeepSeek >#{reset()}\n#{rendered}"
+    "#{cyan()}#{bold()}󰚩 DeepSeek >#{reset()}\n#{rendered}"
   end
 
   def format_error(msg) do
