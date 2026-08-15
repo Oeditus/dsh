@@ -31,7 +31,14 @@ defmodule DeepSeekHarness.CLI.Formatter do
   end
 
   def banner_color do
-    if Mix.env() == :prod do
+    prod? =
+      if Code.ensure_loaded?(Mix) do
+        Mix.env() == :prod
+      else
+        true
+      end
+
+    if prod? do
       IO.ANSI.light_magenta()
     else
       IO.ANSI.cyan()
