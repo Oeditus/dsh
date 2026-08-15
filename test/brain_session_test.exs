@@ -51,4 +51,24 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert info_after.pid == initial_info.pid
     assert info_after.session_id == initial_info.session_id
   end
+
+  test "configures hands execution mode", %{pid: pid} do
+    assert {:ok, %{mode: :remote}} = Session.set_hands_mode(pid, :remote, "hands@127.0.0.1")
+    info = Session.get_info(pid)
+    assert info.hands_mode == :remote
+    assert info.hands_target == "hands@127.0.0.1"
+  end
+
+  test "spawns subagent actor and calculates token stats", %{pid: pid} do
+    stats = Session.get_token_stats(pid)
+    assert is_integer(stats.total_tokens)
+
+    assert {:ok, result} = Session.spawn_subagent(pid, "Research quantum computing")
+    assert is_binary(result)
+  end
+
+  test "compresses context via session actor", %{pid: pid} do
+    assert {:ok, summary} = Session.compact_context(pid)
+    assert is_binary(summary)
+  end
 end

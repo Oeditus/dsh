@@ -57,6 +57,19 @@ defmodule DeepSeekHarness.Config do
     end
   end
 
+  @doc "Saves workspace local configuration file (.dsh/config.json)."
+  def save_config(config, cwd \\ ".") do
+    local_path = Path.join(cwd, ".dsh/config.json")
+
+    with :ok <- local_path |> Path.dirname() |> File.mkdir_p(),
+         {:ok, json} <- Jason.encode(config, pretty: true),
+         :ok <- File.write(local_path, json) do
+      :ok
+    else
+      err -> {:error, "Failed to save local config: #{inspect(err)}"}
+    end
+  end
+
   defp read_json_config(path) do
     if File.exists?(path) do
       case File.read(path) do

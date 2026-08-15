@@ -194,7 +194,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
   end
 
-  defp history_navigate(state, :up) do
+  def history_navigate(state, :up) do
     if Enum.empty?(state.history) do
       state
     else
@@ -206,7 +206,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
   end
 
-  defp history_navigate(state, :down) do
+  def history_navigate(state, :down) do
     case state.hist_idx do
       -1 ->
         state
@@ -223,11 +223,11 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
   end
 
-  defp toggle_reverse_search(state) do
+  def toggle_reverse_search(state) do
     %{state | search_mode: not state.search_mode}
   end
 
-  defp find_in_history(query, history) do
+  def find_in_history(query, history) do
     case Enum.find(history, fn item -> String.contains?(item, query) end) do
       nil -> ""
       match -> match

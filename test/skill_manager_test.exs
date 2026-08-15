@@ -27,4 +27,14 @@ defmodule DeepSeekHarness.SkillManagerTest do
 
     File.rm_rf!(tmp_dir)
   end
+
+  test "discovers skills in project and system directories" do
+    skills = SkillManager.discover_skills()
+    assert is_list(skills)
+  end
+
+  test "handles non-existent skill file parsing" do
+    assert {:error, msg} = SkillManager.parse_skill_file("/tmp/non_existent_skill_path/SKILL.md")
+    assert String.contains?(msg, "Failed to read skill file")
+  end
 end

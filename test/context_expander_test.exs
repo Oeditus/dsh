@@ -28,4 +28,21 @@ defmodule DeepSeekHarness.ContextExpanderTest do
 
     File.rm_rf!(tmp_dir)
   end
+
+  test "expands file URI reference (@file://...)" do
+    tmp_path = Path.join(System.tmp_dir!(), "file_uri_#{System.unique_integer([:positive])}.txt")
+    File.write!(tmp_path, "File URI content")
+
+    assert {:ok, expanded, attachments} = ContextExpander.expand("Check @file://#{tmp_path}")
+    assert String.contains?(expanded, "File URI content")
+    assert ("file://" <> tmp_path) in attachments or tmp_path in attachments
+
+    File.rm(tmp_path)
+  end
+
+  test "retains original token if target file does not exist" do
+    assert {:ok, expanded, attachments} = ContextExpander.expand("Check @/tmp/non_existent_file_xyz_123.txt")
+    assert String.contains?(expanded, "@/tmp/non_existent_file_xyz_123.txt")
+    assert attachments == []
+  end
 end
