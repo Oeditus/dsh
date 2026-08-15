@@ -11,6 +11,7 @@ defmodule DeepSeekHarness.Distribution.NodeManager do
       {:ok, Node.self()}
     else
       full_name = String.to_atom(name)
+
       case Node.start(full_name, type) do
         {:ok, _pid} ->
           Logger.info("[Distribution] Started Erlang node: #{Node.self()}")

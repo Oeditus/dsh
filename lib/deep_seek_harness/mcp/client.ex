@@ -64,11 +64,12 @@ defmodule DeepSeekHarness.MCP.Client do
     }
 
     # Send MCP initialize request
-    state = send_json_rpc(state, "initialize", %{
-      "protocolVersion" => "2024-11-05",
-      "capabilities" => %{},
-      "clientInfo" => %{"name" => "DeepSeekHarness-Elixir", "version" => "0.1.0"}
-    })
+    state =
+      send_json_rpc(state, "initialize", %{
+        "protocolVersion" => "2024-11-05",
+        "capabilities" => %{},
+        "clientInfo" => %{"name" => "DeepSeekHarness-Elixir", "version" => "0.1.0"}
+      })
 
     {:ok, state}
   end
@@ -119,7 +120,10 @@ defmodule DeepSeekHarness.MCP.Client do
         end
 
       {:ok, notification} ->
-        Logger.debug("[MCP.Client] Received notification from #{state.name}: #{inspect(notification)}")
+        Logger.debug(
+          "[MCP.Client] Received notification from #{state.name}: #{inspect(notification)}"
+        )
+
         {:noreply, state}
 
       _ ->
@@ -148,6 +152,7 @@ defmodule DeepSeekHarness.MCP.Client do
 
   defp send_json_rpc(state, method, params, id \\ nil) do
     id = id || state.req_id
+
     payload = %{
       "jsonrpc" => "2.0",
       "id" => id,

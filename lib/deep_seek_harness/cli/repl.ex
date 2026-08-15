@@ -18,10 +18,20 @@ defmodule DeepSeekHarness.CLI.Repl do
     IO.puts(Formatter.banner())
 
     session_id = opts[:session_id] || "main"
-    {:ok, session_pid} = SessionSupervisor.start_session(session_id: session_id, model: opts[:model] || "deepseek-chat")
+
+    {:ok, session_pid} =
+      SessionSupervisor.start_session(
+        session_id: session_id,
+        model: opts[:model] || "deepseek-chat"
+      )
 
     IO.puts(Formatter.format_info("Brain actor spawned for session '#{session_id}'"))
-    IO.puts(Formatter.format_info("Type /help for command menu or !command for direct shell execution.\n"))
+
+    IO.puts(
+      Formatter.format_info(
+        "Type /help for command menu or !command for direct shell execution.\n"
+      )
+    )
 
     history = LineEditor.load_history()
     loop(session_pid, session_id, history)
@@ -50,7 +60,10 @@ defmodule DeepSeekHarness.CLI.Repl do
             loop(session_pid, session_id, updated_history)
 
           :exit ->
-            IO.puts("#{Formatter.cyan()}Session ended. Exiting DeepSeek Harness.#{Formatter.reset()}")
+            IO.puts(
+              "#{Formatter.cyan()}Session ended. Exiting DeepSeek Harness.#{Formatter.reset()}"
+            )
+
             :ok
         end
     end
@@ -121,7 +134,11 @@ defmodule DeepSeekHarness.CLI.Repl do
         _ -> {"main", "HEAD"}
       end
 
-    IO.puts(Formatter.format_info("Comparing branches '#{base_branch}' vs '#{head_branch}' and generating Code Review..."))
+    IO.puts(
+      Formatter.format_info(
+        "Comparing branches '#{base_branch}' vs '#{head_branch}' and generating Code Review..."
+      )
+    )
 
     case Session.generate_code_review(session_pid, base_branch, head_branch) do
       {:ok, %{content: review_md}} ->
@@ -187,7 +204,9 @@ defmodule DeepSeekHarness.CLI.Repl do
       if Enum.empty?(skills) do
         "*No skills discovered in `.dsh/skills` or `~/.dsh/skills`.*"
       else
-        Enum.map_join(skills, "\n", fn s -> "- **`#{s.name}`** [`#{Path.basename(s.path)}`]: #{s.description}" end)
+        Enum.map_join(skills, "\n", fn s ->
+          "- **`#{s.name}`** [`#{Path.basename(s.path)}`]: #{s.description}"
+        end)
       end
 
     md = "### Discovered Skills (#{length(skills)})\n\n#{skill_rows}"
@@ -203,6 +222,7 @@ defmodule DeepSeekHarness.CLI.Repl do
       %SkillManager{content: content} ->
         prompt = "Execute skill '#{name}':\n\n#{content}"
         IO.puts(Formatter.format_info("Loading and executing skill '#{name}'..."))
+
         case Session.send_user_message(session_pid, prompt) do
           {:ok, %{content: out}} ->
             IO.puts("\n" <> Formatter.format_agent_response(out) <> "\n")
@@ -212,7 +232,11 @@ defmodule DeepSeekHarness.CLI.Repl do
         end
 
       nil ->
-        IO.puts(Formatter.format_error("Skill '#{name}' not found. Use /skills to view available skills."))
+        IO.puts(
+          Formatter.format_error(
+            "Skill '#{name}' not found. Use /skills to view available skills."
+          )
+        )
     end
 
     :continue
@@ -248,7 +272,11 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/plugins reload", _session_pid, _session_id) do
     case PluginLoader.reload_all() do
       {:ok, tools_list} ->
-        IO.puts(Formatter.format_success("Hot-reloaded plugins and updated active Brain actors! Total tools: #{length(tools_list)}"))
+        IO.puts(
+          Formatter.format_success(
+            "Hot-reloaded plugins and updated active Brain actors! Total tools: #{length(tools_list)}"
+          )
+        )
 
       {:error, err} ->
         IO.puts(Formatter.format_error("Plugin reload failed: #{err}"))
@@ -258,8 +286,12 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   # Handle all variations of /mcp list, /mcp ls, /mcp
-  def handle_input("/mcp list", session_pid, session_id), do: handle_mcp_list(session_pid, session_id)
-  def handle_input("/mcp ls", session_pid, session_id), do: handle_mcp_list(session_pid, session_id)
+  def handle_input("/mcp list", session_pid, session_id),
+    do: handle_mcp_list(session_pid, session_id)
+
+  def handle_input("/mcp ls", session_pid, session_id),
+    do: handle_mcp_list(session_pid, session_id)
+
   def handle_input("/mcp", session_pid, session_id), do: handle_mcp_list(session_pid, session_id)
 
   def handle_input("/mcp load", _session_pid, _session_id) do
@@ -285,7 +317,11 @@ defmodule DeepSeekHarness.CLI.Repl do
 
         case MCPServerManager.add_server(name, cmd, cmd_args) do
           {:ok, tools} ->
-            IO.puts(Formatter.format_success("Connected MCP server '#{name}'! Registered #{length(tools)} tools."))
+            IO.puts(
+              Formatter.format_success(
+                "Connected MCP server '#{name}'! Registered #{length(tools)} tools."
+              )
+            )
 
           {:error, err} ->
             IO.puts(Formatter.format_error(err))
@@ -300,11 +336,18 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/ragex", _session_pid, _session_id) do
     target_dir = File.cwd!()
-    IO.puts(Formatter.format_info("Mounting Ragex MCP server targeting workspace '#{target_dir}'..."))
+
+    IO.puts(
+      Formatter.format_info("Mounting Ragex MCP server targeting workspace '#{target_dir}'...")
+    )
 
     case MCPServerManager.start_ragex(target_dir: target_dir) do
       {:ok, dir, tools} ->
-        IO.puts(Formatter.format_success("Mounted Ragex MCP server targeting '#{dir}'! Registered #{length(tools)} code analysis & refactoring tools."))
+        IO.puts(
+          Formatter.format_success(
+            "Mounted Ragex MCP server targeting '#{dir}'! Registered #{length(tools)} code analysis & refactoring tools."
+          )
+        )
 
       {:error, err} ->
         IO.puts(Formatter.format_error(err))
@@ -345,7 +388,11 @@ defmodule DeepSeekHarness.CLI.Repl do
         IO.puts(Formatter.format_success("Hands target set to local sandbox"))
 
       _ ->
-        IO.puts(Formatter.format_error("Usage: /mode [local | remote <node_name> | docker <container_id>]"))
+        IO.puts(
+          Formatter.format_error(
+            "Usage: /mode [local | remote <node_name> | docker <container_id>]"
+          )
+        )
     end
 
     :continue
@@ -407,7 +454,12 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   # Catch any unknown slash command to avoid sending accidental mistyped commands to LLM
   def handle_input("/" <> command, _session_pid, _session_id) do
-    IO.puts(Formatter.format_error("Unknown command '/#{command}'. Type /help for available slash commands."))
+    IO.puts(
+      Formatter.format_error(
+        "Unknown command '/#{command}'. Type /help for available slash commands."
+      )
+    )
+
     :continue
   end
 
@@ -446,6 +498,7 @@ defmodule DeepSeekHarness.CLI.Repl do
       pid
     else
       via = Session.via_tuple(session_id)
+
       case GenServer.whereis(via) do
         nil ->
           IO.puts(Formatter.format_info("Restarting agent session actor '#{session_id}'..."))
@@ -465,17 +518,17 @@ defmodule DeepSeekHarness.CLI.Repl do
       if Enum.empty?(servers) do
         "### Connected MCP Servers (0)\n*No MCP servers connected. Use `/mcp add <name> <cmd> [args...]`, `/mcp load`, or `/ragex`.*"
       else
-        server_blocks =
-          Enum.map(servers, fn s ->
-            tools_list = Enum.map_join(s.tools, "\n", fn t -> "  - `#{t}`" end)
-            "#### #{s.name} (`#{s.command} #{Enum.join(s.args, " ")}`)\n**Registered Tools (#{s.tools_count}):**\n#{tools_list}"
-          end)
-          |> Enum.join("\n\n")
-
+        server_blocks = Enum.map_join(servers, "\n\n", &format_server_block/1)
         "### Connected MCP Servers (#{length(servers)})\n\n" <> server_blocks
       end
 
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
+  end
+
+  defp format_server_block(s) do
+    tools_list = Enum.map_join(s.tools, "\n", fn t -> "  - `#{t}`" end)
+
+    "#### #{s.name} (`#{s.command} #{Enum.join(s.args, " ")}`)\n**Registered Tools (#{s.tools_count}):**\n#{tools_list}"
   end
 end

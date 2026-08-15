@@ -48,8 +48,10 @@ defmodule DeepSeekHarness.Git do
     range = "#{base_branch}...#{head_branch}"
     log_range = "#{base_branch}..#{head_branch}"
 
-    with {stat, 0} <- System.cmd("git", ["diff", "--stat", range], cd: cwd, stderr_to_stdout: true),
-         {log, 0} <- System.cmd("git", ["log", "--oneline", log_range], cd: cwd, stderr_to_stdout: true),
+    with {stat, 0} <-
+           System.cmd("git", ["diff", "--stat", range], cd: cwd, stderr_to_stdout: true),
+         {log, 0} <-
+           System.cmd("git", ["log", "--oneline", log_range], cd: cwd, stderr_to_stdout: true),
          {raw_diff, 0} <- System.cmd("git", ["diff", range], cd: cwd, stderr_to_stdout: true) do
       diff_payload =
         if byte_size(raw_diff) > 300_000 do
@@ -69,16 +71,17 @@ defmodule DeepSeekHarness.Git do
        }}
     else
       {err, code} ->
-        {:error, "Failed to compare branches (#{base_branch} vs #{head_branch}, code #{code}): #{err}"}
+        {:error,
+         "Failed to compare branches (#{base_branch} vs #{head_branch}, code #{code}): #{err}"}
     end
   rescue
     e -> {:error, "Branch comparison exception: #{Exception.message(e)}"}
   end
 
-  defp colorize_diff(diff_str) do
-    diff_str
+  defp colorize_diff(raw_diff) do
+    raw_diff
     |> String.split("\n")
-    |> Enum.map(fn line ->
+    |> Enum.map_join("\n", fn line ->
       cond do
         String.starts_with?(line, "+") and not String.starts_with?(line, "+++") ->
           IO.ANSI.green() <> line <> IO.ANSI.reset()
@@ -93,6 +96,5 @@ defmodule DeepSeekHarness.Git do
           line
       end
     end)
-    |> Enum.join("\n")
   end
 end

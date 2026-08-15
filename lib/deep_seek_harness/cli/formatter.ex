@@ -82,12 +82,11 @@ defmodule DeepSeekHarness.CLI.Formatter do
 
   @doc "Renders markdown text using Marcli library into styled ANSI terminal text."
   def format_markdown(text) when is_binary(text) do
-    try do
-      Marcli.render(text)
-    rescue
-      _ -> text
-    end
+    Marcli.render(text)
+  rescue
+    _ -> text
   end
+
   def format_markdown(text), do: inspect(text)
 
   def format_agent_response(content) do

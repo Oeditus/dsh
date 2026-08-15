@@ -153,10 +153,12 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
       :tab ->
         buf_str = List.to_string(state.buffer)
+
         case tab_complete(buf_str) do
           {:ok, completed} ->
             chars = String.to_charlist(completed)
             raw_loop(%{state | buffer: chars, cursor: length(chars)})
+
           _ ->
             raw_loop(state)
         end
@@ -265,6 +267,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
       # Reposition cursor
       tail_len = length(state.buffer) - state.cursor
+
       if tail_len > 0 do
         IO.write("\e[#{tail_len}D")
       end
@@ -331,8 +334,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       |> String.graphemes()
       |> Enum.zip(String.graphemes(str))
       |> Enum.take_while(fn {a, b} -> a == b end)
-      |> Enum.map(&elem(&1, 0))
-      |> Enum.join()
+      |> Enum.map_join("", &elem(&1, 0))
     end)
   end
 
@@ -362,28 +364,44 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     case IO.getn("", 1) do
       "[" ->
         case IO.getn("", 1) do
-          "A" -> :up
-          "B" -> :down
-          "C" -> :right
-          "D" -> :left
-          "H" -> :home
-          "F" -> :end
+          "A" ->
+            :up
+
+          "B" ->
+            :down
+
+          "C" ->
+            :right
+
+          "D" ->
+            :left
+
+          "H" ->
+            :home
+
+          "F" ->
+            :end
+
           "1" ->
             case IO.getn("", 1) do
               "~" -> :home
               _ -> :home
             end
+
           "4" ->
             case IO.getn("", 1) do
               "~" -> :end
               _ -> :end
             end
+
           "3" ->
             case IO.getn("", 1) do
               "~" -> :delete
               _ -> :delete
             end
-          _ -> :other
+
+          _ ->
+            :other
         end
 
       "O" ->

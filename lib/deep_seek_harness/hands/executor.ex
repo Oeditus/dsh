@@ -7,9 +7,12 @@ defmodule DeepSeekHarness.Hands.Executor do
   require Logger
 
   defstruct [
-    mode: :local,           # :local | :remote | :docker
-    remote_node: nil,       # e.g., :"hands@127.0.0.1"
-    docker_container: nil   # e.g., "dsh_sandbox_1"
+    # :local | :remote | :docker
+    mode: :local,
+    # e.g., :"hands@127.0.0.1"
+    remote_node: nil,
+    # e.g., "dsh_sandbox_1"
+    docker_container: nil
   ]
 
   @type execution_mode :: :local | :remote | :docker
@@ -17,16 +20,26 @@ defmodule DeepSeekHarness.Hands.Executor do
   @doc "Executes a tool call under the configured sandbox target."
   def execute(%__MODULE__{mode: :local}, tool_name, args) do
     Logger.debug("[Hands.Executor] [local] Executing #{tool_name} with args: #{inspect(args)}")
+
     case DeepSeekHarness.Plugin.Loader.execute_tool(tool_name, args, :infinity) do
       {:ok, result} -> {:ok, format_output(result)}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  def execute(%__MODULE__{mode: :remote, remote_node: node}, tool_name, args) when not is_nil(node) do
-    Logger.info("[Hands.Executor] [remote:#{node}] Executing #{tool_name} via Distributed Erlang RPC")
+  def execute(%__MODULE__{mode: :remote, remote_node: node}, tool_name, args)
+      when not is_nil(node) do
+    Logger.info(
+      "[Hands.Executor] [remote:#{node}] Executing #{tool_name} via Distributed Erlang RPC"
+    )
 
-    case :rpc.call(node, DeepSeekHarness.Plugin.Loader, :execute_tool, [tool_name, args, :infinity], :infinity) do
+    case :rpc.call(
+           node,
+           DeepSeekHarness.Plugin.Loader,
+           :execute_tool,
+           [tool_name, args, :infinity],
+           :infinity
+         ) do
       {:ok, result} ->
         {:ok, format_output(result)}
 
@@ -38,7 +51,8 @@ defmodule DeepSeekHarness.Hands.Executor do
     end
   end
 
-  def execute(%__MODULE__{mode: :docker, docker_container: container}, tool_name, args) when not is_nil(container) do
+  def execute(%__MODULE__{mode: :docker, docker_container: container}, tool_name, args)
+      when not is_nil(container) do
     Logger.info("[Hands.Executor] [docker:#{container}] Executing tool via Docker sandbox")
 
     case tool_name do
@@ -58,7 +72,8 @@ defmodule DeepSeekHarness.Hands.Executor do
   end
 
   def execute(config, tool_name, args) do
-    {:error, "Invalid Hands configuration: #{inspect(config)} for tool #{tool_name} (#{inspect(args)})"}
+    {:error,
+     "Invalid Hands configuration: #{inspect(config)} for tool #{tool_name} (#{inspect(args)})"}
   end
 
   defp format_output(output) when is_binary(output), do: output

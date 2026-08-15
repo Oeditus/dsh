@@ -1,11 +1,14 @@
 defmodule DeepSeekHarness.Plugin.DefaultTools do
+  @moduledoc false
   @behaviour DeepSeekHarness.Plugin.Behaviour
 
   @impl true
   def name, do: "DefaultTools"
 
   @impl true
-  def description, do: "Provides default workspace tools: read_file, write_file, replace_file, list_dir, bash, and elixir_eval."
+  def description,
+    do:
+      "Provides default workspace tools: read_file, write_file, replace_file, list_dir, bash, and elixir_eval."
 
   @impl true
   def tools do
@@ -55,7 +58,10 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
         parameters: %{
           type: "object",
           properties: %{
-            path: %{type: "string", description: "Directory path (defaults to current directory '.')."}
+            path: %{
+              type: "string",
+              description: "Directory path (defaults to current directory '.')."
+            }
           },
           required: []
         },
@@ -75,7 +81,8 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       },
       %{
         name: "elixir_eval",
-        description: "Evaluates Elixir code string directly in the runtime and returns the result.",
+        description:
+          "Evaluates Elixir code string directly in the runtime and returns the result.",
         parameters: %{
           type: "object",
           properties: %{
@@ -109,6 +116,7 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       {:ok, content} ->
         if String.contains?(content, target) do
           updated = String.replace(content, target, replacement)
+
           case File.write(path, updated) do
             :ok -> {:ok, "Successfully replaced target text in #{path}"}
             {:error, reason} -> {:error, "Failed to write to file '#{path}': #{inspect(reason)}"}
@@ -124,22 +132,20 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
 
   def list_dir(args) do
     dir = Map.get(args, "path", ".")
+
     case File.ls(dir) do
       {:ok, files} ->
-        detailed =
-          files
-          |> Enum.map(fn f ->
-            full = Path.join(dir, f)
-            type = if File.dir?(full), do: "[DIR]", else: "[FILE]"
-            "#{type} #{f}"
-          end)
-          |> Enum.join("\n")
-
+        detailed = Enum.map_join(files, "\n", &format_file_entry(dir, &1))
         {:ok, "Contents of #{dir}:\n" <> detailed}
 
       {:error, reason} ->
         {:error, "Failed to list directory '#{dir}': #{inspect(reason)}"}
     end
+  end
+
+  defp format_file_entry(dir, f) do
+    type = if File.dir?(Path.join(dir, f)), do: "[DIR]", else: "[FILE]"
+    "#{type} #{f}"
   end
 
   def execute_bash(%{"command" => cmd}) do

@@ -5,7 +5,8 @@ defmodule DeepSeekHarness.Config do
 
   @default_config %{
     "model" => "deepseek-chat",
-    "permission_mode" => "ask_confirm", # "auto_approve" | "ask_confirm"
+    # "auto_approve" | "ask_confirm"
+    "permission_mode" => "ask_confirm",
     "temperature" => 0.7,
     "system_prompt_addon" => "",
     "mcp_servers" => %{}
@@ -31,18 +32,14 @@ defmodule DeepSeekHarness.Config do
       Path.join(cwd, "AGYRULES")
     ]
 
-    rule_contents =
-      rule_files
-      |> Enum.filter(&File.exists?/1)
-      |> Enum.map(fn path ->
-        case File.read(path) do
-          {:ok, content} -> "=== Project Rule (#{Path.basename(path)}) ===\n#{content}\n"
-          _ -> ""
-        end
-      end)
-      |> Enum.join("\n")
-
-    rule_contents
+    rule_files
+    |> Enum.filter(&File.exists?/1)
+    |> Enum.map_join("\n", fn path ->
+      case File.read(path) do
+        {:ok, content} -> "=== Project Rule (#{Path.basename(path)}) ===\n#{content}\n"
+        _ -> ""
+      end
+    end)
   end
 
   def save_global_config(new_config) do
@@ -79,7 +76,8 @@ defmodule DeepSeekHarness.Config do
             _ -> %{}
           end
 
-        _ -> %{}
+        _ ->
+          %{}
       end
     else
       %{}

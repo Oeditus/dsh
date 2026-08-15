@@ -32,7 +32,8 @@ defmodule DeepSeekHarness.Skill.Manager do
             end
           end)
 
-        _ -> []
+        _ ->
+          []
       end
     end)
     |> Enum.uniq_by(& &1.name)

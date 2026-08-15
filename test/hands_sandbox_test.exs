@@ -6,10 +6,16 @@ defmodule DeepSeekHarness.HandsSandboxTest do
   test "executes local file operations cleanly" do
     config = %HandsExecutor{mode: :local}
 
-    tmp_file = Path.join(System.tmp_dir!(), "test_sandbox_#{System.unique_integer([:positive])}.txt")
+    tmp_file =
+      Path.join(System.tmp_dir!(), "test_sandbox_#{System.unique_integer([:positive])}.txt")
 
     # Write file
-    {:ok, write_res} = HandsExecutor.execute(config, "write_file", %{"path" => tmp_file, "content" => "Hello DeepSeek Harness!"})
+    {:ok, write_res} =
+      HandsExecutor.execute(config, "write_file", %{
+        "path" => tmp_file,
+        "content" => "Hello DeepSeek Harness!"
+      })
+
     assert write_res =~ "Successfully wrote"
 
     # Read file
@@ -17,7 +23,13 @@ defmodule DeepSeekHarness.HandsSandboxTest do
     assert read_res == "Hello DeepSeek Harness!"
 
     # Replace file content
-    {:ok, rep_res} = HandsExecutor.execute(config, "replace_file", %{"path" => tmp_file, "target" => "Hello", "replacement" => "Greetings"})
+    {:ok, rep_res} =
+      HandsExecutor.execute(config, "replace_file", %{
+        "path" => tmp_file,
+        "target" => "Hello",
+        "replacement" => "Greetings"
+      })
+
     assert rep_res =~ "Successfully replaced"
 
     # Verify replacement
@@ -29,7 +41,10 @@ defmodule DeepSeekHarness.HandsSandboxTest do
 
   test "executes local bash command" do
     config = %HandsExecutor{mode: :local}
-    {:ok, out} = HandsExecutor.execute(config, "bash", %{"command" => "echo 'DSH Hands Execution Test'"})
+
+    {:ok, out} =
+      HandsExecutor.execute(config, "bash", %{"command" => "echo 'DSH Hands Execution Test'"})
+
     assert String.trim(out) == "DSH Hands Execution Test"
   end
 end

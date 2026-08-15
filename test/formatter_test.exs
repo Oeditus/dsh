@@ -31,7 +31,11 @@ defmodule DeepSeekHarness.FormatterTest do
   end
 
   test "formats prompt string and status messages" do
-    assert String.contains?(Formatter.format_user_prompt("main", "deepseek-chat"), "user@main [deepseek-chat]>")
+    assert String.contains?(
+             Formatter.format_user_prompt("main", "deepseek-chat"),
+             "user@main [deepseek-chat]>"
+           )
+
     assert String.contains?(Formatter.format_user_prompt_str("test_prompt"), "test_prompt")
     assert String.contains?(Formatter.format_agent_response("Hello"), "DeepSeek >")
     assert String.contains?(Formatter.format_error("Failed"), "●")

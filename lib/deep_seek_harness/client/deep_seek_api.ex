@@ -108,12 +108,14 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
 
     # Check if last user message asks to perform an action using tools
     cond do
-      String.contains?(query, "list") or String.contains?(query, "ls") or String.contains?(query, "directory") ->
+      String.contains?(query, "list") or String.contains?(query, "ls") or
+          String.contains?(query, "directory") ->
         {:ok,
          %{
            role: "assistant",
            content: "I will list the files in the directory to inspect the project layout.",
-           reasoning_content: "Thought: The user requested directory contents. Utilizing list_dir tool.",
+           reasoning_content:
+             "Thought: The user requested directory contents. Utilizing list_dir tool.",
            tool_calls: [
              %{
                id: "call_mock_#{System.unique_integer([:positive])}",
@@ -123,7 +125,8 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
            ]
          }}
 
-      String.contains?(query, "eval") or String.contains?(query, "calculate") or String.contains?(query, "elixir") ->
+      String.contains?(query, "eval") or String.contains?(query, "calculate") or
+          String.contains?(query, "elixir") ->
         {:ok,
          %{
            role: "assistant",
@@ -140,10 +143,12 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
 
       true ->
         prefix = if model == "deepseek-reasoner", do: "[DeepSeek-R1 Reasoning Mode] ", else: ""
+
         {:ok,
          %{
            role: "assistant",
-           content: "#{prefix}Received prompt: \"#{last_msg["content"]}\". (Running in offline/mock mode. Set DEEPSEEK_API_KEY to connect live to DeepSeek API).",
+           content:
+             "#{prefix}Received prompt: \"#{last_msg["content"]}\". (Running in offline/mock mode. Set DEEPSEEK_API_KEY to connect live to DeepSeek API).",
            reasoning_content: "Analyzed request using spatiotemporal actor context.",
            tool_calls: []
          }}

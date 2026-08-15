@@ -20,6 +20,10 @@ defmodule DeepSeekHarness.ContextCompressorTest do
     assert is_binary(summary)
     assert length(new_messages) == 2
     assert Enum.at(new_messages, 0)["role"] == "system"
-    assert String.contains?(Enum.at(new_messages, 1)["content"], "Compressed Conversation Context")
+
+    assert String.contains?(
+             Enum.at(new_messages, 1)["content"],
+             "Compressed Conversation Context"
+           )
   end
 end

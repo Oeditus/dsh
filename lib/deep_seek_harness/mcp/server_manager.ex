@@ -50,7 +50,15 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   def handle_call({:add_server, name, command, args, opts}, _from, state) do
     case start_and_register_mcp_server(name, command, args, opts) do
       {:ok, tools_registered, pid} ->
-        new_servers = Map.put(state.servers, name, %{command: command, args: args, cwd: opts[:cwd], pid: pid, tools: tools_registered})
+        new_servers =
+          Map.put(state.servers, name, %{
+            command: command,
+            args: args,
+            cwd: opts[:cwd],
+            pid: pid,
+            tools: tools_registered
+          })
+
         {:reply, {:ok, tools_registered}, %{state | servers: new_servers}}
 
       {:error, reason} ->
@@ -68,14 +76,30 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
         {cmd, args, run_opts} =
           if File.exists?(script_path) do
-            {script_path, [target_dir], [cwd: dir, env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "TARGET_DIR" => target_dir}]}
+            {script_path, [target_dir],
+             [
+               cwd: dir,
+               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "TARGET_DIR" => target_dir}
+             ]}
           else
-            {"mix", ["run", "--no-halt", "--", target_dir], [cwd: dir, env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "TARGET_DIR" => target_dir}]}
+            {"mix", ["run", "--no-halt", "--", target_dir],
+             [
+               cwd: dir,
+               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "TARGET_DIR" => target_dir}
+             ]}
           end
 
         case start_and_register_mcp_server("ragex", cmd, args, run_opts) do
           {:ok, tools_registered, pid} ->
-            new_servers = Map.put(state.servers, "ragex", %{command: cmd, args: args, cwd: target_dir, pid: pid, tools: tools_registered})
+            new_servers =
+              Map.put(state.servers, "ragex", %{
+                command: cmd,
+                args: args,
+                cwd: target_dir,
+                pid: pid,
+                tools: tools_registered
+              })
+
             {:reply, {:ok, target_dir, tools_registered}, %{state | servers: new_servers}}
 
           {:error, reason} ->
@@ -136,10 +160,12 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       start_dir
     ]
 
-    found = Enum.find(candidates, fn path ->
-      File.exists?(Path.join(path, "mix.exs")) and
-        (File.exists?(Path.join(path, "bin/ragex-mcp")) or File.exists?(Path.join(path, "lib/ragex")))
-    end)
+    found =
+      Enum.find(candidates, fn path ->
+        File.exists?(Path.join(path, "mix.exs")) and
+          (File.exists?(Path.join(path, "bin/ragex-mcp")) or
+             File.exists?(Path.join(path, "lib/ragex")))
+      end)
 
     if found do
       {:ok, found}
@@ -159,7 +185,9 @@ defmodule DeepSeekHarness.MCP.ServerManager do
               Enum.map(mcp_tools, fn t ->
                 tool_name = "mcp_#{name}_#{t["name"]}"
                 desc = Map.get(t, "description", "MCP Tool from #{name}")
-                input_schema = Map.get(t, "inputSchema", %{"type" => "object", "properties" => %{}})
+
+                input_schema =
+                  Map.get(t, "inputSchema", %{"type" => "object", "properties" => %{}})
 
                 tool_def = %{
                   name: tool_name,
@@ -188,7 +216,8 @@ defmodule DeepSeekHarness.MCP.ServerManager do
         end
 
       {:error, reason} ->
-        {:error, "Failed to start MCP server process (#{command} #{Enum.join(args, " ")}): #{inspect(reason)}"}
+        {:error,
+         "Failed to start MCP server process (#{command} #{Enum.join(args, " ")}): #{inspect(reason)}"}
     end
   end
 
@@ -210,12 +239,10 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   end
 
   defp format_mcp_content(content) when is_list(content) do
-    content
-    |> Enum.map(fn
+    Enum.map_join(content, "\n", fn
       %{"type" => "text", "text" => text} -> text
       item -> inspect(item)
     end)
-    |> Enum.join("\n")
   end
 
   defp format_mcp_content(content), do: inspect(content, pretty: true)

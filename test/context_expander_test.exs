@@ -10,7 +10,9 @@ defmodule DeepSeekHarness.ContextExpanderTest do
     prompt = "Please inspect @#{tmp_path} and summarize it."
     assert {:ok, expanded, attachments} = ContextExpander.expand(prompt)
 
-    assert String.contains?(expanded, "[Ref: #{tmp_path}]") and String.contains?(expanded, "Hello reference context!")
+    assert String.contains?(expanded, "[Ref: #{tmp_path}]") and
+             String.contains?(expanded, "Hello reference context!")
+
     assert tmp_path in attachments
 
     File.rm(tmp_path)
@@ -41,7 +43,9 @@ defmodule DeepSeekHarness.ContextExpanderTest do
   end
 
   test "retains original token if target file does not exist" do
-    assert {:ok, expanded, attachments} = ContextExpander.expand("Check @/tmp/non_existent_file_xyz_123.txt")
+    assert {:ok, expanded, attachments} =
+             ContextExpander.expand("Check @/tmp/non_existent_file_xyz_123.txt")
+
     assert String.contains?(expanded, "@/tmp/non_existent_file_xyz_123.txt")
     assert attachments == []
   end

@@ -125,7 +125,10 @@ defmodule DeepSeekHarness.Brain.Session do
       status: :idle
     }
 
-    Logger.info("[Brain.Session] Session actor initialized: #{session_id} (model: #{state.model})")
+    Logger.info(
+      "[Brain.Session] Session actor initialized: #{session_id} (model: #{state.model})"
+    )
+
     {:ok, state}
   end
 
@@ -185,6 +188,7 @@ defmodule DeepSeekHarness.Brain.Session do
   @impl true
   def handle_call({:checkpoint, label}, _from, state) do
     label = label || "Manual Checkpoint ##{length(state.snapshots) + 1}"
+
     snapshot = %{
       id: "cp_#{System.unique_integer([:positive])}",
       label: label,
@@ -202,12 +206,14 @@ defmodule DeepSeekHarness.Brain.Session do
     case state.snapshots do
       [latest | rest] ->
         Logger.info("[Brain.Session] Rolling back state to snapshot: #{latest.label}")
+
         new_state = %{
-          state |
-          messages: latest.messages,
-          model: latest.model,
-          snapshots: rest
+          state
+          | messages: latest.messages,
+            model: latest.model,
+            snapshots: rest
         }
+
         {:reply, {:ok, "Rolled back to checkpoint: '#{latest.label}'"}, new_state}
 
       [] ->
@@ -220,7 +226,10 @@ defmodule DeepSeekHarness.Brain.Session do
     sub_id = "sub_#{System.unique_integer([:positive])}"
     Logger.info("[Brain.Session] Spawning background subagent session '#{sub_id}'")
 
-    case DeepSeekHarness.Brain.SessionSupervisor.start_session(session_id: sub_id, model: state.model) do
+    case DeepSeekHarness.Brain.SessionSupervisor.start_session(
+           session_id: sub_id,
+           model: state.model
+         ) do
       {:ok, sub_pid} ->
         case send_user_message(sub_pid, prompt) do
           {:ok, response} ->
@@ -319,7 +328,10 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @impl true
   def handle_info({:hot_reload_tools, new_tools}, state) do
-    Logger.info("[Brain.Session] Hot-reloaded tools dynamically without dropping conversation state! (Tools: #{length(new_tools)})")
+    Logger.info(
+      "[Brain.Session] Hot-reloaded tools dynamically without dropping conversation state! (Tools: #{length(new_tools)})"
+    )
+
     {:noreply, %{state | tools: new_tools}}
   end
 
@@ -337,7 +349,9 @@ defmodule DeepSeekHarness.Brain.Session do
   # Agent Execution Loop
 
   defp run_agent_loop(state, depth \\ 10)
-  defp run_agent_loop(state, depth) when depth <= 0, do: {{:error, "Max tool iteration depth reached."}, state}
+
+  defp run_agent_loop(state, depth) when depth <= 0,
+    do: {{:error, "Max tool iteration depth reached."}, state}
 
   defp run_agent_loop(state, depth) do
     opts = [model: state.model, api_key: state.api_key]
@@ -351,26 +365,28 @@ defmodule DeepSeekHarness.Brain.Session do
         assistant_msg = %{
           "role" => "assistant",
           "content" => response.content || "",
-          "tool_calls" => Enum.map(tool_calls, fn tc ->
-            %{
-              "id" => tc.id,
-              "type" => "function",
-              "function" => %{
-                "name" => tc.name,
-                "arguments" => Jason.encode!(tc.arguments)
+          "tool_calls" =>
+            Enum.map(tool_calls, fn tc ->
+              %{
+                "id" => tc.id,
+                "type" => "function",
+                "function" => %{
+                  "name" => tc.name,
+                  "arguments" => Jason.encode!(tc.arguments)
+                }
               }
-            }
-          end)
+            end)
         }
 
         state_after_assistant = %{state | messages: state.messages ++ [assistant_msg]}
 
-        {tool_messages, updated_hands_state} = execute_tool_calls(tool_calls, state_after_assistant)
+        {tool_messages, updated_hands_state} =
+          execute_tool_calls(tool_calls, state_after_assistant)
 
         state_after_tools = %{
-          updated_hands_state |
-          messages: updated_hands_state.messages ++ tool_messages,
-          step_count: updated_hands_state.step_count + 1
+          updated_hands_state
+          | messages: updated_hands_state.messages ++ tool_messages,
+            step_count: updated_hands_state.step_count + 1
         }
 
         run_agent_loop(state_after_tools, depth - 1)
@@ -397,7 +413,11 @@ defmodule DeepSeekHarness.Brain.Session do
             %{"role" => "tool", "tool_call_id" => tc.id, "content" => result}
 
           {:error, err} ->
-            %{"role" => "tool", "tool_call_id" => tc.id, "content" => "Tool execution failed: #{err}"}
+            %{
+              "role" => "tool",
+              "tool_call_id" => tc.id,
+              "content" => "Tool execution failed: #{err}"
+            }
         end
       end)
 

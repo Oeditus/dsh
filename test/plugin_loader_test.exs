@@ -21,7 +21,8 @@ defmodule DeepSeekHarness.PluginLoaderTest do
   end
 
   test "dynamic plugin file compilation and hot reloading" do
-    tmp_plugin_path = Path.join(System.tmp_dir!(), "custom_math_plugin_#{System.unique_integer([:positive])}.exs")
+    tmp_plugin_path =
+      Path.join(System.tmp_dir!(), "custom_math_plugin_#{System.unique_integer([:positive])}.exs")
 
     code = """
     defmodule CustomMathPlugin do

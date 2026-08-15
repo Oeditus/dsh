@@ -19,13 +19,18 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
         Enum.reduce(matches, {text, []}, fn [full_match, target], {acc_text, acc_attachments} ->
           case resolve_reference(target, cwd) do
             {:ok, content, label} ->
-              block = "\n\n=== Attached File/URI (#{label}) ===\n#{content}\n=======================\n"
+              block =
+                "\n\n=== Attached File/URI (#{label}) ===\n#{content}\n=======================\n"
+
               # Replace the @reference in prompt with a clean label and append block
               clean_text = String.replace(acc_text, full_match, "[Ref: #{label}]")
               {clean_text <> block, [label | acc_attachments]}
 
             {:error, reason} ->
-              Logger.warning("[ContextExpander] Failed to expand reference '#{target}': #{reason}")
+              Logger.warning(
+                "[ContextExpander] Failed to expand reference '#{target}': #{reason}"
+              )
+
               {acc_text, acc_attachments}
           end
         end)

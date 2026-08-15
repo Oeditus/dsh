@@ -178,23 +178,21 @@ defmodule DeepSeekHarness.Plugin.Loader do
 
   defp notify_sessions_of_reload(tools_map) do
     # Broadcast to all registered Session processes
-    try do
-      Registry.dispatch(DeepSeekHarness.PubSubRegistry, "sessions", fn entries ->
-        tools_list =
-          Enum.map(tools_map, fn {name, tool_info} ->
-            %{
-              name: name,
-              description: tool_info.description,
-              parameters: tool_info.parameters
-            }
-          end)
+    Registry.dispatch(DeepSeekHarness.PubSubRegistry, "sessions", fn entries ->
+      tools_list =
+        Enum.map(tools_map, fn {name, tool_info} ->
+          %{
+            name: name,
+            description: tool_info.description,
+            parameters: tool_info.parameters
+          }
+        end)
 
-        for {pid, _val} <- entries do
-          send(pid, {:hot_reload_tools, tools_list})
-        end
-      end)
-    rescue
-      _ -> :ok
-    end
+      for {pid, _} <- entries do
+        send(pid, {:tools_reloaded, tools_list})
+      end
+    end)
+  rescue
+    _ -> :ok
   end
 end

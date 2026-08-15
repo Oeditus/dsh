@@ -7,6 +7,13 @@ defmodule DeepSeekHarness.MixProject do
       version: "0.1.0",
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
+      aliases: aliases(),
+      dialyzer: [
+        plt_add_apps: [:mix, :ex_unit],
+        plt_core_path: "priv/plts",
+        plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
+        ignore_warnings: ".dialyzer_ignore.exs"
+      ],
       releases: [
         dsh: [
           include_executables_for: [:unix],
@@ -32,7 +39,20 @@ defmodule DeepSeekHarness.MixProject do
       {:req, "~> 0.5.0"},
       {:jason, "~> 1.4"},
       {:marcli, "~> 0.3"},
-      {:owl, "~> 0.13"}
+      {:owl, "~> 0.13"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  defp aliases do
+    [
+      quality: ["format", "credo --strict", "dialyzer"],
+      "quality.ci": [
+        "format --check-formatted",
+        "credo --strict",
+        "dialyzer"
+      ]
     ]
   end
 end

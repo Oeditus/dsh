@@ -16,7 +16,8 @@ defmodule DeepSeekHarness.Brain.ContextCompressor do
       summary_prompt = [
         %{
           "role" => "system",
-          "content" => "You are an expert technical summarizer. Compress the provided conversation history into a structured summary preserving: 1. Core user goal & requirements. 2. Code files modified/inspected. 3. Decisions made. 4. Current state and next steps. Keep it highly concise."
+          "content" =>
+            "You are an expert technical summarizer. Compress the provided conversation history into a structured summary preserving: 1. Core user goal & requirements. 2. Code files modified/inspected. 3. Decisions made. 4. Current state and next steps. Keep it highly concise."
         },
         %{
           "role" => "user",
@@ -30,7 +31,8 @@ defmodule DeepSeekHarness.Brain.ContextCompressor do
 
           compressed_block = %{
             "role" => "system",
-            "content" => "=== Compressed Conversation Context ===\n#{summary}\n======================================"
+            "content" =>
+              "=== Compressed Conversation Context ===\n#{summary}\n======================================"
           }
 
           new_messages = system_msgs ++ [compressed_block]
@@ -43,11 +45,10 @@ defmodule DeepSeekHarness.Brain.ContextCompressor do
   end
 
   defp format_history(messages) do
-    Enum.map(messages, fn m ->
+    Enum.map_join(messages, "\n\n", fn m ->
       role = String.upcase(m["role"] || "UNKNOWN")
       content = m["content"] || ""
       "[#{role}]: #{content}"
     end)
-    |> Enum.join("\n\n")
   end
 end
