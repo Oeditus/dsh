@@ -76,16 +76,16 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
         {cmd, args, run_opts} =
           if File.exists?(script_path) do
-            {script_path, [target_dir],
+            {script_path, ["--project", target_dir],
              [
                cwd: dir,
-               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "TARGET_DIR" => target_dir}
+               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "RAGEX_PROJECT" => target_dir}
              ]}
           else
-            {"mix", ["run", "--no-halt", "--", target_dir],
+            {"mix", ["run", "--no-halt", "--", "--project", target_dir],
              [
                cwd: dir,
-               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "TARGET_DIR" => target_dir}
+               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "RAGEX_PROJECT" => target_dir}
              ]}
           end
 
