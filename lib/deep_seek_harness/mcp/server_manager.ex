@@ -1,0 +1,221 @@
+defmodule DeepSeekHarness.MCP.ServerManager do
+  @moduledoc """
+  Manages connections to external Model Context Protocol (MCP) servers, with first-class
+  support for the `ragex` code intelligence & analysis MCP server.
+
+  Launches MCP server processes over stdio (JSON-RPC), fetches declared tools,
+  and registers them with DeepSeekHarness.Plugin.Loader for live hot-code tool access.
+  """
+  use GenServer
+
+  alias DeepSeekHarness.Config
+  alias DeepSeekHarness.MCP.Client, as: MCPClient
+  alias DeepSeekHarness.Plugin.Loader, as: PluginLoader
+
+  @name __MODULE__
+
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: @name)
+  end
+
+  @doc "Connects and registers an MCP server given name, command, args, and optional cwd/env."
+  def add_server(name, command, args \\ [], opts \\ []) do
+    GenServer.call(@name, {:add_server, name, command, args, opts}, 45_000)
+  end
+
+  @doc "Starts and registers Ragex (@../ragex) as a first-class MCP server."
+  def start_ragex(opts \\ []) do
+    GenServer.call(@name, {:start_ragex, opts}, 60_000)
+  end
+
+  @doc "Lists active connected MCP servers."
+  def list_servers do
+    GenServer.call(@name, :list_servers)
+  end
+
+  @doc "Loads all configured MCP servers from ~/.dsh/config.json or .dsh/config.json."
+  def load_from_config(cwd \\ ".") do
+    GenServer.call(@name, {:load_from_config, cwd}, 60_000)
+  end
+
+  # Server Callbacks
+
+  @impl true
+  def init(_opts) do
+    {:ok, %{servers: %{}}}
+  end
+
+  @impl true
+  def handle_call({:add_server, name, command, args, opts}, _from, state) do
+    case start_and_register_mcp_server(name, command, args, opts) do
+      {:ok, tools_registered, pid} ->
+        new_servers = Map.put(state.servers, name, %{command: command, args: args, cwd: opts[:cwd], pid: pid, tools: tools_registered})
+        {:reply, {:ok, tools_registered}, %{state | servers: new_servers}}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:start_ragex, opts}, _from, state) do
+    ragex_dir = discover_ragex_dir(opts[:ragex_dir] || opts[:cwd] || ".")
+
+    case ragex_dir do
+      {:ok, dir} ->
+        script_path = Path.join(dir, "bin/ragex-mcp")
+
+        {cmd, args, run_opts} =
+          if File.exists?(script_path) do
+            {script_path, [], [cwd: dir, env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1"}]}
+          else
+            {"mix", ["run", "--no-halt"], [cwd: dir, env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1"}]}
+          end
+
+        case start_and_register_mcp_server("ragex", cmd, args, run_opts) do
+          {:ok, tools_registered, pid} ->
+            new_servers = Map.put(state.servers, "ragex", %{command: cmd, args: args, cwd: dir, pid: pid, tools: tools_registered})
+            {:reply, {:ok, dir, tools_registered}, %{state | servers: new_servers}}
+
+          {:error, reason} ->
+            {:reply, {:error, "Failed to start ragex MCP server: #{reason}"}, state}
+        end
+
+      {:error, err} ->
+        {:reply, {:error, err}, state}
+    end
+  end
+
+  @impl true
+  def handle_call(:list_servers, _from, state) do
+    info =
+      Enum.map(state.servers, fn {name, srv} ->
+        %{
+          name: name,
+          command: srv.command,
+          args: srv.args,
+          cwd: srv[:cwd],
+          tools_count: length(srv.tools),
+          tools: srv.tools
+        }
+      end)
+
+    {:reply, info, state}
+  end
+
+  @impl true
+  def handle_call({:load_from_config, cwd}, _from, state) do
+    cfg = Config.load_config(cwd)
+    mcp_servers = Map.get(cfg, "mcp_servers", %{})
+
+    results =
+      Enum.map(mcp_servers, fn {name, srv_cfg} ->
+        cmd = Map.get(srv_cfg, "command", "npx")
+        args = Map.get(srv_cfg, "args", [])
+        srv_cwd = Map.get(srv_cfg, "cwd")
+        srv_env = Map.get(srv_cfg, "env", %{})
+
+        opts = []
+        opts = if srv_cwd, do: Keyword.put(opts, :cwd, srv_cwd), else: opts
+        opts = if srv_env != %{}, do: Keyword.put(opts, :env, srv_env), else: opts
+
+        {name, add_server(name, cmd, args, opts)}
+      end)
+
+    {:reply, {:ok, results}, state}
+  end
+
+  # Helper Functions
+
+  def discover_ragex_dir(start_dir \\ ".") do
+    candidates = [
+      "/opt/Proyectos/Oeditus/ragex",
+      Path.expand("../ragex", start_dir),
+      Path.expand("~/Proyectos/Oeditus/ragex", start_dir),
+      start_dir
+    ]
+
+    found = Enum.find(candidates, fn path ->
+      File.exists?(Path.join(path, "mix.exs")) and
+        (File.exists?(Path.join(path, "bin/ragex-mcp")) or File.exists?(Path.join(path, "lib/ragex")))
+    end)
+
+    if found do
+      {:ok, found}
+    else
+      {:error, "Ragex directory not found in candidate paths: #{inspect(candidates)}"}
+    end
+  end
+
+  defp start_and_register_mcp_server(name, command, args, opts) do
+    client_opts = [name: name, command: command, args: args, cwd: opts[:cwd], env: opts[:env]]
+
+    case MCPClient.start_link(client_opts) do
+      {:ok, client_pid} ->
+        case MCPClient.list_mcp_tools(client_pid) do
+          {:ok, %{"tools" => mcp_tools}} when is_list(mcp_tools) ->
+            registered_names =
+              Enum.map(mcp_tools, fn t ->
+                tool_name = "mcp_#{name}_#{t["name"]}"
+                desc = Map.get(t, "description", "MCP Tool from #{name}")
+                input_schema = Map.get(t, "inputSchema", %{"type" => "object", "properties" => %{}})
+
+                tool_def = %{
+                  name: tool_name,
+                  description: "[MCP:#{name}] #{desc}",
+                  parameters: input_schema,
+                  execute: fn arguments ->
+                    case MCPClient.call_mcp_tool(client_pid, t["name"], arguments) do
+                      {:ok, %{"content" => content}} -> {:ok, format_mcp_content(content)}
+                      {:ok, res} -> {:ok, inspect(res, pretty: true)}
+                      {:error, err} -> {:error, "MCP tool error: #{inspect(err)}"}
+                    end
+                  end
+                }
+
+                register_mcp_tool_in_plugin(tool_def)
+                tool_name
+              end)
+
+            {:ok, registered_names, client_pid}
+
+          {:ok, other} ->
+            {:error, "Unexpected tools/list output from MCP server: #{inspect(other)}"}
+
+          {:error, err} ->
+            {:error, "Failed to fetch tools/list from MCP server #{name}: #{inspect(err)}"}
+        end
+
+      {:error, reason} ->
+        {:error, "Failed to start MCP server process (#{command} #{Enum.join(args, " ")}): #{inspect(reason)}"}
+    end
+  end
+
+  defp register_mcp_tool_in_plugin(tool_def) do
+    dynamic_mod_name = String.to_atom("Elixir.DeepSeekHarness.Plugin.MCP_#{tool_def.name}")
+
+    contents = """
+    defmodule #{dynamic_mod_name} do
+      @behaviour DeepSeekHarness.Plugin.Behaviour
+
+      def name, do: "#{tool_def.name}"
+      def description, do: "#{String.replace(tool_def.description, "\"", "\\\"")}"
+      def tools, do: [#{inspect(tool_def)}]
+    end
+    """
+
+    [{mod, _}] = Code.compile_string(contents)
+    PluginLoader.register_plugin(mod)
+  end
+
+  defp format_mcp_content(content) when is_list(content) do
+    content
+    |> Enum.map(fn
+      %{"type" => "text", "text" => text} -> text
+      item -> inspect(item)
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp format_mcp_content(content), do: inspect(content, pretty: true)
+end
