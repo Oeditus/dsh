@@ -111,7 +111,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     case read_key() do
       :enter ->
         IO.write("\n")
-        line = state.buffer |> Enum.reverse() |> List.to_string()
+        line = List.to_string(state.buffer)
         add_history(line)
         line <> "\n"
 
