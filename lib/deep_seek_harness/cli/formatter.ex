@@ -15,17 +15,27 @@ defmodule DeepSeekHarness.CLI.Formatter do
   def blue, do: IO.ANSI.blue()
 
   def banner do
+    color = banner_color()
+
     """
-    #{cyan()}#{bold()}
-    ██████╗ ███████╗██╗  ██╗   ███████╗██╗     ██╗██╗  ██╗██╗██████╗ 
-    ██╔══██╗██╔════╝██║  ██║   ██╔════╝██║     ██║██║  ██║██║██╔══██╗
-    ██║  ██║███████╗███████║   █████╗  ██║     ██║███████║██║██████╔╝
-    ██║  ██║╚════██║██╔══██║   ██╔══╝  ██║     ██║██╔══██║██║██╔══██╗
-    ██████╔╝███████║██║  ██║   ███████╗███████╗██║██║  ██║██║██║  ██║
-    ╚═════╝ ╚══════╝╚═╝  ╚═╝   ╚══════╝╚══════╝╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═╝
-    #{reset()}#{dim()}DeepSeek Agentic CLI Harness in Elixir (DSH) — Powered by Erlang/OTP#{reset()}
+    #{color}#{bold()}
+    ██████╗ ███████╗██╗  ██╗    ██████╗  █████╗  ██████╗ ███████╗
+    ██╔══██╗██╔════╝██║  ██║    ██╔══██╗██╔══██╗██╔════╝ ██╔════╝
+    ██║  ██║███████╗███████║    ██████╔╝███████║██║  ███╗█████╗  
+    ██║  ██║╚════██║██╔══██║    ██╔══██╗██╔══██║██║   ██║██╔══╝  
+    ██████╔╝███████║██║  ██║    ██║  ██║██║  ██║╚██████╔╝███████╗
+    ╚═════╝ ╚══════╝╚═╝  ╚═╝    ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+    #{reset()}#{dim()}DeepSeek Agentic CLI Harness (DSH RAGE) — Powered by Erlang/OTP#{reset()}
     #{yellow()}Actors • Hot-Code Reloading • Distributed Brain/Hands • Spatiotemporal Checkpoints#{reset()}
     """
+  end
+
+  def banner_color do
+    if Mix.env() == :prod do
+      IO.ANSI.light_magenta()
+    else
+      IO.ANSI.cyan()
+    end
   end
 
   def help_menu do
@@ -57,6 +67,10 @@ defmodule DeepSeekHarness.CLI.Formatter do
 
   def format_user_prompt(session_id, model) do
     "#{green()}#{bold()}user@#{session_id} [#{model}]> #{reset()}"
+  end
+
+  def format_user_prompt_str(prompt_str) do
+    "#{green()}#{bold()}#{prompt_str}#{reset()}"
   end
 
   @doc "Renders markdown text using Marcli library into styled ANSI terminal text."

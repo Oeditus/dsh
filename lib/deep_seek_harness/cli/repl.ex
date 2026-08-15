@@ -12,6 +12,8 @@ defmodule DeepSeekHarness.CLI.Repl do
   alias DeepSeekHarness.Plugin.Loader, as: PluginLoader
   alias DeepSeekHarness.Skill.Manager, as: SkillManager
 
+  alias DeepSeekHarness.CLI.LineEditor
+
   def start(opts \\ []) do
     IO.puts(Formatter.banner())
 
@@ -21,17 +23,18 @@ defmodule DeepSeekHarness.CLI.Repl do
     IO.puts(Formatter.format_info("Brain actor spawned for session '#{session_id}'"))
     IO.puts(Formatter.format_info("Type /help for command menu or !command for direct shell execution.\n"))
 
-    loop(session_pid, session_id)
+    history = LineEditor.load_history()
+    loop(session_pid, session_id, history)
   end
 
-  def loop(session_pid, session_id) do
+  def loop(session_pid, session_id, history \\ []) do
     # Ensure session actor process is alive before turn
     session_pid = ensure_session_alive(session_pid, session_id)
 
     info = Session.get_info(session_pid)
-    prompt = Formatter.format_user_prompt(session_id, info.model)
+    prompt_str = LineEditor.build_prompt(session_id, info.model, info.hands_mode)
 
-    case IO.gets(prompt) do
+    case LineEditor.get_line(prompt_str, history) do
       :eof ->
         IO.puts("\nGoodbye!")
 
@@ -40,10 +43,11 @@ defmodule DeepSeekHarness.CLI.Repl do
 
       line when is_binary(line) ->
         trimmed = String.trim(line)
+        updated_history = if trimmed != "", do: [trimmed | history], else: history
 
         case handle_input(trimmed, session_pid, session_id) do
           :continue ->
-            loop(session_pid, session_id)
+            loop(session_pid, session_id, updated_history)
 
           :exit ->
             IO.puts("#{Formatter.cyan()}Session ended. Exiting DeepSeek Harness.#{Formatter.reset()}")
@@ -407,9 +411,21 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   def handle_input(user_prompt, session_pid, _session_id) do
-    IO.puts("#{Formatter.dim()}Thinking and coordinating with Hands...#{Formatter.reset()}")
+    turn_fn = fn -> try_send_message(session_pid, user_prompt) end
 
-    case try_send_message(session_pid, user_prompt) do
+    res =
+      if Code.ensure_loaded?(Owl.Spinner) do
+        Owl.Spinner.run(
+          id: :dsh_spinner,
+          title: "Thinking & coordinating with Hands...",
+          func: turn_fn
+        )
+      else
+        IO.puts("#{Formatter.dim()}Thinking and coordinating with Hands...#{Formatter.reset()}")
+        turn_fn.()
+      end
+
+    case res do
       {:ok, %{content: content}} ->
         IO.puts("\n" <> Formatter.format_agent_response(content) <> "\n")
 

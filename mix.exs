@@ -31,7 +31,8 @@ defmodule DeepSeekHarness.MixProject do
     [
       {:req, "~> 0.5.0"},
       {:jason, "~> 1.4"},
-      {:marcli, "~> 0.3"}
+      {:marcli, "~> 0.3"},
+      {:owl, "~> 0.13"}
     ]
   end
 end
