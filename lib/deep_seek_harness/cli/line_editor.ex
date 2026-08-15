@@ -2,10 +2,9 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   @moduledoc """
   2026 Modern TUI Line Editor & Readline Engine for DeepSeek Harness (DSH RAGE).
   Features:
-    - Real-time raw TTY key handling via stty raw -echo
-    - Persistent history (~/.dsh/history) across sessions
-    - Arrow Up/Down history browsing
-    - Arrow Left/Right cursor positioning
+    - Real-time raw TTY key handling via stty raw -echo < /dev/tty
+    - Up / Down Arrow history navigation through ~/.dsh/history
+    - Left / Right Arrow cursor positioning
     - Ctrl+R Reverse-i-Search history matching
     - Emacs & Vim keybindings (Ctrl+A, Ctrl+E, Ctrl+K, Ctrl+W, Ctrl+U, Ctrl+L)
     - Tab auto-completion for slash commands
@@ -96,7 +95,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
   end
 
-  # TUI Interactive Line Reader with stty raw mode
+  # TUI Interactive Line Reader with stty raw mode targeting /dev/tty
   defp read_tty_line(prompt_text, history) do
     set_raw_mode()
 
@@ -123,14 +122,14 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp set_raw_mode do
-    System.cmd("stty", ["raw", "-echo"], stderr_to_stdout: true)
+    System.cmd("sh", ["-c", "stty raw -echo < /dev/tty"], stderr_to_stdout: true)
     :ok
   rescue
     _ -> :error
   end
 
   defp restore_tty_mode do
-    System.cmd("stty", ["sane"], stderr_to_stdout: true)
+    System.cmd("sh", ["-c", "stty sane < /dev/tty"], stderr_to_stdout: true)
     :ok
   rescue
     _ -> :ok
@@ -369,13 +368,30 @@ defmodule DeepSeekHarness.CLI.LineEditor do
           "D" -> :left
           "H" -> :home
           "F" -> :end
-          "1" -> IO.getn("", 1); :home
-          "4" -> IO.getn("", 1); :end
+          "1" ->
+            case IO.getn("", 1) do
+              "~" -> :home
+              _ -> :home
+            end
+          "4" ->
+            case IO.getn("", 1) do
+              "~" -> :end
+              _ -> :end
+            end
+          "3" ->
+            case IO.getn("", 1) do
+              "~" -> :delete
+              _ -> :delete
+            end
           _ -> :other
         end
 
       "O" ->
         case IO.getn("", 1) do
+          "A" -> :up
+          "B" -> :down
+          "C" -> :right
+          "D" -> :left
           "H" -> :home
           "F" -> :end
           _ -> :other
