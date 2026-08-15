@@ -71,4 +71,10 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert {:ok, summary} = Session.compact_context(pid)
     assert is_binary(summary)
   end
+
+  test "retrieves latest assistant response", %{pid: pid} do
+    assert match?({:ok, _}, Session.send_user_message(pid, "Hello agent"))
+    assert {:ok, response} = Session.get_latest_response(pid)
+    assert is_binary(response)
+  end
 end

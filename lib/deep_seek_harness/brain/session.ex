@@ -87,6 +87,11 @@ defmodule DeepSeekHarness.Brain.Session do
     GenServer.call(pid, :get_info)
   end
 
+  @doc "Returns content of the latest assistant message response in session."
+  def get_latest_response(pid) do
+    GenServer.call(pid, :get_latest_response)
+  end
+
   # Server Callbacks
 
   @impl true
@@ -324,6 +329,22 @@ defmodule DeepSeekHarness.Brain.Session do
     }
 
     {:reply, info, state}
+  end
+
+  @impl true
+  def handle_call(:get_latest_response, _from, state) do
+    last_assistant_msg =
+      state.messages
+      |> Enum.reverse()
+      |> Enum.find(fn m -> m["role"] == "assistant" end)
+
+    case last_assistant_msg do
+      %{"content" => content} when is_binary(content) and content != "" ->
+        {:reply, {:ok, content}, state}
+
+      _ ->
+        {:reply, {:error, "No assistant response found in active session history."}, state}
+    end
   end
 
   @impl true

@@ -67,6 +67,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/undo#{reset()}                   Roll back state to previous checkpoint
       #{cyan()}/session#{reset()}                Display active session metadata & statistics
       #{cyan()}/nodes#{reset()}                  View distributed Erlang node cluster status
+      #{cyan()}/cb#{reset()} or #{cyan()}/clipboard#{reset()}       Copy latest assistant response to system clipboard (Markdown)
       #{cyan()}/clear#{reset()}                  Clear terminal output
       #{cyan()}/exit#{reset()} or #{cyan()}/quit#{reset()}            Exit DeepSeek Harness
     """
@@ -104,5 +105,33 @@ defmodule DeepSeekHarness.CLI.Formatter do
 
   def format_info(msg) do
     "#{blue()}#{bold()}●#{reset()} #{msg}"
+  end
+
+  @doc "Copies a markdown text payload to the OS clipboard."
+  def copy_to_clipboard(text) when is_binary(text) do
+    cmd_info =
+      cond do
+        wl = System.find_executable("wl-copy") -> {wl, []}
+        xc = System.find_executable("xclip") -> {xc, ["-selection", "clipboard"]}
+        xs = System.find_executable("xsel") -> {xs, ["--clipboard", "--input"]}
+        pb = System.find_executable("pbcopy") -> {pb, []}
+        cl = System.find_executable("clip.exe") || System.find_executable("clip") -> {cl, []}
+        true -> nil
+      end
+
+    case cmd_info do
+      {exec_path, args} ->
+        try do
+          port = Port.open({:spawn_executable, exec_path}, [:binary, args: args])
+          Port.command(port, text)
+          Port.close(port)
+          :ok
+        rescue
+          e -> {:error, "Failed to copy to clipboard: #{Exception.message(e)}"}
+        end
+
+      nil ->
+        {:error, "No system clipboard utility found (install xclip, wl-copy, xsel, or pbcopy)."}
+    end
   end
 end

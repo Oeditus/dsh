@@ -169,6 +169,12 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/cb", session_pid, session_id),
+    do: handle_copy_clipboard(session_pid, session_id)
+
+  def handle_input("/clipboard", session_pid, session_id),
+    do: handle_copy_clipboard(session_pid, session_id)
+
   def handle_input("/cost", session_pid, _session_id) do
     stats = Session.get_token_stats(session_pid)
 
@@ -530,5 +536,27 @@ defmodule DeepSeekHarness.CLI.Repl do
     tools_list = Enum.map_join(s.tools, "\n", fn t -> "  - `#{t}`" end)
 
     "#### #{s.name} (`#{s.command} #{Enum.join(s.args, " ")}`)\n**Registered Tools (#{s.tools_count}):**\n#{tools_list}"
+  end
+
+  defp handle_copy_clipboard(session_pid, _session_id) do
+    case Session.get_latest_response(session_pid) do
+      {:ok, content} ->
+        case Formatter.copy_to_clipboard(content) do
+          :ok ->
+            IO.puts(
+              Formatter.format_success(
+                "Copied latest assistant response to clipboard (#{String.length(content)} characters)!"
+              )
+            )
+
+          {:error, err} ->
+            IO.puts(Formatter.format_error(err))
+        end
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
   end
 end

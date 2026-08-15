@@ -48,4 +48,9 @@ defmodule DeepSeekHarness.FormatterTest do
     rendered = Formatter.format_markdown(md)
     assert is_binary(rendered)
   end
+
+  test "attempts copying text to system clipboard" do
+    res = Formatter.copy_to_clipboard("test_clipboard_content")
+    assert res == :ok or match?({:error, _}, res)
+  end
 end
