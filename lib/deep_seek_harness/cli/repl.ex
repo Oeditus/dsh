@@ -299,11 +299,12 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   def handle_input("/ragex", _session_pid, _session_id) do
-    IO.puts(Formatter.format_info("Connecting to Ragex MCP server (@../ragex)..."))
+    target_dir = File.cwd!()
+    IO.puts(Formatter.format_info("Mounting Ragex MCP server targeting workspace '#{target_dir}'..."))
 
-    case MCPServerManager.start_ragex() do
+    case MCPServerManager.start_ragex(target_dir: target_dir) do
       {:ok, dir, tools} ->
-        IO.puts(Formatter.format_success("Connected Ragex MCP server from '#{dir}'! Registered #{length(tools)} code analysis & refactoring tools."))
+        IO.puts(Formatter.format_success("Mounted Ragex MCP server targeting '#{dir}'! Registered #{length(tools)} code analysis & refactoring tools."))
 
       {:error, err} ->
         IO.puts(Formatter.format_error(err))

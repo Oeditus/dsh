@@ -23,9 +23,10 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     GenServer.call(@name, {:add_server, name, command, args, opts}, 45_000)
   end
 
-  @doc "Starts and registers Ragex (@../ragex) as a first-class MCP server."
+  @doc "Starts and registers Ragex (@../ragex) as a first-class MCP server targeting specified working directory."
   def start_ragex(opts \\ []) do
-    GenServer.call(@name, {:start_ragex, opts}, 60_000)
+    target_dir = opts[:target_dir] || opts[:cwd] || File.cwd!()
+    GenServer.call(@name, {:start_ragex, target_dir, opts}, 60_000)
   end
 
   @doc "Lists active connected MCP servers."
@@ -58,8 +59,8 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   end
 
   @impl true
-  def handle_call({:start_ragex, opts}, _from, state) do
-    ragex_dir = discover_ragex_dir(opts[:ragex_dir] || opts[:cwd] || ".")
+  def handle_call({:start_ragex, target_dir, opts}, _from, state) do
+    ragex_dir = discover_ragex_dir(opts[:ragex_dir] || ".")
 
     case ragex_dir do
       {:ok, dir} ->
@@ -67,15 +68,15 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
         {cmd, args, run_opts} =
           if File.exists?(script_path) do
-            {script_path, [], [cwd: dir, env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1"}]}
+            {script_path, [target_dir], [cwd: dir, env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "TARGET_DIR" => target_dir}]}
           else
-            {"mix", ["run", "--no-halt"], [cwd: dir, env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1"}]}
+            {"mix", ["run", "--no-halt", "--", target_dir], [cwd: dir, env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "TARGET_DIR" => target_dir}]}
           end
 
         case start_and_register_mcp_server("ragex", cmd, args, run_opts) do
           {:ok, tools_registered, pid} ->
-            new_servers = Map.put(state.servers, "ragex", %{command: cmd, args: args, cwd: dir, pid: pid, tools: tools_registered})
-            {:reply, {:ok, dir, tools_registered}, %{state | servers: new_servers}}
+            new_servers = Map.put(state.servers, "ragex", %{command: cmd, args: args, cwd: target_dir, pid: pid, tools: tools_registered})
+            {:reply, {:ok, target_dir, tools_registered}, %{state | servers: new_servers}}
 
           {:error, reason} ->
             {:reply, {:error, "Failed to start ragex MCP server: #{reason}"}, state}
