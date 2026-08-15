@@ -34,7 +34,14 @@ defmodule DeepSeekHarness.LineEditorTest do
     assert LineEditor.find_in_history("git", history) == "git status"
     assert LineEditor.find_in_history("xyz", history) == ""
 
-    state = %{search_mode: false}
+    state = %{search_mode: false, search_query: []}
     assert LineEditor.toggle_reverse_search(state).search_mode == true
+  end
+
+  test "tab completes slash commands" do
+    assert {:ok, "/mcp list"} = LineEditor.tab_complete("/mcp l")
+    assert {:ok, "/ragex"} = LineEditor.tab_complete("/r")
+    assert {:ok, "/skills"} = LineEditor.tab_complete("/sk")
+    assert :none = LineEditor.tab_complete("not_a_slash_cmd")
   end
 end
