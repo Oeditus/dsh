@@ -339,84 +339,90 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp read_key do
-    case IO.getn("", 1) do
-      "\r" -> :enter
-      "\n" -> :enter
-      "\t" -> :tab
-      "\x01" -> :ctrl_a
-      "\x03" -> :ctrl_c
-      "\x04" -> :ctrl_d
-      "\x05" -> :ctrl_e
-      "\x0b" -> :ctrl_k
-      "\x0c" -> :ctrl_l
-      "\x12" -> :ctrl_r
-      "\x15" -> :ctrl_u
-      "\x17" -> :ctrl_w
-      "\x7f" -> :backspace
-      "\x08" -> :backspace
-      "\e" -> parse_escape_seq()
-      char when is_binary(char) -> {:char, :binary.first(char)}
-      _ -> :other
+    match_key(get_raw_input_chunk())
+  end
+
+  defp match_key("\e[A"), do: :up
+  defp match_key("\e[B"), do: :down
+  defp match_key("\e[C"), do: :right
+  defp match_key("\e[D"), do: :left
+  defp match_key("\eOA"), do: :up
+  defp match_key("\eOB"), do: :down
+  defp match_key("\eOC"), do: :right
+  defp match_key("\eOD"), do: :left
+  defp match_key("\e[H"), do: :home
+  defp match_key("\e[F"), do: :end
+  defp match_key("\e[1~"), do: :home
+  defp match_key("\e[4~"), do: :end
+  defp match_key("\e[3~"), do: :delete
+  defp match_key("\r"), do: :enter
+  defp match_key("\n"), do: :enter
+  defp match_key("\r\n"), do: :enter
+  defp match_key("\t"), do: :tab
+  defp match_key("\x01"), do: :ctrl_a
+  defp match_key("\x03"), do: :ctrl_c
+  defp match_key("\x04"), do: :ctrl_d
+  defp match_key("\x05"), do: :ctrl_e
+  defp match_key("\x0b"), do: :ctrl_k
+  defp match_key("\x0c"), do: :ctrl_l
+  defp match_key("\x12"), do: :ctrl_r
+  defp match_key("\x15"), do: :ctrl_u
+  defp match_key("\x17"), do: :ctrl_w
+  defp match_key("\x7f"), do: :backspace
+  defp match_key("\x08"), do: :backspace
+  defp match_key("\e"), do: :escape
+
+  defp match_key(other) when is_binary(other) do
+    cond do
+      String.contains?(other, "[A") or String.contains?(other, "OA") ->
+        :up
+
+      String.contains?(other, "[B") or String.contains?(other, "OB") ->
+        :down
+
+      String.contains?(other, "[C") or String.contains?(other, "OC") ->
+        :right
+
+      String.contains?(other, "[D") or String.contains?(other, "OD") ->
+        :left
+
+      true ->
+        case String.to_charlist(other) do
+          [c | _] -> {:char, c}
+          _ -> :other
+        end
     end
   end
 
-  defp parse_escape_seq do
+  defp get_raw_input_chunk do
     case IO.getn("", 1) do
-      "[" ->
-        case IO.getn("", 1) do
-          "A" ->
-            :up
+      "\e" ->
+        seq = read_available_escape_bytes("", 3)
+        "\e" <> seq
 
-          "B" ->
-            :down
+      char when is_binary(char) ->
+        char
 
-          "C" ->
-            :right
+      _ ->
+        ""
+    end
+  end
 
-          "D" ->
-            :left
+  defp read_available_escape_bytes(acc, count) when count > 0 do
+    case IO.getn("", 1) do
+      char when is_binary(char) and char != "" ->
+        new_acc = acc <> char
 
-          "H" ->
-            :home
-
-          "F" ->
-            :end
-
-          "1" ->
-            case IO.getn("", 1) do
-              "~" -> :home
-              _ -> :home
-            end
-
-          "4" ->
-            case IO.getn("", 1) do
-              "~" -> :end
-              _ -> :end
-            end
-
-          "3" ->
-            case IO.getn("", 1) do
-              "~" -> :delete
-              _ -> :delete
-            end
-
-          _ ->
-            :other
-        end
-
-      "O" ->
-        case IO.getn("", 1) do
-          "A" -> :up
-          "B" -> :down
-          "C" -> :right
-          "D" -> :left
-          "H" -> :home
-          "F" -> :end
-          _ -> :other
+        if char in ["A", "B", "C", "D", "H", "F", "~"] do
+          new_acc
+        else
+          read_available_escape_bytes(new_acc, count - 1)
         end
 
       _ ->
-        :escape
+        acc
     end
   end
+
+  defp read_available_escape_bytes(acc, _count), do: acc
 end
