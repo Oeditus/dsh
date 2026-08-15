@@ -36,8 +36,8 @@ defmodule DeepSeekHarness.Plugin.Loader do
   end
 
   @doc "Executes a named tool with arguments."
-  def execute_tool(tool_name, args) do
-    GenServer.call(@name, {:execute_tool, tool_name, args})
+  def execute_tool(tool_name, args, timeout \\ :infinity) do
+    GenServer.call(@name, {:execute_tool, tool_name, args}, timeout)
   end
 
   # Server Callbacks

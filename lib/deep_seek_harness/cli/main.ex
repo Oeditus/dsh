@@ -3,9 +3,7 @@ defmodule DeepSeekHarness.CLI.Main do
   CLI entrypoint module for `dsh` escript executable.
   Supports interactive REPL and command-line execution arguments.
   """
-  alias DeepSeekHarness.Brain.Session
   alias DeepSeekHarness.Brain.SessionSupervisor
-  alias DeepSeekHarness.CLI.Formatter
   alias DeepSeekHarness.CLI.Repl
   alias DeepSeekHarness.Distribution.NodeManager
 
@@ -62,14 +60,9 @@ defmodule DeepSeekHarness.CLI.Main do
       DeepSeekHarness.Plugin.Loader.load_file(opts[:plugin])
     end
 
-    case Session.send_user_message(session_pid, prompt) do
-      {:ok, %{content: content}} ->
-        IO.puts(content)
-        System.halt(0)
-
-      {:error, reason} ->
-        IO.puts(:stderr, Formatter.format_error(reason))
-        System.halt(1)
+    case Repl.handle_input(prompt, session_pid, "oneshot") do
+      :continue -> System.halt(0)
+      :exit -> System.halt(0)
     end
   end
 

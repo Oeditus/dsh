@@ -1,7 +1,7 @@
 defmodule DeepSeekHarness.CLI.Repl do
   @moduledoc """
   Interactive REPL loop and slash-command handler for DeepSeek Harness.
-  Includes support for !shell execution, /compact, /diff, /commit, /cost, /permissions, /skills, /subagent.
+  Includes resilience against actor crashes, slash command validation, and Marcli rendering.
   """
   alias DeepSeekHarness.Brain.Session
   alias DeepSeekHarness.Brain.SessionSupervisor
@@ -25,6 +25,9 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   def loop(session_pid, session_id) do
+    # Ensure session actor process is alive before turn
+    session_pid = ensure_session_alive(session_pid, session_id)
+
     info = Session.get_info(session_pid)
     prompt = Formatter.format_user_prompt(session_id, info.model)
 
@@ -82,7 +85,8 @@ defmodule DeepSeekHarness.CLI.Repl do
     case Session.compact_context(session_pid) do
       {:ok, summary} ->
         IO.puts(Formatter.format_success("Context successfully compressed!"))
-        IO.puts("#{Formatter.dim()}#{summary}#{Formatter.reset()}\n")
+        md = "### 🗜️ Compressed Context Summary\n" <> summary
+        IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
 
       {:error, err} ->
         IO.puts(Formatter.format_error(err))
@@ -147,12 +151,15 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/cost", session_pid, _session_id) do
     stats = Session.get_token_stats(session_pid)
 
-    IO.puts("\n#{Formatter.bold()}Session Token & Cost Statistics:#{Formatter.reset()}")
-    IO.puts("  • Estimated Context Tokens: #{stats.estimated_prompt_tokens}")
-    IO.puts("  • Completion Tokens:       #{stats.tracked_completion_tokens}")
-    IO.puts("  • Total Session Tokens:     #{stats.total_tokens}")
-    IO.puts("  • Estimated Cost (USD):     $#{:erlang.float_to_binary(stats.estimated_cost_usd, [{:decimals, 6}])}\n")
+    md = """
+    ### 📊 Session Token & Cost Statistics
+    - **Estimated Context Tokens**: `#{stats.estimated_prompt_tokens}`
+    - **Completion Tokens**: `#{stats.tracked_completion_tokens}`
+    - **Total Session Tokens**: `#{stats.total_tokens}`
+    - **Estimated Cost (USD)**: `$#{:erlang.float_to_binary(stats.estimated_cost_usd, [{:decimals, 6}])}`
+    """
 
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
   end
 
@@ -171,13 +178,16 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/skills", _session_pid, _session_id) do
     skills = SkillManager.discover_skills()
-    IO.puts("\n#{Formatter.bold()}Discovered Skills (#{length(skills)}):#{Formatter.reset()}")
 
-    Enum.each(skills, fn s ->
-      IO.puts("  • #{Formatter.cyan()}#{s.name}#{Formatter.reset()} [#{Path.basename(s.path)}]: #{s.description}")
-    end)
+    skill_rows =
+      if Enum.empty?(skills) do
+        "*No skills discovered in `.dsh/skills` or `~/.dsh/skills`.*"
+      else
+        Enum.map_join(skills, "\n", fn s -> "- 🎯 **`#{s.name}`** [`#{Path.basename(s.path)}`]: #{s.description}" end)
+      end
 
-    IO.puts("")
+    md = "### 🎯 Discovered Skills (#{length(skills)})\n\n#{skill_rows}"
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
   end
 
@@ -210,7 +220,8 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     case Session.spawn_subagent(session_pid, prompt) do
       {:ok, result} ->
-        IO.puts("\n#{Formatter.cyan()}🤖 Subagent Completed Result:#{Formatter.reset()}\n#{result}\n")
+        md = "### 🤖 Subagent Completed Result\n" <> result
+        IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
 
       {:error, err} ->
         IO.puts(Formatter.format_error("Subagent failed: #{err}"))
@@ -221,13 +232,12 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/plugins", _session_pid, _session_id) do
     tools = PluginLoader.list_tools()
-    IO.puts("\n#{Formatter.bold()}Registered Tools (#{length(tools)}):#{Formatter.reset()}")
 
-    Enum.each(tools, fn t ->
-      IO.puts("  • #{Formatter.cyan()}#{t.name}#{Formatter.reset()}: #{t.description}")
-    end)
+    tools_rows =
+      Enum.map_join(tools, "\n", fn t -> "- **`#{t.name}`**: #{t.description}" end)
 
-    IO.puts("")
+    md = "### 🛠️ Registered Tools (#{length(tools)})\n\n#{tools_rows}"
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
   end
 
@@ -243,20 +253,10 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
-  def handle_input("/mcp", _session_pid, _session_id) do
-    servers = MCPServerManager.list_servers()
-    IO.puts("\n#{Formatter.bold()}Connected MCP Servers (#{length(servers)}):#{Formatter.reset()}")
-
-    Enum.each(servers, fn s ->
-      IO.puts("  • #{Formatter.cyan()}#{s.name}#{Formatter.reset()} (#{s.command} #{Enum.join(s.args, " ")}): #{s.tools_count} tools registered")
-      Enum.each(s.tools, fn t ->
-        IO.puts("      └─ #{t}")
-      end)
-    end)
-
-    IO.puts("")
-    :continue
-  end
+  # Handle all variations of /mcp list, /mcp ls, /mcp
+  def handle_input("/mcp list", session_pid, session_id), do: handle_mcp_list(session_pid, session_id)
+  def handle_input("/mcp ls", session_pid, session_id), do: handle_mcp_list(session_pid, session_id)
+  def handle_input("/mcp", session_pid, session_id), do: handle_mcp_list(session_pid, session_id)
 
   def handle_input("/mcp load", _session_pid, _session_id) do
     IO.puts(Formatter.format_info("Loading MCP servers configured in config.json..."))
@@ -370,32 +370,46 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/session", session_pid, _session_id) do
     info = Session.get_info(session_pid)
 
-    IO.puts("\n#{Formatter.bold()}Active Session Status:#{Formatter.reset()}")
-    IO.puts("  • Session ID:    #{info.session_id}")
-    IO.puts("  • Actor PID:     #{inspect(info.pid)}")
-    IO.puts("  • Model:         #{Formatter.cyan()}#{info.model}#{Formatter.reset()}")
-    IO.puts("  • Permission:    #{info.permission_mode}")
-    IO.puts("  • History Size:  #{info.message_count} messages")
-    IO.puts("  • Checkpoints:   #{info.snapshot_count} snapshots")
-    IO.puts("  • Hands Mode:    #{info.hands_mode} (#{info.hands_target})")
-    IO.puts("  • Active Tools:  #{info.tools_count} registered\n")
+    md = """
+    ### ⚙️ Active Session Status
+    - **Session ID**: `#{info.session_id}`
+    - **Actor PID**: `#{inspect(info.pid)}`
+    - **Model**: `#{info.model}`
+    - **Permission Mode**: `#{info.permission_mode}`
+    - **History Length**: `#{info.message_count}` messages
+    - **Checkpoints**: `#{info.snapshot_count}` snapshots
+    - **Hands Execution Target**: `#{info.hands_mode}` (`#{info.hands_target}`)
+    - **Active Tools Count**: `#{info.tools_count}` registered
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
   end
 
   def handle_input("/nodes", _session_pid, _session_id) do
     data = NodeManager.list_nodes()
 
-    IO.puts("\n#{Formatter.bold()}Distributed Erlang Node Cluster:#{Formatter.reset()}")
-    IO.puts("  • Local Node:    #{data.self}")
-    IO.puts("  • Node Alive?:   #{data.alive?}")
-    IO.puts("  • Connected Nodes: #{inspect(data.connected)}\n")
+    md = """
+    ### 🌐 Distributed Erlang Node Cluster
+    - **Local Node**: `#{data.self}`
+    - **Node Alive?**: `#{data.alive?}`
+    - **Connected Nodes**: `#{inspect(data.connected)}`
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  # Catch any unknown slash command to avoid sending accidental mistyped commands to LLM
+  def handle_input("/" <> command, _session_pid, _session_id) do
+    IO.puts(Formatter.format_error("Unknown command '/#{command}'. Type /help for available slash commands."))
     :continue
   end
 
   def handle_input(user_prompt, session_pid, _session_id) do
     IO.puts("#{Formatter.dim()}Thinking and coordinating with Hands...#{Formatter.reset()}")
 
-    case Session.send_user_message(session_pid, user_prompt) do
+    case try_send_message(session_pid, user_prompt) do
       {:ok, %{content: content}} ->
         IO.puts("\n" <> Formatter.format_agent_response(content) <> "\n")
 
@@ -403,6 +417,52 @@ defmodule DeepSeekHarness.CLI.Repl do
         IO.puts(Formatter.format_error("Turn failed: #{reason}"))
     end
 
+    :continue
+  end
+
+  # Helper to safely send message and handle potential actor exits gracefully
+  defp try_send_message(session_pid, user_prompt) do
+    Session.send_user_message(session_pid, user_prompt)
+  catch
+    :exit, reason ->
+      {:error, "Session process crashed or stopped: #{inspect(reason)}"}
+  end
+
+  defp ensure_session_alive(pid, session_id) do
+    if is_pid(pid) and Process.alive?(pid) do
+      pid
+    else
+      via = Session.via_tuple(session_id)
+      case GenServer.whereis(via) do
+        nil ->
+          IO.puts(Formatter.format_info("Restarting agent session actor '#{session_id}'..."))
+          {:ok, new_pid} = SessionSupervisor.start_session(session_id: session_id)
+          new_pid
+
+        new_pid ->
+          new_pid
+      end
+    end
+  end
+
+  defp handle_mcp_list(_session_pid, _session_id) do
+    servers = MCPServerManager.list_servers()
+
+    md =
+      if Enum.empty?(servers) do
+        "### 🔌 Connected MCP Servers (0)\n*No MCP servers connected. Use `/mcp add <name> <cmd> [args...]`, `/mcp load`, or `/ragex`.*"
+      else
+        server_blocks =
+          Enum.map(servers, fn s ->
+            tools_list = Enum.map_join(s.tools, "\n", fn t -> "  - `#{t}`" end)
+            "#### 📦 #{s.name} (`#{s.command} #{Enum.join(s.args, " ")}`)\n**Registered Tools (#{s.tools_count}):**\n#{tools_list}"
+          end)
+          |> Enum.join("\n\n")
+
+        "### 🔌 Connected MCP Servers (#{length(servers)})\n\n" <> server_blocks
+      end
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
   end
 end

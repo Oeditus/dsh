@@ -59,8 +59,19 @@ defmodule DeepSeekHarness.CLI.Formatter do
     "#{green()}#{bold()}user@#{session_id} [#{model}]> #{reset()}"
   end
 
+  @doc "Renders markdown text using Marcli library into styled ANSI terminal text."
+  def format_markdown(text) when is_binary(text) do
+    try do
+      Marcli.render(text)
+    rescue
+      _ -> text
+    end
+  end
+  def format_markdown(text), do: inspect(text)
+
   def format_agent_response(content) do
-    "#{cyan()}#{bold()}🤖 DeepSeek >#{reset()}\n#{content}"
+    rendered = format_markdown(content)
+    "#{cyan()}#{bold()}🤖 DeepSeek >#{reset()}\n#{rendered}"
   end
 
   def format_error(msg) do

@@ -30,9 +30,10 @@ Derived from **José Valim’s architectural principles**, **DeepSeek Harness (D
 ### 6. 🗜️ Context Compression (`/compact`)
 - Summarizes long message histories using DeepSeek to free up context window space while preserving key architectural decisions and modified file history.
 
-### 7. 🔀 Git Awareness & `/diff` / `/commit`
-- `/diff`: Renders ANSI colorized git diffs of unstaged workspace modifications.
-- `/commit <message>`: Auto-stages and commits changes with structured message generation.
+### 7. 🔀 Git Branch Comparison & Automated Code Review (`/review`, `/diff`, `/commit`)
+- **/review `<base_branch>` `[head_branch]`**: Compares two git branches (`git diff base...head` and `git log`), extracts diff statistics, and generates a comprehensive, production-grade Code Review with executive summaries, risk assessment, actionable recommendations, and a ready-to-post GitHub PR review markdown block.
+- **/diff**: Renders ANSI colorized git diffs of unstaged workspace modifications.
+- **/commit `<message>`**: Auto-stages and commits changes with structured message generation.
 
 ### 8. 📊 Token & Cost Statistics (`/cost`)
 - Displays estimated context tokens, completion tokens, total session token usage, and API cost estimates.

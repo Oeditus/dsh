@@ -17,7 +17,7 @@ defmodule DeepSeekHarness.Hands.Executor do
   @doc "Executes a tool call under the configured sandbox target."
   def execute(%__MODULE__{mode: :local}, tool_name, args) do
     Logger.debug("[Hands.Executor] [local] Executing #{tool_name} with args: #{inspect(args)}")
-    case DeepSeekHarness.Plugin.Loader.execute_tool(tool_name, args) do
+    case DeepSeekHarness.Plugin.Loader.execute_tool(tool_name, args, :infinity) do
       {:ok, result} -> {:ok, format_output(result)}
       {:error, reason} -> {:error, reason}
     end
@@ -26,7 +26,7 @@ defmodule DeepSeekHarness.Hands.Executor do
   def execute(%__MODULE__{mode: :remote, remote_node: node}, tool_name, args) when not is_nil(node) do
     Logger.info("[Hands.Executor] [remote:#{node}] Executing #{tool_name} via Distributed Erlang RPC")
 
-    case :rpc.call(node, DeepSeekHarness.Plugin.Loader, :execute_tool, [tool_name, args], 30_000) do
+    case :rpc.call(node, DeepSeekHarness.Plugin.Loader, :execute_tool, [tool_name, args, :infinity], :infinity) do
       {:ok, result} ->
         {:ok, format_output(result)}
 

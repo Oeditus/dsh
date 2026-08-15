@@ -7,7 +7,13 @@ defmodule DeepSeekHarness.MixProject do
       version: "0.1.0",
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
-      escript: [main_module: DeepSeekHarness.CLI.Main, name: "dsh"],
+      releases: [
+        dsh: [
+          include_executables_for: [:unix],
+          applications: [deep_seek_harness: :permanent],
+          steps: [:assemble]
+        ]
+      ],
       deps: deps()
     ]
   end
@@ -23,8 +29,9 @@ defmodule DeepSeekHarness.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:req, "~> 0.5"},
-      {:jason, "~> 1.4"}
+      {:req, "~> 0.5.0"},
+      {:jason, "~> 1.4"},
+      {:marcli, "~> 0.3"}
     ]
   end
 end
