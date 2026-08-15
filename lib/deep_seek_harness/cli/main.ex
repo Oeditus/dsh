@@ -11,6 +11,8 @@ defmodule DeepSeekHarness.CLI.Main do
     # Ensure application dependencies are started
     Application.ensure_all_started(:deep_seek_harness)
 
+    args = Enum.reject(args, fn a -> a in ["eval", "--"] end)
+
     {opts, extra_args, _invalid} =
       OptionParser.parse(args,
         switches: [
@@ -31,6 +33,7 @@ defmodule DeepSeekHarness.CLI.Main do
     cond do
       opts[:help] ->
         print_usage()
+        System.halt(0)
 
       opts[:node] ->
         NodeManager.start_node(opts[:node])

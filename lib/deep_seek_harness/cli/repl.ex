@@ -415,11 +415,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     res =
       if Code.ensure_loaded?(Owl.Spinner) do
-        Owl.Spinner.run(
-          id: :dsh_spinner,
-          title: "Thinking & coordinating with Hands...",
-          func: turn_fn
-        )
+        Owl.Spinner.run(turn_fn, title: "Thinking & coordinating with Hands...")
       else
         IO.puts("#{Formatter.dim()}Thinking and coordinating with Hands...#{Formatter.reset()}")
         turn_fn.()
