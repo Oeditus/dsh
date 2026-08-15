@@ -43,6 +43,7 @@ DEV_REL="$SCRIPT_DIR/_build/dev/rel/dsh/bin/dsh"
 
 case "$TARGET_ENV" in
   prod)
+    export DSH_ENV="prod"
     if [[ ! -x "$PROD_REL" ]]; then
       echo "[INFO] Production OTP release binary not found. Assembling prod release..."
       (cd "$SCRIPT_DIR" && MIX_ENV=prod mix release dsh --overwrite)
@@ -51,6 +52,7 @@ case "$TARGET_ENV" in
     ;;
 
   dev)
+    export DSH_ENV="dev"
     if [[ ! -x "$DEV_REL" ]]; then
       echo "[INFO] Dev OTP release binary not found. Assembling dev release..."
       (cd "$SCRIPT_DIR" && MIX_ENV=dev mix release dsh --overwrite)
@@ -60,10 +62,13 @@ case "$TARGET_ENV" in
 
   *)
     if [[ -x "$PROD_REL" ]]; then
+      export DSH_ENV="prod"
       exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
     elif [[ -x "$DEV_REL" ]]; then
+      export DSH_ENV="dev"
       exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
     else
+      export DSH_ENV="dev"
       cd "$SCRIPT_DIR"
       exec mix run --no-halt -e "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
     fi

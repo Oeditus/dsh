@@ -400,6 +400,9 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         seq = read_available_escape_bytes("", 3)
         "\e" <> seq
 
+      :eof ->
+        "\x04"
+
       char when is_binary(char) ->
         char
 
