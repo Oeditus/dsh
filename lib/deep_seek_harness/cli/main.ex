@@ -8,6 +8,9 @@ defmodule DeepSeekHarness.CLI.Main do
   alias DeepSeekHarness.Distribution.NodeManager
 
   def main(args) do
+    # Ensure custom agy-style LogFormatter is installed
+    DeepSeekHarness.CLI.LogFormatter.install()
+
     # Ensure application dependencies are started
     Application.ensure_all_started(:deep_seek_harness)
 

@@ -7,6 +7,8 @@ defmodule DeepSeekHarness.Application do
 
   @impl true
   def start(_type, _args) do
+    DeepSeekHarness.CLI.LogFormatter.install()
+
     children = [
       # Unique registry for process naming via tuple
       {Registry, keys: :unique, name: DeepSeekHarness.Registry},

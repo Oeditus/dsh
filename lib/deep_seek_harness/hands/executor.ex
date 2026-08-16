@@ -19,7 +19,7 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   @doc "Executes a tool call under the configured sandbox target."
   def execute(%__MODULE__{mode: :local}, tool_name, args) do
-    Logger.debug("[Hands.Executor] [local] Executing #{tool_name} with args: #{inspect(args)}")
+    Logger.info("[Hands.Executor] [local] Executing #{tool_name} with args: #{inspect(args)}")
 
     case DeepSeekHarness.Plugin.Loader.execute_tool(tool_name, args, :infinity) do
       {:ok, result} -> {:ok, format_output(result)}
