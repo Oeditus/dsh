@@ -21,8 +21,6 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   alias DeepSeekHarness.CLI.Formatter
   alias DeepSeekHarness.Config
 
-  @history_file Path.expand("~/.dsh/history")
-
   @slash_commands [
     "/cb",
     "/checkpoint",
@@ -54,10 +52,12 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   # History persistence
   # ---------------------------------------------------------------------
 
-  @doc "Loads persistent history lines from ~/.dsh/history, most recent first."
+  @doc "Loads persistent history lines from the history file, most recent first."
   def load_history do
-    if File.exists?(@history_file) do
-      @history_file
+    path = history_file()
+
+    if File.exists?(path) do
+      path
       |> File.read!()
       |> String.split("\n", trim: true)
       |> Enum.reverse()
@@ -73,11 +73,21 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     trimmed = String.trim(line)
 
     if trimmed != "" do
-      File.mkdir_p!(Path.dirname(@history_file))
-      File.write!(@history_file, "#{trimmed}\n", [:append])
+      path = history_file()
+      File.mkdir_p!(Path.dirname(path))
+      File.write!(path, "#{trimmed}\n", [:append])
     end
   rescue
     _ -> :ok
+  end
+
+  @doc """
+  Resolves the persistent history file path. Defaults to `~/.dsh/history`,
+  but can be overridden via the `:history_file` application environment key
+  (used by tests so they never read from or write to the real user history).
+  """
+  def history_file do
+    Application.get_env(:deep_seek_harness, :history_file) || Path.expand("~/.dsh/history")
   end
 
   @doc "Formats a configurable prompt string using config template or default."
