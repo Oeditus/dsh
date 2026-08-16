@@ -103,6 +103,9 @@ defmodule DeepSeekHarness.Hands.Executor do
       name in ~w(subagent spawn_subagent agent) ->
         "🤖"
 
+      name in ~w(ask_question ask question user_input) ->
+        "❓"
+
       String.starts_with?(name, "mcp_") or name == "ragex" ->
         "🔌"
 

@@ -13,3 +13,8 @@ config :ragex,
   store_backend: :dllb,
   dllb_mode: :global,
   start_stdio_server: false
+
+if config_env() == :test do
+  config :deep_seek_harness, auto_start_ragex: false
+  config :dllb, enabled: false
+end

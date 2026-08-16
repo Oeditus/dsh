@@ -6,6 +6,7 @@ defmodule DeepSeekHarness.MixProject do
       app: :deep_seek_harness,
       version: "0.1.0",
       elixir: "~> 1.20",
+      escript: [main_module: DeepSeekHarness.CLI.Main, name: "dsh"],
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       dialyzer: [

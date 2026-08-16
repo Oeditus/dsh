@@ -44,7 +44,10 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   @impl true
   def init(_opts) do
-    send(self(), :auto_start_ragex)
+    if Application.get_env(:deep_seek_harness, :auto_start_ragex, true) do
+      send(self(), :auto_start_ragex)
+    end
+
     {:ok, %{servers: %{}}}
   end
 

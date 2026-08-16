@@ -13,6 +13,7 @@ defmodule DeepSeekHarness.PluginLoaderTest do
     assert "list_dir" in tool_names
     assert "bash" in tool_names
     assert "elixir_eval" in tool_names
+    assert "ask_question" in tool_names
   end
 
   test "executes built-in elixir_eval tool" do

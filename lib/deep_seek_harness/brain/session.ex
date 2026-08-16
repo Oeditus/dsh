@@ -16,8 +16,9 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @default_system_prompt """
   You are an expert agentic AI coding assistant powered by DeepSeek.
-  You have access to tools for file operations, bash execution, skills, MCP servers, and Elixir evaluation.
+  You have access to tools for file operations, bash execution, skills, MCP servers, Elixir evaluation, and interactive user questions (ask_question tool).
   Break down tasks systematically, reason carefully, and invoke tools when needed.
+  If requirements are underspecified, design choices need feedback, or confirmation is helpful, use the `ask_question` tool to present structured choices to the user.
   """
 
   # Client API
@@ -483,7 +484,7 @@ defmodule DeepSeekHarness.Brain.Session do
     end
   end
 
-  @standard_tools ~w(read_file write_file replace_file list_dir bash elixir_eval)
+  @standard_tools ~w(read_file write_file replace_file list_dir bash elixir_eval ask_question)
 
   defp execute_tool_calls(tool_calls, state) do
     Enum.reduce(tool_calls, {[], state}, fn tc, {msg_acc, current_state} ->

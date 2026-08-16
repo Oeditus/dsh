@@ -8,7 +8,7 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
   @impl true
   def description,
     do:
-      "Provides default workspace tools: read_file, write_file, replace_file, list_dir, bash, and elixir_eval."
+      "Provides default workspace tools: read_file, write_file, replace_file, list_dir, bash, elixir_eval, and ask_question."
 
   @impl true
   def tools do
@@ -91,6 +91,41 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
           required: ["code"]
         },
         execute: &evaluate_elixir/1
+      },
+      %{
+        name: "ask_question",
+        description:
+          "Ask the user one or more multiple-choice questions or request user feedback/clarification via interactive CLI UI modal.",
+        parameters: %{
+          type: "object",
+          properties: %{
+            questions: %{
+              type: "array",
+              description: "The list of questions to ask the user.",
+              items: %{
+                type: "object",
+                properties: %{
+                  question: %{
+                    type: "string",
+                    description: "The question prompt to ask the user."
+                  },
+                  options: %{
+                    type: "array",
+                    items: %{type: "string"},
+                    description: "List of selectable options for the user."
+                  },
+                  is_multi_select: %{
+                    type: "boolean",
+                    description: "Whether the user can select multiple options (default: false)."
+                  }
+                },
+                required: ["question", "options"]
+              }
+            }
+          },
+          required: ["questions"]
+        },
+        execute: &ask_question/1
       }
     ]
   end
@@ -162,5 +197,22 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
     {:ok, inspect(result, pretty: true)}
   rescue
     e -> {:error, "Evaluation exception: #{Exception.format(:error, e, __STACKTRACE__)}"}
+  end
+
+  def ask_question(args) do
+    questions =
+      cond do
+        is_list(args["questions"]) -> args["questions"]
+        is_binary(args["question"]) and is_list(args["options"]) -> [args]
+        true -> []
+      end
+
+    if questions == [] do
+      {:error,
+       "Invalid arguments for ask_question. Expected 'questions' list containing 'question' and 'options'."}
+    else
+      result = DeepSeekHarness.CLI.QuestionPrompt.ask(questions)
+      {:ok, result}
+    end
   end
 end
