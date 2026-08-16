@@ -103,55 +103,79 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
 
   # Mock handler for local demonstration and test environments without API key
   defp mock_response(messages, _tools, model) do
-    last_msg = List.last(messages) || %{"content" => ""}
-    query = String.downcase(last_msg["content"] || "")
+    last_user_msg =
+      messages
+      |> Enum.reverse()
+      |> Enum.find(fn m -> m["role"] == "user" end) || %{"content" => ""}
 
-    # Check if last user message asks to perform an action using tools
-    cond do
-      String.contains?(query, "list") or String.contains?(query, "ls") or
-          String.contains?(query, "directory") ->
-        {:ok,
-         %{
-           role: "assistant",
-           content: "I will list the files in the directory to inspect the project layout.",
-           reasoning_content:
-             "Thought: The user requested directory contents. Utilizing list_dir tool.",
-           tool_calls: [
-             %{
-               id: "call_mock_#{System.unique_integer([:positive])}",
-               name: "list_dir",
-               arguments: %{"path" => "."}
-             }
-           ]
-         }}
+    has_tool_result? = Enum.any?(messages, fn m -> m["role"] == "tool" end)
 
-      String.contains?(query, "eval") or String.contains?(query, "calculate") or
-          String.contains?(query, "elixir") ->
-        {:ok,
-         %{
-           role: "assistant",
-           content: "Executing Elixir code snippet.",
-           reasoning_content: "Thought: Need to evaluate expression.",
-           tool_calls: [
-             %{
-               id: "call_mock_#{System.unique_integer([:positive])}",
-               name: "elixir_eval",
-               arguments: %{"code" => "1 + 1 + 42"}
-             }
-           ]
-         }}
+    if has_tool_result? do
+      tool_results =
+        messages
+        |> Enum.filter(fn m -> m["role"] == "tool" end)
+        |> Enum.map_join("\n", fn m -> m["content"] || "" end)
 
-      true ->
-        prefix = if model == "deepseek-reasoner", do: "[DeepSeek-R1 Reasoning Mode] ", else: ""
+      prefix = if model == "deepseek-reasoner", do: "[DeepSeek-R1 Reasoning Mode] ", else: ""
 
-        {:ok,
-         %{
-           role: "assistant",
-           content:
-             "#{prefix}Received prompt: \"#{last_msg["content"]}\". (Running in offline/mock mode. Set DEEPSEEK_API_KEY to connect live to DeepSeek API).",
-           reasoning_content: "Analyzed request using spatiotemporal actor context.",
-           tool_calls: []
-         }}
+      {:ok,
+       %{
+         role: "assistant",
+         content:
+           "#{prefix}Examined workspace directory:\n\n#{tool_results}\n\n(Running in offline/mock mode. Set DEEPSEEK_API_KEY to connect live to DeepSeek API).",
+         reasoning_content: "Processed tool results and formulated response.",
+         tool_calls: []
+       }}
+    else
+      query = String.downcase(last_user_msg["content"] || "")
+
+      cond do
+        String.contains?(query, "list") or String.contains?(query, "ls") or
+          String.contains?(query, "directory") or String.contains?(query, "examine") or
+            String.contains?(query, "project") ->
+          {:ok,
+           %{
+             role: "assistant",
+             content: "I will list the files in the directory to inspect the project layout.",
+             reasoning_content:
+               "Thought: The user requested directory contents. Utilizing list_dir tool.",
+             tool_calls: [
+               %{
+                 id: "call_mock_#{System.unique_integer([:positive])}",
+                 name: "list_dir",
+                 arguments: %{"path" => "."}
+               }
+             ]
+           }}
+
+        String.contains?(query, "eval") or String.contains?(query, "calculate") or
+            String.contains?(query, "elixir") ->
+          {:ok,
+           %{
+             role: "assistant",
+             content: "Executing Elixir code snippet.",
+             reasoning_content: "Thought: Need to evaluate expression.",
+             tool_calls: [
+               %{
+                 id: "call_mock_#{System.unique_integer([:positive])}",
+                 name: "elixir_eval",
+                 arguments: %{"code" => "1 + 1 + 42"}
+               }
+             ]
+           }}
+
+        true ->
+          prefix = if model == "deepseek-reasoner", do: "[DeepSeek-R1 Reasoning Mode] ", else: ""
+
+          {:ok,
+           %{
+             role: "assistant",
+             content:
+               "#{prefix}Received prompt: \"#{last_user_msg["content"]}\". (Running in offline/mock mode. Set DEEPSEEK_API_KEY to connect live to DeepSeek API).",
+             reasoning_content: "Analyzed request using spatiotemporal actor context.",
+             tool_calls: []
+           }}
+      end
     end
   end
 end

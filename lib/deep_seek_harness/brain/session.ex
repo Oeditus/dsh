@@ -123,6 +123,7 @@ defmodule DeepSeekHarness.Brain.Session do
       hands: %HandsExecutor{mode: :local},
       messages: initial_messages,
       tools: tools,
+      tool_failure_counts: %{},
       snapshots: [],
       step_count: 0,
       max_tool_depth: opts[:max_tool_depth] || 50,
@@ -350,8 +351,17 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @impl true
   def handle_info({:hot_reload_tools, new_tools}, state) do
-    Logger.info(
+    Logger.debug(
       "[Brain.Session] Hot-reloaded tools dynamically without dropping conversation state! (Tools: #{length(new_tools)})"
+    )
+
+    {:noreply, %{state | tools: new_tools}}
+  end
+
+  @impl true
+  def handle_info({:tools_reloaded, new_tools}, state) do
+    Logger.debug(
+      "[Brain.Session] Dynamic tools updated without dropping conversation state (#{length(new_tools)} tools active)."
     )
 
     {:noreply, %{state | tools: new_tools}}
@@ -382,41 +392,55 @@ defmodule DeepSeekHarness.Brain.Session do
           Logger.info("[DeepSeek-R1 Reasoning]\n#{response.reasoning_content}")
         end
 
-        assistant_msg = %{
-          "role" => "assistant",
-          "content" => response.content || "",
-          "tool_calls" =>
-            Enum.map(tool_calls, fn tc ->
-              %{
-                "id" => tc.id,
-                "type" => "function",
-                "function" => %{
-                  "name" => tc.name,
-                  "arguments" => Jason.encode!(tc.arguments)
+        assistant_msg =
+          %{
+            "role" => "assistant",
+            "content" => response.content || "",
+            "tool_calls" =>
+              Enum.map(tool_calls, fn tc ->
+                %{
+                  "id" => tc.id,
+                  "type" => "function",
+                  "function" => %{
+                    "name" => tc.name,
+                    "arguments" => Jason.encode!(tc.arguments)
+                  }
                 }
-              }
-            end)
-        }
+              end)
+          }
+          |> maybe_put_reasoning(response[:reasoning_content])
 
         state_after_assistant = %{state | messages: state.messages ++ [assistant_msg]}
 
-        {tool_messages, updated_hands_state} =
-          execute_tool_calls(tool_calls, state_after_assistant)
+        if duplicate_tool_calls?(state.messages, tool_calls) do
+          Logger.warning(
+            "[Brain.Session] Detected duplicate tool call loop. Instructing model to finalize response."
+          )
 
-        state_after_tools = %{
-          updated_hands_state
-          | messages: updated_hands_state.messages ++ tool_messages,
-            step_count: updated_hands_state.step_count + 1
-        }
+          system_feedback = %{
+            "role" => "user",
+            "content" =>
+              "SYSTEM NOTICE: The tool call(s) #{inspect(Enum.map(tool_calls, & &1.name))} with the exact same arguments were already executed in the previous turn. Do NOT call the tool again. Synthesize your final answer using the results already provided."
+          }
 
-        next_depth =
-          if Enum.all?(tool_calls, &discovery_tool_call?/1) do
-            depth
-          else
-            depth - 1
-          end
+          state_with_feedback = %{
+            state_after_assistant
+            | messages: state_after_assistant.messages ++ [system_feedback]
+          }
 
-        run_agent_loop(state_after_tools, next_depth)
+          run_agent_loop(state_with_feedback, depth - 1)
+        else
+          {tool_messages, updated_hands_state} =
+            execute_tool_calls(tool_calls, state_after_assistant)
+
+          state_after_tools = %{
+            updated_hands_state
+            | messages: updated_hands_state.messages ++ tool_messages,
+              step_count: updated_hands_state.step_count + 1
+          }
+
+          run_agent_loop(state_after_tools, depth - 1)
+        end
 
       {:ok, response} ->
         if response[:reasoning_content] do
@@ -432,78 +456,41 @@ defmodule DeepSeekHarness.Brain.Session do
     end
   end
 
-  defp discovery_tool_call?(%{name: name} = tc) do
-    cond do
-      name in [
-        "list_dir",
-        "read_file",
-        "file_exists",
-        "grep_search",
-        "find_by_name",
-        "git_status",
-        "git_diff",
-        "dir_list"
-      ] ->
-        true
+  defp maybe_put_reasoning(msg, reasoning) when is_binary(reasoning) and reasoning != "" do
+    Map.put(msg, "reasoning_content", reasoning)
+  end
 
-      name == "bash" ->
-        args = Map.get(tc, :arguments, %{})
-        cmd = Map.get(args, "command", "") |> String.trim()
-        read_only_cmd?(cmd)
+  defp maybe_put_reasoning(msg, _), do: msg
 
-      String.starts_with?(name, "mcp_read_") or String.starts_with?(name, "mcp_list_") ->
-        true
+  defp duplicate_tool_calls?(messages, new_tool_calls) do
+    case Enum.reverse(messages) do
+      [%{"tool_calls" => prev_calls} | _] when is_list(prev_calls) ->
+        prev_names_and_args =
+          Enum.map(prev_calls, fn tc ->
+            fn_data = Map.get(tc, "function", %{})
+            {Map.get(fn_data, "name"), Map.get(fn_data, "arguments")}
+          end)
 
-      true ->
+        new_names_and_args =
+          Enum.map(new_tool_calls, fn tc ->
+            {tc.name, Jason.encode!(tc.arguments)}
+          end)
+
+        prev_names_and_args == new_names_and_args and prev_names_and_args != []
+
+      _ ->
         false
     end
   end
 
-  defp discovery_tool_call?(_), do: false
-
-  defp read_only_cmd?(cmd) do
-    cmd_clean = String.downcase(cmd)
-
-    first_word =
-      cmd_clean
-      |> String.split([" ", "|", ";", "&&"], trim: true)
-      |> List.first() || ""
-
-    first_word in [
-      "ls",
-      "find",
-      "cat",
-      "head",
-      "tail",
-      "grep",
-      "rg",
-      "pwd",
-      "git",
-      "echo",
-      "stat",
-      "file",
-      "du",
-      "wc",
-      "tree"
-    ] and
-      not String.contains?(cmd_clean, [
-        "rm ",
-        "mv ",
-        "cp ",
-        "chmod",
-        "chown",
-        "mkdir",
-        ">",
-        "git commit",
-        "git push",
-        "mix test"
-      ])
-  end
+  @standard_tools ~w(read_file write_file replace_file list_dir bash elixir_eval)
 
   defp execute_tool_calls(tool_calls, state) do
-    tool_messages =
-      Enum.map(tool_calls, fn tc ->
-        case HandsExecutor.execute(state.hands, tc.name, tc.arguments) do
+    Enum.reduce(tool_calls, {[], state}, fn tc, {msg_acc, current_state} ->
+      exec_res = HandsExecutor.execute(current_state.hands, tc.name, tc.arguments)
+
+      tool_msg =
+        case exec_res do
           {:ok, result} ->
             %{"role" => "tool", "tool_call_id" => tc.id, "content" => result}
 
@@ -514,10 +501,68 @@ defmodule DeepSeekHarness.Brain.Session do
               "content" => "Tool execution failed: #{err}"
             }
         end
-      end)
 
-    {tool_messages, state}
+      updated_state =
+        if non_standard_tool?(tc.name) and blank_result?(exec_res) do
+          current_counts = Map.get(current_state, :tool_failure_counts, %{})
+          new_fail_count = Map.get(current_counts, tc.name, 0) + 1
+          updated_counts = Map.put(current_counts, tc.name, new_fail_count)
+
+          if new_fail_count >= 3 do
+            Logger.warning(
+              "[Brain.Session] Non-standard tool '#{tc.name}' failed #{new_fail_count} times without results. Disabling tool and falling back to standard bash+grep."
+            )
+
+            # Disable failing non-standard tool from active tool definitions
+            remaining_tools =
+              Enum.reject(current_state.tools, fn t ->
+                Map.get(t, :name) == tc.name or Map.get(t, "name") == tc.name
+              end)
+
+            fallback_notice = %{
+              "role" => "user",
+              "content" =>
+                "SYSTEM NOTICE: Non-standard tool '#{tc.name}' failed to provide results after #{new_fail_count} attempts. Fallback mode activated: tool '#{tc.name}' has been disabled. Please use standard tools: bash (with grep, find, cat), read_file, or list_dir instead."
+            }
+
+            %{
+              current_state
+              | tool_failure_counts: updated_counts,
+                tools: remaining_tools,
+                messages: current_state.messages ++ [fallback_notice]
+            }
+          else
+            %{current_state | tool_failure_counts: updated_counts}
+          end
+        else
+          current_state
+        end
+
+      {msg_acc ++ [tool_msg], updated_state}
+    end)
   end
+
+  defp non_standard_tool?(name) when is_binary(name) do
+    name not in @standard_tools
+  end
+
+  defp non_standard_tool?(_), do: false
+
+  defp blank_result?({:error, _}), do: true
+
+  defp blank_result?({:ok, res}) when is_binary(res) do
+    trimmed = String.trim(res)
+
+    trimmed == "" or String.starts_with?(trimmed, "Tool execution failed") or
+      String.starts_with?(trimmed, "Ragex tool error") or
+      String.contains?(trimmed, "dllb_disabled") or
+      String.contains?(trimmed, "manager_not_started")
+  end
+
+  defp blank_result?({:ok, nil}), do: true
+  defp blank_result?({:ok, []}), do: true
+  defp blank_result?({:ok, %{}}), do: true
+  defp blank_result?(_), do: false
 
   defp auto_checkpoint(state, label) do
     snapshot = %{

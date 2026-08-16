@@ -52,27 +52,35 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   def handle_info(:auto_start_ragex, state) do
     cwd = File.cwd!()
 
-    case do_start_ragex(cwd, []) do
-      {:ok, dir, tools_registered} ->
-        new_servers =
-          Map.put(state.servers, "ragex", %{
-            command: "in_process",
-            args: [],
-            cwd: dir,
-            tools: tools_registered
-          })
+    Task.start(fn ->
+      case do_start_ragex(cwd, []) do
+        {:ok, dir, tools_registered} ->
+          GenServer.cast(@name, {:ragex_started, dir, tools_registered})
 
-        {:noreply, %{state | servers: new_servers}}
+        {:error, reason} ->
+          Logger.warning("⚡🔌 Ragex auto-start notice: #{inspect(reason)}")
+      end
+    end)
 
-      {:error, reason} ->
-        Logger.warning("⚡🔌 Ragex auto-start notice: #{inspect(reason)}")
-        {:noreply, state}
-    end
+    {:noreply, state}
   end
 
   def handle_info(msg, state) do
     Logger.debug("[ServerManager] Unhandled message: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:ragex_started, dir, tools_registered}, state) do
+    new_servers =
+      Map.put(state.servers, "ragex", %{
+        command: "in_process",
+        args: [],
+        cwd: dir,
+        tools: tools_registered
+      })
+
+    {:noreply, %{state | servers: new_servers}}
   end
 
   @impl true
@@ -155,24 +163,59 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   defp do_start_ragex(target_dir, opts) do
     if Code.ensure_loaded?(Ragex.MCP.Handlers.Tools) do
-      configure_ragex_store()
+      DeepSeekHarness.CLI.Spinner.run(
+        fn ->
+          orig_level = Logger.level()
+          Logger.configure(level: :warning)
 
-      Logger.info("⚡🔌 Auto-indexing codebase in '#{target_dir}' via Ragex...")
+          try do
+            configure_ragex_store(target_dir)
 
-      case Ragex.Analyzers.Directory.analyze_directory(target_dir) do
-        {:ok, stats} ->
-          Logger.info(
-            "⚡🔌 Ragex indexing complete! Indexed #{stats.success} files into Knowledge Graph."
-          )
+            existing_nodes =
+              if Code.ensure_loaded?(Ragex.Graph.Store) do
+                try do
+                  stats = Ragex.Graph.Store.stats()
+                  Map.get(stats, :nodes, 0) + Map.get(stats, :total, 0)
+                rescue
+                  _ -> 0
+                catch
+                  _, _ -> 0
+                end
+              else
+                0
+              end
 
-        {:error, reason} ->
-          Logger.warning("⚡🔌 Ragex indexing notice: #{inspect(reason)}")
-      end
+            if existing_nodes > 0 do
+              Logger.configure(level: orig_level)
 
-      tools = Ragex.MCP.Handlers.Tools.list_tools()
+              Logger.info("⚡🔌 Ragex Knowledge Graph loaded from store (#{existing_nodes} nodes).")
+            else
+              case Ragex.Analyzers.Directory.analyze_directory(target_dir) do
+                {:ok, stats} ->
+                  Logger.configure(level: orig_level)
 
-      registered_names =
-        Enum.map(tools, fn t ->
+                  Logger.info(
+                    "⚡🔌 Ragex indexing complete! Indexed #{stats.success} files into Knowledge Graph."
+                  )
+
+                {:error, reason} ->
+                  Logger.configure(level: orig_level)
+                  Logger.warning("⚡🔌 Ragex indexing notice: #{inspect(reason)}")
+              end
+            end
+          after
+            Logger.configure(level: orig_level)
+          end
+        end,
+        title: "Initializing Ragex Knowledge Graph...",
+        tip: false
+      )
+
+      raw_tools = Ragex.MCP.Handlers.Tools.list_tools()
+      tools_list = Map.get(raw_tools, :tools, [])
+
+      built =
+        Enum.map(tools_list, fn t ->
           t_name = Map.get(t, "name") || Map.get(t, :name)
           t_desc = Map.get(t, "description") || Map.get(t, :description) || "Ragex tool #{t_name}"
 
@@ -182,23 +225,16 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
           tool_name = "mcp_ragex_#{t_name}"
 
-          tool_def = %{
-            name: tool_name,
-            description: "[MCP:ragex] #{t_desc}",
-            parameters: input_schema,
-            execute: fn args ->
-              case Ragex.MCP.Handlers.Tools.call_tool(t_name, args) do
-                {:ok, result} -> {:ok, format_mcp_content(result)}
-                {:error, err} -> {:error, "Ragex tool error: #{inspect(err)}"}
-                other -> {:ok, inspect(other, pretty: true)}
-              end
-            end
-          }
-
-          register_mcp_tool_in_plugin(tool_def)
-          tool_name
+          dynamic_mod_name = build_mcp_ragex_tool_module(tool_name, t_name, t_desc, input_schema)
+          {tool_name, dynamic_mod_name}
         end)
 
+      # Register every dynamically generated module in a single batch call so
+      # sessions receive one "tools reloaded" notification instead of one per tool.
+      PluginLoader.register_plugins(Enum.map(built, fn {_tool_name, mod} -> mod end))
+      registered_names = Enum.map(built, fn {tool_name, _mod} -> tool_name end)
+
+      Logger.info("● DeepSeek Harness initialization complete! System is ready.")
       {:ok, target_dir, registered_names}
     else
       start_ragex_external(target_dir, opts)
@@ -240,15 +276,104 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     end
   end
 
-  defp configure_ragex_store do
+  defp configure_ragex_store(target_dir) do
     use_dllb? = Code.ensure_loaded?(Dllb)
     backend = if use_dllb?, do: :dllb, else: :ets
 
+    host = System.get_env("DLLB_HOST", Application.get_env(:dllb, :host, "127.0.0.1"))
+
+    port =
+      case System.get_env("DLLB_PORT") do
+        nil -> Application.get_env(:dllb, :port, 3009)
+        p -> String.to_integer(p)
+      end
+
+    pool_size =
+      case System.get_env("DLLB_POOL_SIZE") do
+        nil -> Application.get_env(:dllb, :pool_size, 30)
+        p -> String.to_integer(p)
+      end
+
+    dllb_mode =
+      case System.get_env("DLLB_MODE") do
+        "per_project" -> :per_project
+        "global" -> :global
+        _ -> Application.get_env(:ragex, :dllb_mode, :per_project)
+      end
+
     Application.put_env(:ragex, :store_backend, backend)
-    if use_dllb?, do: Application.put_env(:dllb, :enabled, true)
+    Application.put_env(:ragex, :dllb_mode, dllb_mode)
+
+    if use_dllb? do
+      Application.put_env(:dllb, :enabled, true)
+      Application.put_env(:dllb, :host, host)
+      Application.put_env(:dllb, :port, port)
+      Application.put_env(:dllb, :pool_size, pool_size)
+
+      if dllb_mode == :per_project and Code.ensure_loaded?(Ragex.Dllb.ProjectManager) do
+        case Ragex.Dllb.ProjectManager.set_active_project(target_dir) do
+          :ok ->
+            Logger.info("⚡🔌 Per-project Dllb instance active for #{target_dir}")
+
+          {:error, reason} ->
+            Logger.warning("⚡🔌 Per-project Dllb notice: #{inspect(reason)}")
+        end
+      else
+        # Ensure Dllb.Pool is started under Dllb.Supervisor if not running
+        if Process.whereis(Dllb.Pool) == nil and Process.whereis(Dllb.Supervisor) != nil do
+          pool_opts = [
+            host: host,
+            port: port,
+            pool_size: pool_size,
+            outcome: Application.get_env(:dllb, :outcome, :json),
+            timeout: Application.get_env(:dllb, :timeout, 30_000)
+          ]
+
+          case Supervisor.start_child(Dllb.Supervisor, Dllb.Pool.child_spec(pool_opts)) do
+            {:ok, _pid} ->
+              Logger.info("⚡🔌 Dllb.Pool started on #{host}:#{port} (pool size: #{pool_size})")
+
+            {:error, {:already_started, _pid}} ->
+              :ok
+
+            {:error, reason} ->
+              Logger.warning("⚡🔌 Failed to start Dllb.Pool: #{inspect(reason)}")
+          end
+        end
+      end
+
+      # Fast check: skip schema bootstrapping if ast_node table already exists
+      if Process.whereis(Dllb.Pool) != nil or dllb_mode == :per_project do
+        already_bootstrapped? =
+          try do
+            case Ragex.Store.Backend.Dllb.query("SELECT * FROM ast_node LIMIT 1;") do
+              {:ok, _} -> true
+              _ -> false
+            end
+          rescue
+            _ -> false
+          catch
+            _, _ -> false
+          end
+
+        if already_bootstrapped? do
+          Logger.info("⚡🔌 Dllb schema ready for Ragex Knowledge Graph")
+        else
+          Logger.info("⌛ Bootstrapping Dllb database schema...")
+
+          case Ragex.Store.Backend.Dllb.bootstrap() do
+            :ok ->
+              Logger.info("⚡🔌 Dllb schema bootstrapped for Ragex Knowledge Graph")
+
+            {:error, reason} ->
+              Logger.warning("⚡🔌 Dllb schema bootstrap notice: #{inspect(reason)}")
+          end
+        end
+      end
+    end
 
     Logger.info(
-      "⚡🔌 Ragex Knowledge Graph backend configured: #{backend} (dllb active: #{use_dllb?})"
+      "⚡🔌 Ragex Knowledge Graph backend configured: #{backend} (mode: #{dllb_mode}, dllb active: #{use_dllb?})"
     )
   end
 
@@ -283,7 +408,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       {:ok, client_pid} ->
         case MCPClient.list_mcp_tools(client_pid) do
           {:ok, %{"tools" => mcp_tools}} when is_list(mcp_tools) ->
-            registered_names =
+            built =
               Enum.map(mcp_tools, fn t ->
                 tool_name = "mcp_#{name}_#{t["name"]}"
                 desc = Map.get(t, "description", "MCP Tool from #{name}")
@@ -291,22 +416,22 @@ defmodule DeepSeekHarness.MCP.ServerManager do
                 input_schema =
                   Map.get(t, "inputSchema", %{"type" => "object", "properties" => %{}})
 
-                tool_def = %{
-                  name: tool_name,
-                  description: "[MCP:#{name}] #{desc}",
-                  parameters: input_schema,
-                  execute: fn arguments ->
-                    case MCPClient.call_mcp_tool(client_pid, t["name"], arguments) do
-                      {:ok, %{"content" => content}} -> {:ok, format_mcp_content(content)}
-                      {:ok, res} -> {:ok, inspect(res, pretty: true)}
-                      {:error, err} -> {:error, "MCP tool error: #{inspect(err)}"}
-                    end
-                  end
-                }
+                dynamic_mod_name =
+                  build_mcp_client_tool_module(
+                    name,
+                    tool_name,
+                    t["name"],
+                    desc,
+                    input_schema,
+                    client_pid
+                  )
 
-                register_mcp_tool_in_plugin(tool_def)
-                tool_name
+                {tool_name, dynamic_mod_name}
               end)
+
+            # Single batch registration -- avoids one "tools reloaded" notification per tool.
+            PluginLoader.register_plugins(Enum.map(built, fn {_tool_name, mod} -> mod end))
+            registered_names = Enum.map(built, fn {tool_name, _mod} -> tool_name end)
 
             {:ok, registered_names, client_pid}
 
@@ -323,21 +448,103 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     end
   end
 
-  defp register_mcp_tool_in_plugin(tool_def) do
-    dynamic_mod_name = String.to_atom("Elixir.DeepSeekHarness.Plugin.MCP_#{tool_def.name}")
-
-    contents = """
-    defmodule #{dynamic_mod_name} do
-      @behaviour DeepSeekHarness.Plugin.Behaviour
-
-      def name, do: "#{tool_def.name}"
-      def description, do: "#{String.replace(tool_def.description, "\"", "\\\"")}"
-      def tools, do: [#{inspect(tool_def)}]
+  @doc "Executes a Ragex MCP tool by target name with args."
+  def execute_ragex_tool(t_name, args) do
+    case Ragex.MCP.Handlers.Tools.call_tool(t_name, args) do
+      {:ok, result} -> {:ok, format_mcp_content(result)}
+      {:error, err} -> {:error, "Ragex tool error: #{inspect(err)}"}
+      other -> {:ok, inspect(other, pretty: true)}
     end
-    """
+  end
 
-    [{mod, _}] = Code.compile_string(contents)
-    PluginLoader.register_plugin(mod)
+  @doc "Executes an external stdio MCP tool by target name with args."
+  def execute_mcp_client_tool(client_pid, mcp_tool_name, arguments) do
+    case MCPClient.call_mcp_tool(client_pid, mcp_tool_name, arguments) do
+      {:ok, %{"content" => content}} -> {:ok, format_mcp_content(content)}
+      {:ok, res} -> {:ok, inspect(res, pretty: true)}
+      {:error, err} -> {:error, "MCP tool error: #{inspect(err)}"}
+    end
+  end
+
+  defp build_mcp_ragex_tool_module(tool_name, t_name, t_desc, input_schema) do
+    dynamic_mod_name = String.to_atom("Elixir.DeepSeekHarness.Plugin.MCP_#{tool_name}")
+
+    :code.purge(dynamic_mod_name)
+    :code.delete(dynamic_mod_name)
+
+    Module.create(
+      dynamic_mod_name,
+      quote do
+        @behaviour DeepSeekHarness.Plugin.Behaviour
+
+        def name, do: unquote(tool_name)
+        def description, do: unquote("[MCP:ragex] #{t_desc}")
+
+        def execute(args) do
+          DeepSeekHarness.MCP.ServerManager.execute_ragex_tool(unquote(t_name), args)
+        end
+
+        def tools do
+          [
+            %{
+              name: unquote(tool_name),
+              description: unquote("[MCP:ragex] #{t_desc}"),
+              parameters: unquote(Macro.escape(input_schema)),
+              execute: &execute/1
+            }
+          ]
+        end
+      end,
+      Macro.Env.location(__ENV__)
+    )
+
+    dynamic_mod_name
+  end
+
+  defp build_mcp_client_tool_module(
+         server_name,
+         tool_name,
+         mcp_tool_name,
+         desc,
+         input_schema,
+         client_pid
+       ) do
+    dynamic_mod_name = String.to_atom("Elixir.DeepSeekHarness.Plugin.MCP_#{tool_name}")
+
+    :code.purge(dynamic_mod_name)
+    :code.delete(dynamic_mod_name)
+
+    Module.create(
+      dynamic_mod_name,
+      quote do
+        @behaviour DeepSeekHarness.Plugin.Behaviour
+
+        def name, do: unquote(tool_name)
+        def description, do: unquote("[MCP:#{server_name}] #{desc}")
+
+        def execute(args) do
+          DeepSeekHarness.MCP.ServerManager.execute_mcp_client_tool(
+            unquote(client_pid),
+            unquote(mcp_tool_name),
+            args
+          )
+        end
+
+        def tools do
+          [
+            %{
+              name: unquote(tool_name),
+              description: unquote("[MCP:#{server_name}] #{desc}"),
+              parameters: unquote(Macro.escape(input_schema)),
+              execute: &execute/1
+            }
+          ]
+        end
+      end,
+      Macro.Env.location(__ENV__)
+    )
+
+    dynamic_mod_name
   end
 
   defp format_mcp_content(content) when is_list(content) do

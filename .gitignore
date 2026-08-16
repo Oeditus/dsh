@@ -9,9 +9,10 @@
 
 # Where third-party dependencies like ExDoc output generated docs.
 /doc/
+/stuff/dev/
 
-# Temporary files, for example, from tests.
-/tmp/
+# Ignore .fetch files in case you like to edit your project deps locally.
+/.fetch
 
 # If the VM crashes, it generates a dump, let's ignore it too.
 erl_crash.dump
@@ -20,9 +21,22 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-ragec-*.tar
+oeditus_credo-*.tar
 
-# Ignore Dialyzer PLT files
+# Temporary files, for example, from tests.
+/tmp/
+
+/.elixir-tools/
+/.elixir_ls/
+/.erl.history/
+/.zed/
+
+/.aiassistant/
+/.claude/
+/.gemini/
+/.openai/
+
 /priv/plts/
-/.dialyzer/
 
+# Local Ragex knowledge-graph/dllb database for this project (generated data).
+/.ragex/

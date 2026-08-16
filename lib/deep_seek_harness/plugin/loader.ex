@@ -20,6 +20,21 @@ defmodule DeepSeekHarness.Plugin.Loader do
     GenServer.call(@name, {:register_plugin, plugin_module})
   end
 
+  @doc """
+  Registers multiple plugin modules in a single pass.
+
+  Unlike calling `register_plugin/1` in a loop, this only rebuilds the tools
+  map and notifies live sessions once, regardless of how many modules are
+  passed in. Prefer this whenever registering a batch of dynamically
+  generated tools (e.g. all tools from an MCP server) to avoid flooding
+  sessions with one reload notification per tool.
+  """
+  def register_plugins([]), do: {:ok, []}
+
+  def register_plugins(plugin_modules) when is_list(plugin_modules) do
+    GenServer.call(@name, {:register_plugins, plugin_modules})
+  end
+
   @doc "Loads and compiles an Elixir plugin source file (.ex or .exs)."
   def load_file(path) do
     GenServer.call(@name, {:load_file, path})
@@ -37,7 +52,23 @@ defmodule DeepSeekHarness.Plugin.Loader do
 
   @doc "Executes a named tool with arguments."
   def execute_tool(tool_name, args, timeout \\ :infinity) do
-    GenServer.call(@name, {:execute_tool, tool_name, args}, timeout)
+    case GenServer.call(@name, {:get_tool, tool_name}, timeout) do
+      {:ok, tool_info} ->
+        try do
+          case tool_info.execute.(args) do
+            {:ok, res} -> {:ok, res}
+            {:error, err} -> {:error, err}
+            other -> {:ok, other}
+          end
+        rescue
+          e ->
+            err_msg = "Error executing tool #{tool_name}: #{Exception.message(e)}"
+            {:error, err_msg}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   # Server Callbacks
@@ -60,6 +91,15 @@ defmodule DeepSeekHarness.Plugin.Loader do
     new_state = %{state | plugins: new_plugins} |> build_tools_map()
     notify_sessions_of_reload(new_state.tools_map)
     {:reply, {:ok, plugin_module.name()}, new_state}
+  end
+
+  @impl true
+  def handle_call({:register_plugins, plugin_modules}, _from, state) do
+    new_plugins = Enum.uniq(Enum.reverse(plugin_modules) ++ state.plugins)
+    new_state = %{state | plugins: new_plugins} |> build_tools_map()
+    notify_sessions_of_reload(new_state.tools_map)
+    names = Enum.map(plugin_modules, &apply_name/1)
+    {:reply, {:ok, names}, new_state}
   end
 
   @impl true
@@ -122,20 +162,10 @@ defmodule DeepSeekHarness.Plugin.Loader do
   end
 
   @impl true
-  def handle_call({:execute_tool, tool_name, args}, _from, state) do
+  def handle_call({:get_tool, tool_name}, _from, state) do
     case Map.fetch(state.tools_map, tool_name) do
-      {:ok, tool_info} ->
-        try do
-          result = tool_info.execute.(args)
-          {:reply, result, state}
-        rescue
-          e ->
-            err_msg = "Error executing tool #{tool_name}: #{Exception.message(e)}"
-            {:reply, {:error, err_msg}, state}
-        end
-
-      :error ->
-        {:reply, {:error, "Unknown tool: #{tool_name}"}, state}
+      {:ok, tool_info} -> {:reply, {:ok, tool_info}, state}
+      :error -> {:reply, {:error, "Unknown tool: #{tool_name}"}, state}
     end
   end
 

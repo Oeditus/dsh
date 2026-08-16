@@ -13,6 +13,38 @@ defmodule DeepSeekHarness.CLI.Formatter do
   def magenta, do: IO.ANSI.magenta()
   def red, do: IO.ANSI.red()
   def blue, do: IO.ANSI.blue()
+  def gray, do: IO.ANSI.light_black()
+
+  @tips [
+    "Use !command to execute shell commands directly (e.g. !git status)",
+    "Use /help to view available slash commands and shortcuts",
+    "Use /model [chat|reasoner] to switch between deepseek-chat and deepseek-reasoner models",
+    "Use /mode [local|remote|docker] to set Hands execution target",
+    "Use /plugins [reload] to list tools or hot-reload plugins live without dropping state",
+    "Use /mcp [list|add|load] to manage Model Context Protocol (MCP) servers and tools",
+    "Use /ragex to mount first-class Ragex code analysis & refactoring MCP tools",
+    "Use /skills [name] to list available skills or execute a skill instruction",
+    "Use /compact to compress conversation context to save tokens",
+    "Use /diff to show colorized git diff of workspace changes",
+    "Use /review <base> [head] to compare two git branches and generate a detailed Code Review",
+    "Use /commit <message> to auto-commit staged workspace changes to git",
+    "Use /cost to display token usage and session cost statistics",
+    "Use /permissions [auto|ask] to set tool execution safety mode",
+    "Use /subagent <prompt> to spawn a background subagent worker for sub-tasks",
+    "Use /checkpoint [label] to create a temporal state snapshot",
+    "Use /undo to roll back state to previous checkpoint",
+    "Use /session to display active session metadata & statistics",
+    "Use /nodes to view distributed Erlang node cluster status",
+    "Use /cb or /clipboard to copy latest assistant response to system clipboard",
+    "Use /clear to clear terminal output",
+    "Use /exit or /quit to exit DeepSeek Harness"
+  ]
+
+  @doc "Returns the full list of tips derived from /help commands."
+  def tips, do: @tips
+
+  @doc "Returns a random tip string from the /help tips list."
+  def random_tip, do: Enum.random(@tips)
 
   def banner do
     color = banner_color()

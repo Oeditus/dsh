@@ -13,6 +13,19 @@ defmodule DeepSeekHarness.FormatterTest do
     assert Formatter.magenta() == IO.ANSI.magenta()
     assert Formatter.red() == IO.ANSI.red()
     assert Formatter.blue() == IO.ANSI.blue()
+    assert Formatter.gray() == IO.ANSI.light_black()
+  end
+
+  test "provides tips list derived from help menu" do
+    tips = Formatter.tips()
+    assert is_list(tips)
+    assert length(tips) > 10
+    assert Enum.any?(tips, &String.contains?(&1, "/help"))
+    assert Enum.any?(tips, &String.contains?(&1, "/compact"))
+
+    random_tip = Formatter.random_tip()
+    assert is_binary(random_tip)
+    assert random_tip in tips
   end
 
   test "renders ASCII banner with DSH RAGE title" do

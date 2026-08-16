@@ -10,6 +10,14 @@
 #   ./dsh --prod               Explicitly launch production release
 #   ./dsh --dev                Explicitly launch development release
 #
+# Configuration:
+#   DLLB_HOST       dllb server host                (default 127.0.0.1)
+#   DLLB_PORT       dllb server port                (default 3009)
+#   DLLB_DIR        dllb server repo                (default: <dsh>/../dllb)
+#   DLLB_START      command used to start dllb       (default: ./start_dev.sh)
+#   DLLB_LOG        dllb log file                   (default: <dllb>/dllb.log)
+#   DLLB_WAIT       seconds to wait for dllb readiness (default 60)
+#
 
 set -euo pipefail
 
@@ -37,6 +45,46 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# ---- dllb server lazy startup --------------------------------------------
+DLLB_HOST="${DLLB_HOST:-127.0.0.1}"
+DLLB_PORT="${DLLB_PORT:-3009}"
+DLLB_DIR_DEFAULT="$(cd -- "${SCRIPT_DIR}/../dllb" >/dev/null 2>&1 && pwd || echo "${SCRIPT_DIR}/../dllb")"
+DLLB_DIR="${DLLB_DIR:-${DLLB_DIR_DEFAULT}}"
+DLLB_START="${DLLB_START:-./start_dev.sh}"
+DLLB_LOG="${DLLB_LOG:-${DLLB_DIR}/dllb.log}"
+DLLB_WAIT="${DLLB_WAIT:-60}"
+
+port_up() {
+  local host="$1" port="$2"
+  (exec 3<>"/dev/tcp/${host}/${port}") 2>/dev/null
+}
+
+if port_up "${DLLB_HOST}" "${DLLB_PORT}"; then
+  echo "[INFO] dllb server already listening on ${DLLB_HOST}:${DLLB_PORT}"
+else
+  if [[ ! -d "${DLLB_DIR}" ]]; then
+    echo "[ERROR] dllb repo not found at ${DLLB_DIR} (set DLLB_DIR)" >&2
+    exit 1
+  fi
+  echo "[INFO] Starting dllb server in ${DLLB_DIR}..."
+  (
+    cd -- "${DLLB_DIR}"
+    nohup ${DLLB_START} >>"${DLLB_LOG}" 2>&1 &
+    echo "$!" >"${DLLB_DIR}/.dllb.pid"
+  )
+  echo "[INFO] Waiting up to ${DLLB_WAIT}s for ${DLLB_HOST}:${DLLB_PORT}..."
+  waited=0
+  until port_up "${DLLB_HOST}" "${DLLB_PORT}"; do
+    if [[ "${waited}" -ge "${DLLB_WAIT}" ]]; then
+      echo "[ERROR] dllb did not become ready within ${DLLB_WAIT}s -- check ${DLLB_LOG}" >&2
+      exit 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  echo "[INFO] dllb server is ready (after ${waited}s)"
+fi
 
 PROD_REL="$SCRIPT_DIR/_build/prod/rel/dsh/bin/dsh"
 DEV_REL="$SCRIPT_DIR/_build/dev/rel/dsh/bin/dsh"
@@ -74,3 +122,4 @@ case "$TARGET_ENV" in
     fi
     ;;
 esac
+

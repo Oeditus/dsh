@@ -40,14 +40,9 @@ defmodule DeepSeekHarness.MixProject do
       {:jason, "~> 1.4"},
       {:marcli, "~> 0.3"},
       {:owl, "~> 0.13"},
-      if(File.dir?("../ragex") or not is_nil(System.get_env("LOCAL_RAGEX")),
-        do: {:ragex, path: "../ragex", override: true},
-        else: {:ragex, "~> 0.25"}
-      ),
-      if(File.dir?("../dllb_ex") or not is_nil(System.get_env("LOCAL_DLLB")),
-        do: {:dllb, path: "../dllb_ex", override: true},
-        else: {:dllb, "~> 0.8"}
-      ),
+      {:egit, "~> 0.2"},
+      {:ragex, "~> 0.25"},
+      {:dllb, "~> 0.9"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
