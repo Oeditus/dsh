@@ -19,7 +19,7 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   @doc "Executes a tool call under the configured sandbox target."
   def execute(%__MODULE__{mode: :local}, tool_name, args) do
-    Logger.info("[Hands.Executor] [local] Executing #{tool_name} with args: #{inspect(args)}")
+    Logger.info("⚡#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
 
     case DeepSeekHarness.Plugin.Loader.execute_tool(tool_name, args, :infinity) do
       {:ok, result} -> {:ok, format_output(result)}
@@ -29,9 +29,7 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   def execute(%__MODULE__{mode: :remote, remote_node: node}, tool_name, args)
       when not is_nil(node) do
-    Logger.info(
-      "[Hands.Executor] [remote:#{node}] Executing #{tool_name} via Distributed Erlang RPC"
-    )
+    Logger.info("⚡[remote:#{node}]#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
 
     case :rpc.call(
            node,
@@ -53,7 +51,7 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   def execute(%__MODULE__{mode: :docker, docker_container: container}, tool_name, args)
       when not is_nil(container) do
-    Logger.info("[Hands.Executor] [docker:#{container}] Executing tool via Docker sandbox")
+    Logger.info("⚡[docker:#{container}]#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
 
     case tool_name do
       "bash" ->
@@ -75,6 +73,56 @@ defmodule DeepSeekHarness.Hands.Executor do
     {:error,
      "Invalid Hands configuration: #{inspect(config)} for tool #{tool_name} (#{inspect(args)})"}
   end
+
+  @doc "Returns an icon emoji for a known tool."
+  def tool_icon(name) when is_binary(name) do
+    cond do
+      name in ~w(read_file view_file file_read read_contents get_file) -> "📖"
+      name in ~w(write_file write_to_file replace_file_content edit_file create_file save_file) -> "📝"
+      name in ~w(bash cmd run_command shell exec execute_command) -> "🖥️"
+      name in ~w(grep_search grep search_files file_search ripgrep search) -> "🔍"
+      name in ~w(list_dir ls dir_list list_directory find_by_name) -> "📁"
+      name in ~w(git git_status git_diff git_commit git_log) -> "🌿"
+      name in ~w(http req fetch_url web_search read_url) -> "🌐"
+      name in ~w(subagent spawn_subagent agent) -> "🤖"
+      String.starts_with?(name, "mcp_") or name == "ragex" -> "🔌"
+      true -> "🛠️"
+    end
+  end
+
+  def tool_icon(_), do: "🛠️"
+
+  @doc "Formats a tool call into a user-friendly string: tool_name(key: val, ...)"
+  def format_tool_call(tool_name, args) when is_map(args) do
+    if map_size(args) == 0 do
+      "#{tool_name}()"
+    else
+      formatted_args =
+        args
+        |> Enum.map(fn
+          {k, v} when is_binary(k) -> "#{k}: #{format_arg_val(v)}"
+          {k, v} -> "#{inspect(k)}: #{format_arg_val(v)}"
+        end)
+        |> Enum.join(", ")
+
+      "#{tool_name}(#{formatted_args})"
+    end
+  end
+
+  def format_tool_call(tool_name, args) do
+    "#{tool_name}(#{inspect(args)})"
+  end
+
+  defp format_arg_val(val) when is_binary(val) do
+    if String.contains?(val, "\n") or String.length(val) > 80 do
+      trimmed = val |> String.slice(0, 60) |> String.replace("\n", "\\n")
+      inspect(trimmed <> "...")
+    else
+      inspect(val)
+    end
+  end
+
+  defp format_arg_val(val), do: inspect(val)
 
   defp format_output(output) when is_binary(output), do: output
   defp format_output(output), do: inspect(output, pretty: true)

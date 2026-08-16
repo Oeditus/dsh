@@ -472,13 +472,7 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input(user_prompt, session_pid, _session_id) do
     turn_fn = fn -> try_send_message(session_pid, user_prompt) end
 
-    res =
-      if Code.ensure_loaded?(Owl.Spinner) do
-        Owl.Spinner.run(turn_fn, title: "Thinking & coordinating with Hands...")
-      else
-        IO.puts("#{Formatter.dim()}Thinking and coordinating with Hands...#{Formatter.reset()}")
-        turn_fn.()
-      end
+    res = DeepSeekHarness.CLI.Spinner.run(turn_fn, title: "Thinking & coordinating with Hands...")
 
     case res do
       {:ok, %{content: content}} ->

@@ -125,6 +125,7 @@ defmodule DeepSeekHarness.Brain.Session do
       tools: tools,
       snapshots: [],
       step_count: 0,
+      max_tool_depth: opts[:max_tool_depth] || 50,
       total_prompt_tokens: 0,
       total_completion_tokens: 0,
       status: :idle
@@ -147,7 +148,7 @@ defmodule DeepSeekHarness.Brain.Session do
 
     state = auto_checkpoint(state, "Pre-turn ##{state.step_count + 1}")
 
-    {final_response, new_state} = run_agent_loop(state)
+    {final_response, new_state} = run_agent_loop(state, state.max_tool_depth)
     {:reply, final_response, new_state}
   end
 
@@ -285,7 +286,7 @@ defmodule DeepSeekHarness.Brain.Session do
         user_msg = %{"role" => "user", "content" => prompt}
         state_with_msg = %{state | messages: state.messages ++ [user_msg], status: :thinking}
 
-        {final_response, new_state} = run_agent_loop(state_with_msg)
+        {final_response, new_state} = run_agent_loop(state_with_msg, state.max_tool_depth)
         {:reply, final_response, new_state}
 
       {:error, err} ->
@@ -369,8 +370,6 @@ defmodule DeepSeekHarness.Brain.Session do
 
   # Agent Execution Loop
 
-  defp run_agent_loop(state, depth \\ 10)
-
   defp run_agent_loop(state, depth) when depth <= 0,
     do: {{:error, "Max tool iteration depth reached."}, state}
 
@@ -410,7 +409,14 @@ defmodule DeepSeekHarness.Brain.Session do
             step_count: updated_hands_state.step_count + 1
         }
 
-        run_agent_loop(state_after_tools, depth - 1)
+        next_depth =
+          if Enum.all?(tool_calls, &discovery_tool_call?/1) do
+            depth
+          else
+            depth - 1
+          end
+
+        run_agent_loop(state_after_tools, next_depth)
 
       {:ok, response} ->
         if response[:reasoning_content] do
@@ -424,6 +430,74 @@ defmodule DeepSeekHarness.Brain.Session do
       {:error, reason} ->
         {{:error, "Error communicating with DeepSeek API: #{reason}"}, %{state | status: :idle}}
     end
+  end
+
+  defp discovery_tool_call?(%{name: name} = tc) do
+    cond do
+      name in [
+        "list_dir",
+        "read_file",
+        "file_exists",
+        "grep_search",
+        "find_by_name",
+        "git_status",
+        "git_diff",
+        "dir_list"
+      ] ->
+        true
+
+      name == "bash" ->
+        args = Map.get(tc, :arguments, %{})
+        cmd = Map.get(args, "command", "") |> String.trim()
+        read_only_cmd?(cmd)
+
+      String.starts_with?(name, "mcp_read_") or String.starts_with?(name, "mcp_list_") ->
+        true
+
+      true ->
+        false
+    end
+  end
+
+  defp discovery_tool_call?(_), do: false
+
+  defp read_only_cmd?(cmd) do
+    cmd_clean = String.downcase(cmd)
+
+    first_word =
+      cmd_clean
+      |> String.split([" ", "|", ";", "&&"], trim: true)
+      |> List.first() || ""
+
+    first_word in [
+      "ls",
+      "find",
+      "cat",
+      "head",
+      "tail",
+      "grep",
+      "rg",
+      "pwd",
+      "git",
+      "echo",
+      "stat",
+      "file",
+      "du",
+      "wc",
+      "tree"
+    ] and
+      not String.contains?(cmd_clean, [
+        "rm ",
+        "mv ",
+        "cp ",
+        "chmod",
+        "chown",
+        "mkdir",
+        ">",
+        "git commit",
+        "git push",
+        "mix test"
+      ])
   end
 
   defp execute_tool_calls(tool_calls, state) do

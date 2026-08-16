@@ -4,6 +4,8 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
   Formats log events with colored geometric circles (blue/yellow/red) without timestamp clutter.
   """
 
+  alias DeepSeekHarness.CLI.Spinner
+
   @doc "Formats Erlang/Elixir log events into agy-style single lines."
   def format(%{level: level, msg: msg}, _config) do
     circle =
@@ -18,7 +20,19 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
 
     formatted_msg = format_message(msg) |> String.trim()
 
-    "#{circle} #{formatted_msg}\n"
+    base_line =
+      if String.starts_with?(formatted_msg, "⚡") do
+        "#{formatted_msg}\n"
+      else
+        "#{circle} #{formatted_msg}\n"
+      end
+
+    if Spinner.active?() do
+      current_spinner = Spinner.current_line()
+      "\r\e[2K" <> base_line <> current_spinner
+    else
+      base_line
+    end
   rescue
     _ -> "#{IO.ANSI.blue()}●#{IO.ANSI.reset()} #{inspect(msg)}\n"
   end
