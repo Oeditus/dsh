@@ -1,14 +1,13 @@
 defmodule DeepSeekHarness.CLI.LineEditor do
   @moduledoc """
-  2026 Modern TUI Line Editor & Readline Engine for DeepSeek Harness (DSH RAGE).
+  Modern TUI Line Editor & Readline Engine for DeepSeek Harness (DSH RAGE).
   Features:
-    - Real-time raw TTY key handling via stty raw -echo < /dev/tty
-    - Up / Down Arrow history navigation through ~/.dsh/history
-    - Left / Right Arrow cursor positioning
-    - Ctrl+R Reverse-i-Search history matching
-    - Emacs & Vim keybindings (Ctrl+A, Ctrl+E, Ctrl+K, Ctrl+W, Ctrl+U, Ctrl+L)
+    - Fixed bottom command bar with horizontal ruler (agy style)
+    - Full keyboard cursor navigation (Left/Right, Home/End, Backspace/Delete)
+    - Persistent history navigation (Up/Down arrows) with ~/.dsh/history
+    - Reverse incremental search (Ctrl+R)
     - Tab auto-completion for slash commands
-    - Configurable prompt templates
+    - Emacs shortcuts (Ctrl+A, Ctrl+E, Ctrl+U, Ctrl+K, Ctrl+W, Ctrl+C, Ctrl+D)
   """
   alias DeepSeekHarness.CLI.Formatter
   alias DeepSeekHarness.Config
@@ -16,31 +15,32 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   @history_file Path.expand("~/.dsh/history")
 
   @slash_commands [
+    "/cb",
+    "/clipboard",
+    "/checkpoint",
+    "/clear",
+    "/commit ",
+    "/compact",
+    "/cost",
+    "/diff",
+    "/exit",
     "/help",
     "/mcp",
+    "/mcp add ",
     "/mcp list",
     "/mcp load",
-    "/mcp add ",
-    "/ragex",
+    "/model ",
+    "/mode ",
+    "/nodes",
+    "/permissions ",
     "/plugins",
     "/plugins reload",
-    "/skills",
-    "/skill ",
-    "/compact",
-    "/diff",
-    "/review",
-    "/commit ",
-    "/cost",
-    "/permissions auto",
-    "/permissions ask",
-    "/subagent ",
-    "/checkpoint",
-    "/undo",
+    "/quit",
+    "/ragex",
+    "/review ",
     "/session",
-    "/nodes",
-    "/clear",
-    "/exit",
-    "/quit"
+    "/skills",
+    "/subagent "
   ]
 
   @doc "Loads persistent history lines from ~/.dsh/history."
@@ -95,7 +95,6 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
   end
 
-  # TUI Interactive Line Reader with stty raw mode targeting /dev/tty
   defp read_tty_line(prompt_text, history) do
     set_raw_mode()
 
@@ -136,27 +135,35 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp raw_loop(state) do
-    render_prompt_and_buffer(state)
+    render_bar(state)
 
     case read_key() do
       :enter ->
         if state.search_mode do
-          match = find_in_history(List.to_string(state.search_query), state.history)
-          chars = String.to_charlist(match)
-          raw_loop(%{state | buffer: chars, cursor: length(chars), search_mode: false})
+          query_str = Enum.join(state.search_query)
+          match = find_in_history(query_str, state.history)
+          chars = String.graphemes(match)
+
+          raw_loop(%{
+            state
+            | buffer: chars,
+              cursor: length(chars),
+              search_mode: false,
+              search_query: []
+          })
         else
           IO.write("\r\n")
-          line = List.to_string(state.buffer)
+          line = Enum.join(state.buffer)
           add_history(line)
           line <> "\n"
         end
 
       :tab ->
-        buf_str = List.to_string(state.buffer)
+        buf_str = Enum.join(state.buffer)
 
         case tab_complete(buf_str) do
           {:ok, completed} ->
-            chars = String.to_charlist(completed)
+            chars = String.graphemes(completed)
             raw_loop(%{state | buffer: chars, cursor: length(chars)})
 
           _ ->
@@ -203,25 +210,32 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       :ctrl_e ->
         raw_loop(%{state | cursor: length(state.buffer)})
 
+      :ctrl_u ->
+        {_left, right} = Enum.split(state.buffer, state.cursor)
+        raw_loop(%{state | buffer: right, cursor: 0})
+
       :ctrl_k ->
         {left, _right} = Enum.split(state.buffer, state.cursor)
         raw_loop(%{state | buffer: left})
 
       :ctrl_w ->
         {left, right} = Enum.split(state.buffer, state.cursor)
-        words = left |> List.to_string() |> String.split(~r/\s+/, trim: false)
-        new_left_str = Enum.drop(words, -1) |> Enum.join(" ")
-        new_left = String.to_charlist(new_left_str)
+        left_str = Enum.join(left)
+        new_left_str = Regex.replace(~r/\S+\s*$/, left_str, "")
+        new_left = String.graphemes(new_left_str)
         raw_loop(%{state | buffer: new_left ++ right, cursor: length(new_left)})
 
-      :ctrl_l ->
-        IO.write("\e[H\e[2J")
-        raw_loop(state)
+      :ctrl_r ->
+        if state.search_mode do
+          raw_loop(state)
+        else
+          raw_loop(%{state | search_mode: true, search_query: []})
+        end
 
       :backspace ->
         if state.search_mode do
-          new_query = Enum.drop(state.search_query, -1)
-          raw_loop(%{state | search_query: new_query})
+          new_q = Enum.drop(state.search_query, -1)
+          raw_loop(%{state | search_query: new_q})
         else
           if state.cursor > 0 do
             {left, right} = Enum.split(state.buffer, state.cursor)
@@ -232,20 +246,25 @@ defmodule DeepSeekHarness.CLI.LineEditor do
           end
         end
 
-      :ctrl_u ->
-        raw_loop(%{state | buffer: [], cursor: 0})
+      :delete ->
+        {left, right} = Enum.split(state.buffer, state.cursor)
 
-      :ctrl_r ->
-        new_state = toggle_reverse_search(state)
-        raw_loop(new_state)
+        if right != [] do
+          new_right = Enum.drop(right, 1)
+          raw_loop(%{state | buffer: left ++ new_right})
+        else
+          raw_loop(state)
+        end
 
-      {:char, char} ->
+      {:char, char_code} ->
+        char = <<char_code::utf8>>
+
         if state.search_mode do
-          raw_loop(%{state | search_query: state.search_query ++ [char]})
+          new_q = state.search_query ++ [char]
+          raw_loop(%{state | search_query: new_q})
         else
           {left, right} = Enum.split(state.buffer, state.cursor)
-          new_buffer = left ++ [char] ++ right
-          raw_loop(%{state | buffer: new_buffer, cursor: state.cursor + 1})
+          raw_loop(%{state | buffer: left ++ [char] ++ right, cursor: state.cursor + 1})
         end
 
       _ ->
@@ -253,78 +272,116 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
   end
 
-  defp render_prompt_and_buffer(state) do
-    IO.write("\r\e[K")
-
-    if state.search_mode do
-      query = List.to_string(state.search_query)
-      match = find_in_history(query, state.history)
-      IO.write("#{Formatter.cyan()}(reverse-i-search)'#{query}':#{Formatter.reset()} #{match}")
-    else
-      buf_str = List.to_string(state.buffer)
-      prompt_str = Formatter.format_user_prompt_str(state.prompt)
-      IO.write("#{prompt_str}#{buf_str}")
-
-      # Reposition cursor
-      tail_len = length(state.buffer) - state.cursor
-
-      if tail_len > 0 do
-        IO.write("\e[#{tail_len}D")
+  defp render_bar(state) do
+    cols =
+      case :io.columns() do
+        {:ok, c} when c > 10 -> c
+        _ -> 80
       end
-    end
-  end
 
-  def history_navigate(state, :up) do
-    if Enum.empty?(state.history) do
-      state
+    ruler = Formatter.dim() <> String.duplicate("─", max(10, cols - 1)) <> Formatter.reset()
+
+    {displayed_prompt, displayed_text, cursor_pos} =
+      if state.search_mode do
+        q = Enum.join(state.search_query)
+        match = find_in_history(q, state.history)
+        p = "(reverse-i-search)'#{q}': "
+        {p, match, length(String.graphemes(p)) + length(String.graphemes(match))}
+      else
+        prompt_str = Formatter.format_user_prompt_str(state.prompt)
+        text_str = Enum.join(state.buffer)
+        p_visible_len = strip_ansi_length(prompt_str)
+
+        buffer_prefix_len =
+          Enum.take(state.buffer, state.cursor) |> Enum.join() |> String.length()
+
+        {prompt_str, text_str, p_visible_len + buffer_prefix_len}
+      end
+
+    # Clear line, output ruler and prompt text
+    output = "\r\e[K" <> ruler <> "\r\n\r\e[K" <> displayed_prompt <> displayed_text
+    IO.write(output)
+
+    # Position cursor at exact position
+    if cursor_pos > 0 do
+      IO.write("\r\e[#{cursor_pos}C")
     else
-      new_idx = min(length(state.history) - 1, state.hist_idx + 1)
-      saved = if state.hist_idx == -1, do: state.buffer, else: state.saved_buffer
-      item = Enum.at(state.history, new_idx) || ""
-      chars = String.to_charlist(item)
-      %{state | buffer: chars, cursor: length(chars), hist_idx: new_idx, saved_buffer: saved}
+      IO.write("\r")
     end
   end
 
-  def history_navigate(state, :down) do
-    case state.hist_idx do
-      -1 ->
-        state
+  defp strip_ansi_length(str) do
+    str
+    |> String.replace(~r/\e\[[0-9;]*[mGKH]/, "")
+    |> String.length()
+  end
 
-      0 ->
-        chars = state.saved_buffer
-        %{state | buffer: chars, cursor: length(chars), hist_idx: -1}
+  defp history_navigate(state, direction) do
+    case direction do
+      :up ->
+        if state.hist_idx < length(state.history) - 1 do
+          new_idx = state.hist_idx + 1
+          saved = if state.hist_idx == -1, do: state.buffer, else: state.saved_buffer
+          line = Enum.at(state.history, new_idx, "")
+          chars = String.graphemes(line)
+          %{state | hist_idx: new_idx, saved_buffer: saved, buffer: chars, cursor: length(chars)}
+        else
+          state
+        end
 
-      idx ->
-        new_idx = idx - 1
-        item = Enum.at(state.history, new_idx) || ""
-        chars = String.to_charlist(item)
-        %{state | buffer: chars, cursor: length(chars), hist_idx: new_idx}
+      :down ->
+        if state.hist_idx > 0 do
+          new_idx = state.hist_idx - 1
+          line = Enum.at(state.history, new_idx, "")
+          chars = String.graphemes(line)
+          %{state | hist_idx: new_idx, buffer: chars, cursor: length(chars)}
+        else
+          if state.hist_idx == 0 do
+            chars = state.saved_buffer
+            %{state | hist_idx: -1, buffer: chars, cursor: length(chars)}
+          else
+            state
+          end
+        end
     end
   end
 
-  def toggle_reverse_search(state) do
-    %{state | search_mode: not state.search_mode, search_query: []}
-  end
-
-  def find_in_history(query, history) do
-    case Enum.find(history, fn item -> String.contains?(item, query) end) do
-      nil -> ""
-      match -> match
+  defp find_in_history(query, history) do
+    if query == "" do
+      ""
+    else
+      Enum.find(history, "", fn h -> String.contains?(h, query) end)
     end
   end
 
-  def tab_complete(input) do
+  defp tab_complete(input) do
     if String.starts_with?(input, "/") do
-      matches = Enum.filter(@slash_commands, fn cmd -> String.starts_with?(cmd, input) end)
+      matches = Enum.filter(@slash_commands, &String.starts_with?(&1, input))
 
       case matches do
-        [single] -> {:ok, single}
-        [_first | _] -> {:ok, common_prefix(matches)}
-        [] -> :none
+        [single] ->
+          {:ok, single}
+
+        [_ | _] = multiple ->
+          prefix = common_prefix(multiple)
+
+          if prefix != "" and String.length(prefix) > String.length(input) do
+            {:ok, prefix}
+          else
+            IO.write(
+              "\r\n" <>
+                Formatter.dim() <>
+                "Completions: " <> Enum.join(matches, "  ") <> Formatter.reset() <> "\r\n"
+            )
+
+            {:ok, input}
+          end
+
+        [] ->
+          :error
       end
     else
-      :none
+      :error
     end
   end
 
