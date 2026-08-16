@@ -7,6 +7,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   and registers them with DeepSeekHarness.Plugin.Loader for live hot-code tool access.
   """
   use GenServer
+  require Logger
 
   alias DeepSeekHarness.Config
   alias DeepSeekHarness.MCP.Client, as: MCPClient
@@ -43,7 +44,35 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   @impl true
   def init(_opts) do
+    send(self(), :auto_start_ragex)
     {:ok, %{servers: %{}}}
+  end
+
+  @impl true
+  def handle_info(:auto_start_ragex, state) do
+    cwd = File.cwd!()
+
+    case do_start_ragex(cwd, []) do
+      {:ok, dir, tools_registered} ->
+        new_servers =
+          Map.put(state.servers, "ragex", %{
+            command: "in_process",
+            args: [],
+            cwd: dir,
+            tools: tools_registered
+          })
+
+        {:noreply, %{state | servers: new_servers}}
+
+      {:error, reason} ->
+        Logger.warning("⚡🔌 Ragex auto-start notice: #{inspect(reason)}")
+        {:noreply, state}
+    end
+  end
+
+  def handle_info(msg, state) do
+    Logger.debug("[ServerManager] Unhandled message: #{inspect(msg)}")
+    {:noreply, state}
   end
 
   @impl true
@@ -68,46 +97,20 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   @impl true
   def handle_call({:start_ragex, target_dir, opts}, _from, state) do
-    ragex_dir = discover_ragex_dir(opts[:ragex_dir] || ".")
+    case do_start_ragex(target_dir, opts) do
+      {:ok, dir, tools_registered} ->
+        new_servers =
+          Map.put(state.servers, "ragex", %{
+            command: "in_process",
+            args: [],
+            cwd: dir,
+            tools: tools_registered
+          })
 
-    case ragex_dir do
-      {:ok, dir} ->
-        script_path = Path.join(dir, "bin/ragex-mcp")
+        {:reply, {:ok, dir, tools_registered}, %{state | servers: new_servers}}
 
-        {cmd, args, run_opts} =
-          if File.exists?(script_path) do
-            {script_path, ["--project", target_dir],
-             [
-               cwd: dir,
-               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "RAGEX_PROJECT" => target_dir}
-             ]}
-          else
-            {"mix", ["run", "--no-halt", "--", "--project", target_dir],
-             [
-               cwd: dir,
-               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "RAGEX_PROJECT" => target_dir}
-             ]}
-          end
-
-        case start_and_register_mcp_server("ragex", cmd, args, run_opts) do
-          {:ok, tools_registered, pid} ->
-            new_servers =
-              Map.put(state.servers, "ragex", %{
-                command: cmd,
-                args: args,
-                cwd: target_dir,
-                pid: pid,
-                tools: tools_registered
-              })
-
-            {:reply, {:ok, target_dir, tools_registered}, %{state | servers: new_servers}}
-
-          {:error, reason} ->
-            {:reply, {:error, "Failed to start ragex MCP server: #{reason}"}, state}
-        end
-
-      {:error, err} ->
-        {:reply, {:error, err}, state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -148,6 +151,105 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       end)
 
     {:reply, {:ok, results}, state}
+  end
+
+  defp do_start_ragex(target_dir, opts) do
+    if Code.ensure_loaded?(Ragex.MCP.Handlers.Tools) do
+      configure_ragex_store()
+
+      Logger.info("⚡🔌 Auto-indexing codebase in '#{target_dir}' via Ragex...")
+
+      case Ragex.Analyzers.Directory.analyze_directory(target_dir) do
+        {:ok, stats} ->
+          Logger.info(
+            "⚡🔌 Ragex indexing complete! Indexed #{stats.success} files into Knowledge Graph."
+          )
+
+        {:error, reason} ->
+          Logger.warning("⚡🔌 Ragex indexing notice: #{inspect(reason)}")
+      end
+
+      tools = Ragex.MCP.Handlers.Tools.list_tools()
+
+      registered_names =
+        Enum.map(tools, fn t ->
+          t_name = Map.get(t, "name") || Map.get(t, :name)
+          t_desc = Map.get(t, "description") || Map.get(t, :description) || "Ragex tool #{t_name}"
+
+          input_schema =
+            Map.get(t, "inputSchema") || Map.get(t, :inputSchema) ||
+              %{"type" => "object", "properties" => %{}}
+
+          tool_name = "mcp_ragex_#{t_name}"
+
+          tool_def = %{
+            name: tool_name,
+            description: "[MCP:ragex] #{t_desc}",
+            parameters: input_schema,
+            execute: fn args ->
+              case Ragex.MCP.Handlers.Tools.call_tool(t_name, args) do
+                {:ok, result} -> {:ok, format_mcp_content(result)}
+                {:error, err} -> {:error, "Ragex tool error: #{inspect(err)}"}
+                other -> {:ok, inspect(other, pretty: true)}
+              end
+            end
+          }
+
+          register_mcp_tool_in_plugin(tool_def)
+          tool_name
+        end)
+
+      {:ok, target_dir, registered_names}
+    else
+      start_ragex_external(target_dir, opts)
+    end
+  end
+
+  defp start_ragex_external(target_dir, opts) do
+    ragex_dir = discover_ragex_dir(opts[:ragex_dir] || ".")
+
+    case ragex_dir do
+      {:ok, dir} ->
+        script_path = Path.join(dir, "bin/ragex-mcp")
+
+        {cmd, args, run_opts} =
+          if File.exists?(script_path) do
+            {script_path, ["--project", target_dir],
+             [
+               cwd: dir,
+               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "RAGEX_PROJECT" => target_dir}
+             ]}
+          else
+            {"mix", ["run", "--no-halt", "--", "--project", target_dir],
+             [
+               cwd: dir,
+               env: %{"MIX_ENV" => "prod", "RAGEX_STDIO" => "1", "RAGEX_PROJECT" => target_dir}
+             ]}
+          end
+
+        case start_and_register_mcp_server("ragex", cmd, args, run_opts) do
+          {:ok, tools_registered, _pid} ->
+            {:ok, target_dir, tools_registered}
+
+          {:error, reason} ->
+            {:error, "Failed to start ragex MCP server: #{reason}"}
+        end
+
+      {:error, err} ->
+        {:error, err}
+    end
+  end
+
+  defp configure_ragex_store do
+    use_dllb? = Code.ensure_loaded?(Dllb)
+    backend = if use_dllb?, do: :dllb, else: :ets
+
+    Application.put_env(:ragex, :store_backend, backend)
+    if use_dllb?, do: Application.put_env(:dllb, :enabled, true)
+
+    Logger.info(
+      "⚡🔌 Ragex Knowledge Graph backend configured: #{backend} (dllb active: #{use_dllb?})"
+    )
   end
 
   # Helper Functions
