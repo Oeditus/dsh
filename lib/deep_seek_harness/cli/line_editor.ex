@@ -121,12 +121,11 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     branch_str = if branch != "", do: "  #{branch}", else: ""
     sandbox = if Map.get(config, "sandbox_workspace", false), do: " 🔒 sandbox", else: ""
 
-    model_short =
+    model_icon =
       case model do
-        "deepseek-chat" -> "🤖 V3"
-        "deepseek-reasoner" -> "🧠 R1"
-        "deepseek-coder" -> "💻 Coder"
-        other -> "🤖 #{other}"
+        "deepseek-reasoner" -> "🧠"
+        "deepseek-coder" -> "💻"
+        _ -> "🤖"
       end
 
     mode_badge =
@@ -135,13 +134,13 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         other -> " 🌐 #{other}"
       end
 
-    line1 =
+    line =
       "#{Formatter.cyan()}📁 #{folder}#{Formatter.reset()}" <>
         "#{Formatter.magenta()}#{branch_str}#{Formatter.reset()}" <>
-        " #{Formatter.green()}#{model_short}#{Formatter.reset()}" <>
+        " #{Formatter.green()}#{model_icon} #{model}#{Formatter.reset()}" <>
         "#{Formatter.yellow()}#{sandbox}#{mode_badge}#{Formatter.reset()}"
 
-    "#{line1}\n#{Formatter.cyan()}❯#{Formatter.reset()} "
+    "#{line} #{Formatter.cyan()}❯#{Formatter.reset()} "
   end
 
   defp build_compact_prompt(_session_id, model, cwd) do
