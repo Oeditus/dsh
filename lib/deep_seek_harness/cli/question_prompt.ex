@@ -120,9 +120,15 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # ---------------------------------------------------------------------
 
   defp tty? do
-    case :io.columns() do
-      {:ok, _} -> true
-      _ -> false
+    case :io.columns(:user) do
+      {:ok, _} ->
+        true
+
+      _ ->
+        case :io.columns() do
+          {:ok, _} -> true
+          _ -> false
+        end
     end
   end
 
@@ -130,16 +136,22 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     set_raw_mode()
     state = new_state(question, options, is_multi, custom_idx)
 
-    try do
-      result = tui_loop(state)
-      restore_tty_mode()
-      IO.puts("")
-      result
-    catch
-      _kind, _err ->
-        restore_tty_mode()
-        prompt_non_tty(question, options, is_multi, custom_idx)
-    end
+    res =
+      try do
+        tui_loop(state)
+      catch
+        :exit, _ ->
+          restore_tty_mode()
+          prompt_non_tty(question, options, is_multi, custom_idx)
+
+        :error, _ ->
+          restore_tty_mode()
+          prompt_non_tty(question, options, is_multi, custom_idx)
+      end
+
+    restore_tty_mode()
+    IO.write(:user, "\r\n")
+    res
   end
 
   defp set_raw_mode do
@@ -185,6 +197,10 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       :ctrl_c ->
         %{cancelled: true, selected: []}
 
+      :eof ->
+        restore_tty_mode()
+        prompt_non_tty(state.question, state.options, state.is_multi, state.custom_idx)
+
       _ ->
         tui_loop(state)
     end
@@ -194,10 +210,14 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     if state.cursor == state.custom_idx do
       # User selected write-in custom response
       restore_tty_mode()
-      IO.puts("\n" <> Formatter.cyan() <> "✏️  Enter custom response: " <> Formatter.reset())
+
+      IO.write(
+        :user,
+        "\r\n" <> Formatter.cyan() <> "✏️  Enter custom response: " <> Formatter.reset()
+      )
 
       custom_input =
-        case IO.gets("") do
+        case IO.gets(:user, "") do
           line when is_binary(line) -> String.trim(line)
           _ -> ""
         end
@@ -238,8 +258,8 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     box_width = 72
 
     if state.rendered_lines > 0 do
-      # Move cursor up and clear lines
-      IO.write("\e[#{state.rendered_lines}A\e[0J")
+      # Move cursor to column 0, move up rendered_lines, clear to bottom
+      IO.write(:user, "\r\e[#{state.rendered_lines}A\e[0J")
     end
 
     header_title = " ❓ Question from AI "
@@ -315,7 +335,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         [blank_line] ++
         q_lines ++ [blank_line] ++ opt_lines ++ [blank_line] ++ [footer]
 
-    IO.puts(Enum.join(lines, "\n"))
+    IO.write(:user, "\r\n" <> Enum.join(lines, "\r\n") <> "\r\n")
     %{state | rendered_lines: length(lines)}
   end
 
@@ -342,17 +362,22 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # ---------------------------------------------------------------------
 
   defp prompt_non_tty(question, options, _is_multi, custom_idx) do
-    IO.puts("\n" <> Formatter.cyan() <> "❓ Question from AI: " <> Formatter.bold() <> question <> Formatter.reset())
+    IO.write(
+      :user,
+      "\r\n" <>
+        Formatter.cyan() <>
+        "❓ Question from AI: " <> Formatter.bold() <> question <> Formatter.reset() <> "\r\n"
+    )
 
     options
     |> Enum.with_index()
     |> Enum.each(fn {opt, idx} ->
       tag = if idx == custom_idx, do: "✏️  #{opt}", else: opt
-      IO.puts("  #{idx + 1}. #{tag}")
+      IO.write(:user, "  #{idx + 1}. #{tag}\r\n")
     end)
 
     input =
-      case IO.gets("Select option number (1-#{length(options)}) or enter response: ") do
+      case IO.gets(:user, "Select option number (1-#{length(options)}) or enter response: ") do
         str when is_binary(str) -> String.trim(str)
         _ -> ""
       end
@@ -362,7 +387,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         idx = num - 1
 
         if idx == custom_idx do
-          custom_val = IO.gets("Enter custom response: ") |> to_string() |> String.trim()
+          custom_val = IO.gets(:user, "Enter custom response: ") |> to_string() |> String.trim()
           %{selected: [], custom: custom_val}
         else
           %{selected: [Enum.at(options, idx)]}
@@ -374,13 +399,13 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   end
 
   # ---------------------------------------------------------------------
-  # Key Reader (using standard BEAM term reading)
+  # Key Reader (directed to controlling terminal :user)
   # ---------------------------------------------------------------------
 
   defp read_key do
-    case IO.getn("", 1) do
+    case IO.getn(:user, "", 1) do
       "\e" ->
-        case IO.getn("", 2) do
+        case IO.getn(:user, "", 2) do
           "[A" -> :up
           "[B" -> :down
           "[C" -> :right
@@ -403,8 +428,14 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       <<char_code::utf8>> ->
         {:char, char_code}
 
+      :eof ->
+        :eof
+
+      {:error, _} ->
+        :eof
+
       _ ->
-        :unknown
+        :eof
     end
   end
 end
