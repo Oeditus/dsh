@@ -15,12 +15,12 @@ defmodule DeepSeekHarness.MCP.Client do
 
   @doc "Lists tools available from connected MCP server."
   def list_mcp_tools(pid) do
-    GenServer.call(pid, :list_mcp_tools, 60_000)
+    GenServer.call(pid, :list_mcp_tools, :infinity)
   end
 
   @doc "Calls a tool on the MCP server."
   def call_mcp_tool(pid, tool_name, arguments) do
-    GenServer.call(pid, {:call_mcp_tool, tool_name, arguments}, 60_000)
+    GenServer.call(pid, {:call_mcp_tool, tool_name, arguments}, :infinity)
   end
 
   # Server Callbacks

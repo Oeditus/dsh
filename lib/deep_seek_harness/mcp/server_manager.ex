@@ -21,23 +21,23 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   @doc "Connects and registers an MCP server given name, command, args, and optional cwd/env."
   def add_server(name, command, args \\ [], opts \\ []) do
-    GenServer.call(@name, {:add_server, name, command, args, opts}, 45_000)
+    GenServer.call(@name, {:add_server, name, command, args, opts}, :infinity)
   end
 
   @doc "Starts and registers Ragex (@../ragex) as a first-class MCP server targeting specified working directory."
   def start_ragex(opts \\ []) do
     target_dir = opts[:target_dir] || opts[:cwd] || File.cwd!()
-    GenServer.call(@name, {:start_ragex, target_dir, opts}, 60_000)
+    GenServer.call(@name, {:start_ragex, target_dir, opts}, :infinity)
   end
 
   @doc "Lists active connected MCP servers."
   def list_servers do
-    GenServer.call(@name, :list_servers)
+    GenServer.call(@name, :list_servers, :infinity)
   end
 
   @doc "Loads all configured MCP servers from ~/.dsh/config.json or .dsh/config.json."
   def load_from_config(cwd \\ ".") do
-    GenServer.call(@name, {:load_from_config, cwd}, 60_000)
+    GenServer.call(@name, {:load_from_config, cwd}, :infinity)
   end
 
   # Server Callbacks

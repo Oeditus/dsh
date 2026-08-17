@@ -38,62 +38,62 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @doc "Sends a user prompt to the session actor, expanding @ references."
   def send_user_message(pid, text) do
-    GenServer.call(pid, {:send_user_message, text}, 180_000)
+    GenServer.call(pid, {:send_user_message, text}, :infinity)
   end
 
   @doc "Sets the DeepSeek model ('deepseek-chat' or 'deepseek-reasoner')."
   def set_model(pid, model) do
-    GenServer.call(pid, {:set_model, model})
+    GenServer.call(pid, {:set_model, model}, :infinity)
   end
 
   @doc "Sets permission mode (:auto_approve | :ask_confirm)."
   def set_permission_mode(pid, mode) do
-    GenServer.call(pid, {:set_permission_mode, mode})
+    GenServer.call(pid, {:set_permission_mode, mode}, :infinity)
   end
 
   @doc "Configures the Hands execution mode (:local, :remote, :docker)."
   def set_hands_mode(pid, mode, target \\ nil) do
-    GenServer.call(pid, {:set_hands_mode, mode, target})
+    GenServer.call(pid, {:set_hands_mode, mode, target}, :infinity)
   end
 
   @doc "Compresses context history (/compact)."
   def compact_context(pid) do
-    GenServer.call(pid, :compact_context, 60_000)
+    GenServer.call(pid, :compact_context, :infinity)
   end
 
   @doc "Creates a temporal state snapshot (checkpoint)."
   def checkpoint(pid, label \\ nil) do
-    GenServer.call(pid, {:checkpoint, label})
+    GenServer.call(pid, {:checkpoint, label}, :infinity)
   end
 
   @doc "Rolls back session state to previous checkpoint."
   def undo(pid) do
-    GenServer.call(pid, :undo)
+    GenServer.call(pid, :undo, :infinity)
   end
 
   @doc "Spawns a subagent session actor for sub-task execution."
   def spawn_subagent(pid, prompt, opts \\ []) do
-    GenServer.call(pid, {:spawn_subagent, prompt, opts}, 180_000)
+    GenServer.call(pid, {:spawn_subagent, prompt, opts}, :infinity)
   end
 
   @doc "Generates a comprehensive Code Review comparing two git branches."
   def generate_code_review(pid, base_branch, head_branch \\ "HEAD") do
-    GenServer.call(pid, {:generate_code_review, base_branch, head_branch}, 240_000)
+    GenServer.call(pid, {:generate_code_review, base_branch, head_branch}, :infinity)
   end
 
   @doc "Returns token stats and session cost estimate."
   def get_token_stats(pid) do
-    GenServer.call(pid, :get_token_stats)
+    GenServer.call(pid, :get_token_stats, :infinity)
   end
 
   @doc "Returns current session summary and statistics."
   def get_info(pid) do
-    GenServer.call(pid, :get_info)
+    GenServer.call(pid, :get_info, :infinity)
   end
 
   @doc "Returns content of the latest assistant message response in session."
   def get_latest_response(pid) do
-    GenServer.call(pid, :get_latest_response)
+    GenServer.call(pid, :get_latest_response, :infinity)
   end
 
   # Server Callbacks

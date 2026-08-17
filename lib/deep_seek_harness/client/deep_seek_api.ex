@@ -71,7 +71,7 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
     req_opts = [
       json: body,
       headers: headers,
-      receive_timeout: 90_000
+      receive_timeout: :infinity
     ]
 
     case Req.post(config.endpoint, req_opts) do
