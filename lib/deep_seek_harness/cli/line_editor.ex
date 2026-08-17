@@ -665,6 +665,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
             DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
               "Select file context to attach:",
               opts,
+              false,
               false
             )
           end)
@@ -687,17 +688,27 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp list_workspace_files do
-    case System.cmd("git", ["ls-files", "--cached", "--others", "--exclude-standard"],
-           stderr_to_stdout: true
-         ) do
-      {out, 0} ->
-        out
-        |> String.split("\n", trim: true)
-        |> Enum.reject(&String.starts_with?(&1, ".git"))
+    raw_files =
+      case System.cmd("git", ["ls-files", "--cached", "--others", "--exclude-standard"],
+             stderr_to_stdout: true
+           ) do
+        {out, 0} ->
+          String.split(out, "\n", trim: true)
 
-      _ ->
-        fallback_wildcard_files()
-    end
+        _ ->
+          fallback_wildcard_files()
+      end
+
+    raw_files
+    |> Enum.reject(fn path ->
+      String.starts_with?(path, ".git") or
+        String.starts_with?(path, "_build") or
+        String.contains?(path, "/_build/") or
+        String.starts_with?(path, "deps") or
+        String.contains?(path, "/deps/") or
+        String.starts_with?(path, ".elixir_ls") or
+        String.contains?(path, "/.elixir_ls/")
+    end)
   rescue
     _ -> fallback_wildcard_files()
   end
@@ -706,8 +717,12 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     Path.wildcard("**/*")
     |> Enum.reject(fn path ->
       String.starts_with?(path, ".git") or
+        String.starts_with?(path, "_build") or
+        String.contains?(path, "/_build/") or
+        String.starts_with?(path, "deps") or
         String.contains?(path, "/deps/") or
-        String.contains?(path, "/_build/")
+        String.starts_with?(path, ".elixir_ls") or
+        String.contains?(path, "/.elixir_ls/")
     end)
   end
 

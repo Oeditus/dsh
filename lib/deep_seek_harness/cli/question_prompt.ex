@@ -27,13 +27,13 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   def ask(_), do: "No questions provided."
 
   @doc "Asks a single question and returns choice result map."
-  def ask_single_question(question, options, is_multi) do
+  def ask_single_question(question, options, is_multi \\ false, show_numbers \\ true) do
     options = if is_list(options) and options != [], do: options, else: ["Yes", "No"]
     all_options = options ++ ["Write custom response…"]
     custom_idx = length(all_options) - 1
 
     if tty?() do
-      prompt_tty(question, all_options, is_multi, custom_idx)
+      prompt_tty(question, all_options, is_multi, custom_idx, show_numbers)
     else
       prompt_non_tty(question, all_options, is_multi, custom_idx)
     end
@@ -43,12 +43,13 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # Pure state management (unit-testable)
   # ---------------------------------------------------------------------
 
-  def new_state(question, options, is_multi, custom_idx) do
+  def new_state(question, options, is_multi, custom_idx, show_numbers \\ true) do
     %{
       question: question,
       options: options,
       is_multi: is_multi,
       custom_idx: custom_idx,
+      show_numbers: show_numbers,
       cursor: 0,
       selected: MapSet.new(),
       rendered_lines: 0
@@ -132,9 +133,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     end
   end
 
-  defp prompt_tty(question, options, is_multi, custom_idx) do
+  defp prompt_tty(question, options, is_multi, custom_idx, show_numbers) do
     set_raw_mode()
-    state = new_state(question, options, is_multi, custom_idx)
+    state = new_state(question, options, is_multi, custom_idx, show_numbers)
 
     res =
       try do
@@ -335,11 +336,13 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
         clean_opt = String.replace(opt, ~r/^\d+[\.\)\-]\s*/, "")
 
+        num_prefix = if Map.get(state, :show_numbers, true), do: "#{idx + 1}. ", else: ""
+
         label =
           if is_custom do
-            "#{prefix}#{idx + 1}. ✏ #{clean_opt}"
+            "#{prefix}#{num_prefix}✏ #{clean_opt}"
           else
-            "#{prefix}#{idx + 1}. #{clean_opt}"
+            "#{prefix}#{num_prefix}#{clean_opt}"
           end
 
         max_text_width = inner_width - 4
