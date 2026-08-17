@@ -26,6 +26,21 @@ DSH is tailored to maximize the reasoning and execution capabilities of DeepSeek
 - **Adaptive Tool Execution Loop**: Detects duplicate tool call loops, provides automatic system feedback to redirect the model, and features automatic fallback to standard shell commands when non-standard tools fail repeatedly.
 - **Context Compression & Cost Efficiency**: Built-in context summarization (`/compact`) maintains long-running coding sessions within token limits while tracking prompt and completion token statistics (`/cost`).
 
+### 3. DeepSeek Model Selection & Best Practices
+
+DeepSeek Harness supports the full suite of official DeepSeek models, local open-weights models, and third-party API aggregators. Switch models anytime via `/model <alias>` or `--model <alias>`:
+
+| Model | ID / Alias in DSH | Best Used For | Strengths & Characteristics |
+| :--- | :--- | :--- | :--- |
+| **DeepSeek-V3** | `deepseek-chat`<br>`/model chat` | **Agentic workflows & multi-tool tasks** *(Default)* | 671B MoE model. Offers high general reasoning and **highest tool-calling precision** across multi-turn agent loops. |
+| **DeepSeek-Coder-V2.5** | `deepseek-coder`<br>`/model coder` | **Direct code generation, syntax completion & refactoring** | Trained specifically on **338+ programming languages**. Produces idiomatic Elixir/C++/Rust code with high precision on syntax and language conventions. |
+| **DeepSeek-R1** | `deepseek-reasoner`<br>`/model reasoner` | **Complex debugging & architectural design** | Reinforcement Learning (RL) reasoning model. DSH captures and streams `[DeepSeek-R1 Reasoning]` Chain-of-Thought output live before tool execution. |
+
+#### Model Selection Strategy:
+- 💡 **Daily Agentic Development**: Use `deepseek-chat` (`/model chat`) for reliable multi-step tool execution (editing files, running tests, checking status).
+- 💻 **Heavy Code Writing & Algorithm Implementation**: Use `deepseek-coder` (`/model coder`) for specialized syntax and idiom completion.
+- 🧠 **Hard Bug Diagnostics & System Architecture**: Use `deepseek-reasoner` (`/model reasoner`) when deep step-by-step reasoning is required.
+
 ---
 
 ## Key Features & Capabilities
