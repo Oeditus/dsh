@@ -676,14 +676,22 @@ defmodule DeepSeekHarness.CLI.LineEditor do
             inserted = "@" <> clean_path
             chars = String.graphemes(inserted)
             {left, right} = Enum.split(state.buffer, state.cursor)
-            %{state | buffer: left ++ chars ++ right, cursor: state.cursor + length(chars)}
+
+            %{
+              state
+              | buffer: left ++ chars ++ right,
+                cursor: state.cursor + length(chars),
+                first_render: true
+            }
 
           _ ->
-            insert_char(state, "@")
+            st = insert_char(state, "@")
+            %{st | first_render: true}
         end
       end
     else
-      insert_char(state, "@")
+      st = insert_char(state, "@")
+      %{st | first_render: true}
     end
   end
 
