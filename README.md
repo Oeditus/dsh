@@ -56,6 +56,8 @@ DSH is tailored to maximize the reasoning and execution capabilities of DeepSeek
 
 ### Building and Execution
 
+### Building and Execution
+
 ```bash
 # Fetch dependencies and compile project
 mix deps.get
@@ -65,12 +67,31 @@ mix compile
 mix run -e "DeepSeekHarness.CLI.Main.main([])"
 
 # One-shot command execution with @ file reference
-mix run -e "DeepSeekHarness.CLI.Main.main([\"Summarize implementation in @lib/deep_seek_harness/brain/session.ex\"])"
+mix run -e "DeepSeekHarness.CLI.Main.main([\"Summarize implementation in @lib/deep_seek_harness/brain/session.ex\"]) "
 
 # Build standalone binary executable
 mix escript.build
 ./dsh
 ```
+
+### Automatic Release Rebuild (`--overwrite`)
+
+The `./dsh` launcher does not just run a pre-built release — it keeps the OTP
+release in sync with your working tree. On every launch it checks whether the
+release needs to be (re)assembled with `mix release --overwrite`:
+
+- **Missing binary** — the first time you run `./dsh`, or after a clean checkout,
+  the release is assembled automatically.
+- **Stale sources** — if any source file under `lib/`, `config/`, `priv/`, or the
+  `mix.exs` / `mix.lock` files is newer than the release binary, the release is
+  rebuilt with `--overwrite`. This means you never run a stale build after editing
+  Elixir code.
+- **Force rebuild** — set `DSH_REBUILD=1` to bypass timestamp checks and always
+  re-assemble the release.
+
+The same logic applies to both the `prod` (`--env prod` / `--prod`) and `dev`
+(`--env dev` / `--dev`) targets. In auto-detect mode, if a release exists but is
+stale, the most recently built one is refreshed and launched.
 
 ---
 

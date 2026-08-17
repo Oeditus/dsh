@@ -3,6 +3,12 @@
 # dsh -- DeepSeek Harness (DSH RAGE) CLI Launcher
 # Executable launcher for DeepSeek Harness OTP Release.
 #
+# The launcher auto-assembles the OTP release the first time it runs, and
+# automatically re-assembles it with `--overwrite` whenever any source file
+# (lib/**, mix.exs, mix.lock, config/**, priv/**) is newer than the existing
+# release binary. This keeps the release in sync with the working tree without
+# requiring a manual `mix release --overwrite` step.
+#
 # Usage:
 #   ./dsh                      Auto-detect release (prod -> dev -> mix run)
 #   ./dsh --env prod           Explicitly launch production release
@@ -17,6 +23,7 @@
 #   DLLB_START      command used to start dllb       (default: ./start_prod.sh)
 #   DLLB_LOG        dllb log file                   (default: <dllb>/dllb.log)
 #   DLLB_WAIT       seconds to wait for dllb readiness (default 60)
+#   DSH_REBUILD     force release rebuild            (default: auto)
 #
 
 set -euo pipefail
@@ -89,32 +96,102 @@ fi
 PROD_REL="$SCRIPT_DIR/_build/prod/rel/dsh/bin/dsh"
 DEV_REL="$SCRIPT_DIR/_build/dev/rel/dsh/bin/dsh"
 
+# ---- release freshness detection -----------------------------------------
+# Returns 0 (true) if the given release binary is missing or if any source
+# file is newer than it, meaning the release must be re-assembled with the
+# --overwrite flag. Returns 1 (false) when the existing release is up to date.
+#
+# The set of watched source globs mirrors what `mix release` consumes: the
+# project manifest, lockfile, application config, lib sources and priv assets.
+release_needs_build() {
+  local rel_bin="$1"
+  [[ ! -x "${rel_bin}" ]] && return 0
+
+  # DSH_REBUILD=1 forces a rebuild regardless of file timestamps.
+  if [[ "${DSH_REBUILD:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  local rel_mtime
+  rel_mtime="$(stat -c %Y "${rel_bin}" 2>/dev/null || stat -f %m "${rel_bin}" 2>/dev/null || echo 0)"
+
+  local glob
+  for glob in "${SCRIPT_DIR}"/mix.exs "${SCRIPT_DIR}"/mix.lock \
+              "${SCRIPT_DIR}"/lib/**/*.ex "${SCRIPT_DIR}"/lib/**/*.exs \
+              "${SCRIPT_DIR}"/config/**/*.exs "${SCRIPT_DIR}"/priv/**/*; do
+    # If no files match a glob, bash leaves the literal pattern; skip it.
+    [[ -e "${glob}" ]] || continue
+
+    local src_mtime
+    src_mtime="$(stat -c %Y "${glob}" 2>/dev/null || stat -f %m "${glob}" 2>/dev/null || echo 0)"
+    if (( src_mtime > rel_mtime )); then
+      echo "[INFO] Rebuilding release: ${glob} is newer than the release binary."
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# Assembles the requested release with mix release, always passing --overwrite
+# so an existing release directory is replaced rather than merged. Stale
+# release artifacts under _build/<env>/rel are cleaned first to guarantee a
+# deterministic build.
+build_release() {
+  local env="$1"
+  echo "[INFO] Assembling ${env} OTP release…"
+  (
+    cd "${SCRIPT_DIR}"
+    rm -rf "_build/${env}/rel/dsh"
+    MIX_ENV="${env}" mix release dsh --overwrite
+  )
+}
+
 case "$TARGET_ENV" in
   prod)
     export DSH_ENV="prod"
-    if [[ ! -x "$PROD_REL" ]]; then
-      echo "[INFO] Production OTP release binary not found. Assembling prod release…"
-      (cd "$SCRIPT_DIR" && MIX_ENV=prod mix release dsh --overwrite)
+    if release_needs_build "$PROD_REL"; then
+      build_release "prod"
     fi
     exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
     ;;
 
   dev)
     export DSH_ENV="dev"
-    if [[ ! -x "$DEV_REL" ]]; then
-      echo "[INFO] Dev OTP release binary not found. Assembling dev release…"
-      (cd "$SCRIPT_DIR" && MIX_ENV=dev mix release dsh --overwrite)
+    if release_needs_build "$DEV_REL"; then
+      build_release "dev"
     fi
     exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
     ;;
 
   *)
-    if [[ -x "$PROD_REL" ]]; then
+    if [[ -x "$PROD_REL" ]] && ! release_needs_build "$PROD_REL"; then
       export DSH_ENV="prod"
       exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
-    elif [[ -x "$DEV_REL" ]]; then
+    elif [[ -x "$DEV_REL" ]] && ! release_needs_build "$DEV_REL"; then
       export DSH_ENV="dev"
       exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+    elif [[ -x "$PROD_REL" ]] || [[ -x "$DEV_REL" ]]; then
+      # A release exists but is stale; rebuild the most recently used one.
+      if [[ -x "$PROD_REL" ]] && [[ -x "$DEV_REL" ]]; then
+        if [[ "$PROD_REL" -nt "$DEV_REL" ]]; then
+          export DSH_ENV="prod"
+          build_release "prod"
+          exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+        else
+          export DSH_ENV="dev"
+          build_release "dev"
+          exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+        fi
+      elif [[ -x "$PROD_REL" ]]; then
+        export DSH_ENV="prod"
+        build_release "prod"
+        exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+      else
+        export DSH_ENV="dev"
+        build_release "dev"
+        exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
+      fi
     else
       export DSH_ENV="dev"
       cd "$SCRIPT_DIR"
