@@ -46,6 +46,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     case LineEditor.get_line(prompt_str, history) do
       :eof ->
+        graceful_shutdown()
         IO.puts("\nGoodbye!")
 
       {:error, reason} ->
@@ -60,6 +61,8 @@ defmodule DeepSeekHarness.CLI.Repl do
             loop(session_pid, session_id, updated_history)
 
           :exit ->
+            graceful_shutdown()
+
             IO.puts(
               "#{Formatter.cyan()}Session ended. Exiting DeepSeek Harness.#{Formatter.reset()}"
             )
@@ -67,6 +70,18 @@ defmodule DeepSeekHarness.CLI.Repl do
             :ok
         end
     end
+  end
+
+  # Stops any externally spawned processes (e.g. the per-project Ragex/dllb
+  # instance) before the VM halts. `System.halt/1` (called by the escript
+  # runtime once `main/1` returns) skips normal port cleanup, so without
+  # this the per-project `dllb-server` OS process is left running as an
+  # orphan, and the next launch can't reliably reuse its on-disk cache --
+  # forcing a full re-index every time instead of an instant cache hit.
+  defp graceful_shutdown do
+    MCPServerManager.stop_ragex()
+  catch
+    _, _ -> :ok
   end
 
   def handle_input("", _session_pid, _session_id), do: :continue
@@ -97,7 +112,7 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   def handle_input("/compact", session_pid, _session_id) do
-    IO.puts(Formatter.format_info("Compressing conversation context..."))
+    IO.puts(Formatter.format_info("Compressing conversation context…"))
 
     case Session.compact_context(session_pid) do
       {:ok, summary} ->
@@ -136,7 +151,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     IO.puts(
       Formatter.format_info(
-        "Comparing branches '#{base_branch}' vs '#{head_branch}' and generating Code Review..."
+        "Comparing branches '#{base_branch}' vs '#{head_branch}' and generating Code Review…"
       )
     )
 
@@ -227,7 +242,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     case Enum.find(skills, fn s -> s.name == name end) do
       %SkillManager{content: content} ->
         prompt = "Execute skill '#{name}':\n\n#{content}"
-        IO.puts(Formatter.format_info("Loading and executing skill '#{name}'..."))
+        IO.puts(Formatter.format_info("Loading and executing skill '#{name}'…"))
 
         case Session.send_user_message(session_pid, prompt) do
           {:ok, %{content: out}} ->
@@ -250,7 +265,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/subagent " <> prompt, session_pid, _session_id) do
     prompt = String.trim(prompt)
-    IO.puts(Formatter.format_info("Spawning background subagent for task: \"#{prompt}\"..."))
+    IO.puts(Formatter.format_info("Spawning background subagent for task: \"#{prompt}\"…"))
 
     case Session.spawn_subagent(session_pid, prompt) do
       {:ok, result} ->
@@ -301,7 +316,7 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/mcp", session_pid, session_id), do: handle_mcp_list(session_pid, session_id)
 
   def handle_input("/mcp load", _session_pid, _session_id) do
-    IO.puts(Formatter.format_info("Loading MCP servers configured in config.json..."))
+    IO.puts(Formatter.format_info("Loading MCP servers configured in config.json…"))
 
     case MCPServerManager.load_from_config() do
       {:ok, results} ->
@@ -319,7 +334,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     case parts do
       [name, cmd | cmd_args] ->
-        IO.puts(Formatter.format_info("Connecting to MCP server '#{name}' via '#{cmd}'..."))
+        IO.puts(Formatter.format_info("Connecting to MCP server '#{name}' via '#{cmd}'…"))
 
         case MCPServerManager.add_server(name, cmd, cmd_args) do
           {:ok, tools} ->
@@ -344,7 +359,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     target_dir = File.cwd!()
 
     IO.puts(
-      Formatter.format_info("Mounting Ragex MCP server targeting workspace '#{target_dir}'...")
+      Formatter.format_info("Mounting Ragex MCP server targeting workspace '#{target_dir}'…")
     )
 
     case MCPServerManager.start_ragex(target_dir: target_dir) do
@@ -472,7 +487,7 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input(user_prompt, session_pid, _session_id) do
     turn_fn = fn -> try_send_message(session_pid, user_prompt) end
 
-    res = DeepSeekHarness.CLI.Spinner.run(turn_fn, title: "Thinking & coordinating with Hands...")
+    res = DeepSeekHarness.CLI.Spinner.run(turn_fn, title: "Thinking & coordinating with Hands…")
 
     case res do
       {:ok, %{content: content}} ->
@@ -501,7 +516,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
       case GenServer.whereis(via) do
         nil ->
-          IO.puts(Formatter.format_info("Restarting agent session actor '#{session_id}'..."))
+          IO.puts(Formatter.format_info("Restarting agent session actor '#{session_id}'…"))
           {:ok, new_pid} = SessionSupervisor.start_session(session_id: session_id)
           new_pid
 

@@ -77,15 +77,52 @@ defmodule DeepSeekHarness.Hands.Executor do
   end
 
   @icon_map %{
-    "read_file" => "📖", "view_file" => "📖", "file_read" => "📖", "read_contents" => "📖", "get_file" => "📖",
-    "write_file" => "📝", "write_to_file" => "📝", "replace_file_content" => "📝", "replace_file" => "📝", "edit_file" => "📝", "create_file" => "📝", "save_file" => "📝",
-    "bash" => "🖥️", "cmd" => "🖥️", "run_command" => "🖥️", "shell" => "🖥️", "exec" => "🖥️", "execute_command" => "🖥️",
-    "grep_search" => "🔍", "grep" => "🔍", "search_files" => "🔍", "file_search" => "🔍", "ripgrep" => "🔍", "search" => "🔍",
-    "list_dir" => "📁", "ls" => "📁", "dir_list" => "📁", "list_directory" => "📁", "find_by_name" => "📁",
-    "git" => "🌿", "git_status" => "🌿", "git_diff" => "🌿", "git_commit" => "🌿", "git_log" => "🌿",
-    "http" => "🌐", "req" => "🌐", "fetch_url" => "🌐", "web_search" => "🌐", "read_url" => "🌐",
-    "subagent" => "🤖", "spawn_subagent" => "🤖", "agent" => "🤖",
-    "ask_question" => "❓", "ask" => "❓", "question" => "❓", "user_input" => "❓"
+    "read_file" => "📖",
+    "view_file" => "📖",
+    "file_read" => "📖",
+    "read_contents" => "📖",
+    "get_file" => "📖",
+    "write_file" => "📝",
+    "write_to_file" => "📝",
+    "replace_file_content" => "📝",
+    "replace_file" => "📝",
+    "edit_file" => "📝",
+    "create_file" => "📝",
+    "save_file" => "📝",
+    "bash" => "🖥️",
+    "cmd" => "🖥️",
+    "run_command" => "🖥️",
+    "shell" => "🖥️",
+    "exec" => "🖥️",
+    "execute_command" => "🖥️",
+    "grep_search" => "🔍",
+    "grep" => "🔍",
+    "search_files" => "🔍",
+    "file_search" => "🔍",
+    "ripgrep" => "🔍",
+    "search" => "🔍",
+    "list_dir" => "📁",
+    "ls" => "📁",
+    "dir_list" => "📁",
+    "list_directory" => "📁",
+    "find_by_name" => "📁",
+    "git" => "🌿",
+    "git_status" => "🌿",
+    "git_diff" => "🌿",
+    "git_commit" => "🌿",
+    "git_log" => "🌿",
+    "http" => "🌐",
+    "req" => "🌐",
+    "fetch_url" => "🌐",
+    "web_search" => "🌐",
+    "read_url" => "🌐",
+    "subagent" => "🤖",
+    "spawn_subagent" => "🤖",
+    "agent" => "🤖",
+    "ask_question" => "❓",
+    "ask" => "❓",
+    "question" => "❓",
+    "user_input" => "❓"
   }
 
   @doc "Returns an icon emoji for a known tool."
@@ -100,20 +137,17 @@ defmodule DeepSeekHarness.Hands.Executor do
   def tool_icon(_), do: "🛠️"
 
   @doc "Formats a tool call into a user-friendly string: tool_name(key: val, ...)"
-  def format_tool_call(tool_name, args) when is_map(args) do
-    if map_size(args) == 0 do
-      "#{tool_name}()"
-    else
-      formatted_args =
-        args
-        |> Enum.map(fn
-          {k, v} when is_binary(k) -> "#{k}: #{format_arg_val(v)}"
-          {k, v} -> "#{inspect(k)}: #{format_arg_val(v)}"
-        end)
-        |> Enum.join(", ")
+  def format_tool_call(tool_name, %{} = args) when map_size(args) == 0,
+    do: "#{tool_name}()"
 
-      "#{tool_name}(#{formatted_args})"
-    end
+  def format_tool_call(tool_name, args) when is_map(args) do
+    formatted_args =
+      Enum.map_join(args, ", ", fn
+        {k, v} when is_binary(k) -> "#{k}: #{format_arg_val(v)}"
+        {k, v} -> "#{inspect(k)}: #{format_arg_val(v)}"
+      end)
+
+    "#{tool_name}(#{formatted_args})"
   end
 
   def format_tool_call(tool_name, args) do
@@ -123,7 +157,7 @@ defmodule DeepSeekHarness.Hands.Executor do
   defp format_arg_val(val) when is_binary(val) do
     if String.contains?(val, "\n") or String.length(val) > 80 do
       trimmed = val |> String.slice(0, 60) |> String.replace("\n", "\\n")
-      inspect(trimmed <> "...")
+      inspect(trimmed <> "…")
     else
       inspect(val)
     end

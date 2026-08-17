@@ -67,13 +67,13 @@ else
     echo "[ERROR] dllb repo not found at ${DLLB_DIR} (set DLLB_DIR)" >&2
     exit 1
   fi
-  echo "[INFO] Starting dllb server in ${DLLB_DIR}..."
+  echo "[INFO] Starting dllb server in ${DLLB_DIR}…"
   (
     cd -- "${DLLB_DIR}"
     nohup ${DLLB_START} >>"${DLLB_LOG}" 2>&1 &
     echo "$!" >"${DLLB_DIR}/.dllb.pid"
   )
-  echo "[INFO] Waiting up to ${DLLB_WAIT}s for ${DLLB_HOST}:${DLLB_PORT}..."
+  echo "[INFO] Waiting up to ${DLLB_WAIT}s for ${DLLB_HOST}:${DLLB_PORT}…"
   waited=0
   until port_up "${DLLB_HOST}" "${DLLB_PORT}"; do
     if [[ "${waited}" -ge "${DLLB_WAIT}" ]]; then
@@ -93,7 +93,7 @@ case "$TARGET_ENV" in
   prod)
     export DSH_ENV="prod"
     if [[ ! -x "$PROD_REL" ]]; then
-      echo "[INFO] Production OTP release binary not found. Assembling prod release..."
+      echo "[INFO] Production OTP release binary not found. Assembling prod release…"
       (cd "$SCRIPT_DIR" && MIX_ENV=prod mix release dsh --overwrite)
     fi
     exec "$PROD_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"
@@ -102,7 +102,7 @@ case "$TARGET_ENV" in
   dev)
     export DSH_ENV="dev"
     if [[ ! -x "$DEV_REL" ]]; then
-      echo "[INFO] Dev OTP release binary not found. Assembling dev release..."
+      echo "[INFO] Dev OTP release binary not found. Assembling dev release…"
       (cd "$SCRIPT_DIR" && MIX_ENV=dev mix release dsh --overwrite)
     fi
     exec "$DEV_REL" eval "DeepSeekHarness.CLI.Main.main(System.argv())" -- "${ARGS[@]}"

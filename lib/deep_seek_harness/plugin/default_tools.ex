@@ -211,7 +211,13 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       {:error,
        "Invalid arguments for ask_question. Expected 'questions' list containing 'question' and 'options'."}
     else
-      result = DeepSeekHarness.CLI.QuestionPrompt.ask(questions)
+      # Pause the spinner while the question modal is displayed so its
+      # periodic terminal redraws don't interleave with the modal's output.
+      result =
+        DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+          DeepSeekHarness.CLI.QuestionPrompt.ask(questions)
+        end)
+
       {:ok, result}
     end
   end

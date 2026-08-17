@@ -39,11 +39,11 @@ defmodule DeepSeekHarness.CLI.SpinnerTest do
     gray = DeepSeekHarness.CLI.Formatter.gray()
     reset = DeepSeekHarness.CLI.Formatter.reset()
 
-    formatted_custom = Spinner.format_line("⠋", "Thinking...", "Use /compact")
-    assert formatted_custom == "⠋ Thinking...  #{gray}(Tip: Use /compact)#{reset}"
+    formatted_custom = Spinner.format_line("⠋", "Thinking…", "Use /compact")
+    assert formatted_custom == "⠋ Thinking…  #{gray}(Tip: Use /compact)#{reset}"
 
-    formatted_none = Spinner.format_line("⠋", "Thinking...", nil)
-    assert formatted_none == "⠋ Thinking..."
+    formatted_none = Spinner.format_line("⠋", "Thinking…", nil)
+    assert formatted_none == "⠋ Thinking…"
   end
 
   test "spinner includes gray tip when active" do

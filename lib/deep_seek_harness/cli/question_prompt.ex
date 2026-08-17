@@ -29,7 +29,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   @doc "Asks a single question and returns choice result map."
   def ask_single_question(question, options, is_multi) do
     options = if is_list(options) and options != [], do: options, else: ["Yes", "No"]
-    all_options = options ++ ["Write custom response..."]
+    all_options = options ++ ["Write custom response…"]
     custom_idx = length(all_options) - 1
 
     if tty?() do
@@ -158,7 +158,6 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     case :shell.start_interactive({:noshell, :raw}) do
       :ok -> :ok
       {:error, :already_started} -> :ok
-      _ -> :error
     end
   rescue
     _ -> :error
@@ -168,7 +167,6 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     case :shell.start_interactive({:noshell, :cooked}) do
       :ok -> :ok
       {:error, :already_started} -> :ok
-      _ -> :ok
     end
   rescue
     _ -> :ok

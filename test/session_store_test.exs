@@ -4,7 +4,9 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
   alias DeepSeekHarness.Brain.SessionStore
 
   setup do
-    tmp_dir = Path.join(System.tmp_dir!(), "session_store_test_#{System.unique_integer([:positive])}")
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "session_store_test_#{System.unique_integer([:positive])}")
+
     File.mkdir_p!(tmp_dir)
     on_exit(fn -> File.rm_rf(tmp_dir) end)
     {:ok, tmp_dir: tmp_dir}
@@ -19,7 +21,15 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
       total_prompt_tokens: 120,
       total_completion_tokens: 60,
       messages: [%{"role" => "user", "content" => "Hello"}],
-      snapshots: [%{id: "cp_1", label: "Snap 1", timestamp: "2026-08-17T08:00:00Z", model: "deepseek-chat", messages: []}]
+      snapshots: [
+        %{
+          id: "cp_1",
+          label: "Snap 1",
+          timestamp: "2026-08-17T08:00:00Z",
+          model: "deepseek-chat",
+          messages: []
+        }
+      ]
     }
 
     assert {:ok, file_path} = SessionStore.save_session(session_state, tmp_dir)

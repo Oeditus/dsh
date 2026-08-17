@@ -10,15 +10,13 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
 
   defmodule ClientConfig do
     @moduledoc "Configuration parameters for DeepSeek API requests."
-    defstruct [
-      model: "deepseek-chat",
-      api_key: nil,
-      endpoint: "https://api.deepseek.com/chat/completions",
-      temperature: 0.7,
-      stream: false,
-      stream_fun: nil,
-      mock: false
-    ]
+    defstruct model: "deepseek-chat",
+              api_key: nil,
+              endpoint: "https://api.deepseek.com/chat/completions",
+              temperature: 0.7,
+              stream: false,
+              stream_fun: nil,
+              mock: false
   end
 
   @doc """

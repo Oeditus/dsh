@@ -55,8 +55,6 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
     Regex.match?(@noisy_patterns, msg)
   end
 
-  defp noisy_log?(_), do: false
-
   defp format_message({:string, chardata}), do: to_string(chardata)
   defp format_message({:report, report}), do: inspect(report)
 

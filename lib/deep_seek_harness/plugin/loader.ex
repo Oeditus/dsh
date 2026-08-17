@@ -128,7 +128,7 @@ defmodule DeepSeekHarness.Plugin.Loader do
 
   @impl true
   def handle_call(:reload_all, _from, state) do
-    Logger.info("[Plugin.Loader] Re-compiling and hot-swapping all plugin files...")
+    Logger.info("[Plugin.Loader] Re-compiling and hot-swapping all plugin files…")
 
     # Recompile external files
     Enum.each(state.file_paths, fn path ->

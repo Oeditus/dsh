@@ -26,11 +26,33 @@ defmodule DeepSeekHarness.Application do
 
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
+        install_sigterm_trap()
         Logger.info("[DeepSeekHarness] Application started successfully.")
         {:ok, pid}
 
       error ->
         error
     end
+  end
+
+  # Terminal/process-manager shutdowns (e.g. `kill`, closing the terminal tab)
+  # commonly deliver SIGTERM rather than going through the REPL's `/exit`
+  # path. Without this, the per-project Ragex/dllb OS process is left
+  # running as an orphan, so the next launch can't reliably reuse its
+  # on-disk cache and ends up doing a full re-index every time.
+  defp install_sigterm_trap do
+    System.trap_signal(:sigterm, :dsh_graceful_shutdown, fn ->
+      try do
+        DeepSeekHarness.MCP.ServerManager.stop_ragex()
+      catch
+        _, _ -> :ok
+      end
+
+      :ok
+    end)
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
   end
 end

@@ -46,17 +46,23 @@ defmodule DeepSeekHarness.ContextExpanderTest do
     File.mkdir_p!(workspace)
 
     inside_file = Path.join(workspace, "inside.txt")
-    outside_file = Path.join(System.tmp_dir!(), "outside_#{System.unique_integer([:positive])}.txt")
+
+    outside_file =
+      Path.join(System.tmp_dir!(), "outside_#{System.unique_integer([:positive])}.txt")
 
     File.write!(inside_file, "Inside workspace")
     File.write!(outside_file, "Outside workspace")
 
     # Allowed inside workspace
-    assert {:ok, exp1, _att1} = ContextExpander.expand("Read @#{inside_file}", workspace, sandbox_workspace: true)
+    assert {:ok, exp1, _att1} =
+             ContextExpander.expand("Read @#{inside_file}", workspace, sandbox_workspace: true)
+
     assert String.contains?(exp1, "Inside workspace")
 
     # Denied outside workspace sandbox
-    assert {:ok, exp2, att2} = ContextExpander.expand("Read @#{outside_file}", workspace, sandbox_workspace: true)
+    assert {:ok, exp2, att2} =
+             ContextExpander.expand("Read @#{outside_file}", workspace, sandbox_workspace: true)
+
     refute String.contains?(exp2, "Outside workspace")
     assert att2 == []
 

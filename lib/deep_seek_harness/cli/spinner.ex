@@ -10,7 +10,7 @@ defmodule DeepSeekHarness.CLI.Spinner do
   alias DeepSeekHarness.CLI.Formatter
 
   @frames ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-  @default_title "Thinking & coordinating with Hands..."
+  @default_title "Thinking & coordinating with Hands…"
 
   # Client API
 
@@ -41,6 +41,54 @@ defmodule DeepSeekHarness.CLI.Spinner do
     end
   catch
     :exit, _ -> :ok
+  end
+
+  @doc """
+  Pauses spinner redraws without stopping the process.
+
+  Any other process that needs to render its own content to the terminal
+  (e.g. `DeepSeekHarness.CLI.QuestionPrompt`) MUST call this before writing,
+  otherwise the spinner's periodic `\r\e[2K<frame>` redraws race with that
+  output and corrupt the terminal. Safe to call even if the spinner isn't
+  running.
+  """
+  def pause do
+    if active?() do
+      try do
+        GenServer.call(__MODULE__, :pause, 500)
+      catch
+        :exit, _ -> :ok
+      end
+    else
+      :ok
+    end
+  end
+
+  @doc "Resumes spinner redraws after a previous `pause/0`. Safe to call even if the spinner isn't running."
+  def resume do
+    if active?() do
+      try do
+        GenServer.call(__MODULE__, :resume, 500)
+      catch
+        :exit, _ -> :ok
+      end
+    else
+      :ok
+    end
+  end
+
+  @doc """
+  Runs `fun` with the spinner paused, then resumes it (if it was active).
+  No-op wrapper around `fun.()` when the spinner isn't running.
+  """
+  def with_paused(fun) when is_function(fun, 0) do
+    pause()
+
+    try do
+      fun.()
+    after
+      resume()
+    end
   end
 
   def active? do
@@ -97,7 +145,8 @@ defmodule DeepSeekHarness.CLI.Spinner do
       tip: tip,
       auto_tip?: auto_tip?,
       enabled?: enabled?,
-      timer: nil
+      timer: nil,
+      paused: false
     }
 
     state =
@@ -125,7 +174,7 @@ defmodule DeepSeekHarness.CLI.Spinner do
   @impl true
   def handle_call(:get_current_line, _from, state) do
     line =
-      if state.enabled? do
+      if state.enabled? and not state.paused do
         frame = Enum.at(@frames, state.frame_idx)
         format_line(frame, state.title, state.tip)
       else
@@ -135,7 +184,46 @@ defmodule DeepSeekHarness.CLI.Spinner do
     {:reply, line, state}
   end
 
+  # Pausing stops the redraw timer and clears the spinner's own line so that
+  # another process (e.g. QuestionPrompt) can safely take over the terminal
+  # without its output being interleaved with our periodic `\r\e[2K<frame>`
+  # writes. Idempotent: calling :pause while already paused is a no-op.
   @impl true
+  def handle_call(:pause, _from, %{paused: true} = state) do
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:pause, _from, state) do
+    if state.timer, do: Process.cancel_timer(state.timer)
+    if state.enabled?, do: clear_line()
+    {:reply, :ok, %{state | timer: nil, paused: true}}
+  end
+
+  # Idempotent: calling :resume while not paused is a no-op.
+  @impl true
+  def handle_call(:resume, _from, %{paused: false} = state) do
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:resume, _from, state) do
+    state = %{state | paused: false}
+
+    if state.enabled? do
+      render_frame(state)
+      timer = Process.send_after(self(), :tick, state.refresh_every)
+      {:reply, :ok, %{state | timer: timer}}
+    else
+      {:reply, :ok, state}
+    end
+  end
+
+  @impl true
+  def handle_info(:tick, %{paused: true} = state) do
+    # Drop stray ticks scheduled before a :pause call was processed; do not
+    # reschedule while paused.
+    {:noreply, state}
+  end
+
   def handle_info(:tick, state) do
     new_idx = rem(state.frame_idx + 1, length(@frames))
     new_tick_count = state.tick_count + 1

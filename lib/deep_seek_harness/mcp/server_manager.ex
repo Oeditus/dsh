@@ -12,6 +12,9 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   alias DeepSeekHarness.Config
   alias DeepSeekHarness.MCP.Client, as: MCPClient
   alias DeepSeekHarness.Plugin.Loader, as: PluginLoader
+  alias Ragex.Dllb.ProjectManager, as: DllbPM
+  alias Ragex.MCP.Handlers.Tools, as: MCPTools
+  alias Ragex.Store.Backend.Dllb, as: DllbStore
 
   @name __MODULE__
 
@@ -38,6 +41,26 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   @doc "Loads all configured MCP servers from ~/.dsh/config.json or .dsh/config.json."
   def load_from_config(cwd \\ ".") do
     GenServer.call(@name, {:load_from_config, cwd}, :infinity)
+  end
+
+  @doc """
+  Gracefully shuts down the Ragex MCP server, including stopping any
+  per-project `dllb-server` OS process it spawned.
+
+  MUST be called before the VM halts (see `DeepSeekHarness.CLI.Repl` exit
+  handling and `DeepSeekHarness.CLI.Main` one-shot mode). `System.halt/1`
+  terminates the emulator immediately without running port cleanup, so any
+  external `dllb-server` process left running becomes an orphan holding the
+  project's `.ragex/dllb.redb` file and TCP port. On the next launch a fresh
+  `dllb-server` cannot reliably take over that state, so the knowledge graph
+  looks empty and gets fully re-indexed even though nothing changed. Calling
+  this first lets the per-project instance flush and exit cleanly so the
+  cache is actually reusable on the next launch.
+  """
+  def stop_ragex do
+    GenServer.call(@name, :stop_ragex, :infinity)
+  catch
+    :exit, _ -> :ok
   end
 
   # Server Callbacks
@@ -126,6 +149,27 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   end
 
   @impl true
+  def handle_call(:stop_ragex, _from, state) do
+    case Map.get(state.servers, "ragex") do
+      %{cwd: cwd} when is_binary(cwd) ->
+        if Code.ensure_loaded?(DllbPM) do
+          try do
+            DllbPM.stop_instance(cwd)
+          rescue
+            _ -> :ok
+          catch
+            _, _ -> :ok
+          end
+        end
+
+        {:reply, :ok, %{state | servers: Map.delete(state.servers, "ragex")}}
+
+      _ ->
+        {:reply, :ok, state}
+    end
+  end
+
+  @impl true
   def handle_call(:list_servers, _from, state) do
     info =
       Enum.map(state.servers, fn {name, srv} ->
@@ -165,7 +209,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   end
 
   defp do_start_ragex(target_dir, opts) do
-    if Code.ensure_loaded?(Ragex.MCP.Handlers.Tools) do
+    if Code.ensure_loaded?(MCPTools) do
       orig_level = Logger.level()
       Logger.configure(level: :warning)
 
@@ -178,9 +222,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       existing_nodes = count_existing_nodes()
 
       if existing_nodes > 0 do
-        Logger.info(
-          "⚡🔌 Ragex Knowledge Graph loaded from store (#{existing_nodes} nodes ready)."
-        )
+        Logger.info("⚡🔌 Ragex Knowledge Graph loaded from store (#{existing_nodes} nodes ready).")
       else
         DeepSeekHarness.CLI.Spinner.run(
           fn ->
@@ -204,12 +246,12 @@ defmodule DeepSeekHarness.MCP.ServerManager do
               Logger.configure(level: orig_level)
             end
           end,
-          title: "Indexing Ragex Knowledge Graph...",
+          title: "Indexing Ragex Knowledge Graph…",
           tip: false
         )
       end
 
-      raw_tools = Ragex.MCP.Handlers.Tools.list_tools()
+      raw_tools = MCPTools.list_tools()
       tools_list = Map.get(raw_tools, :tools, [])
 
       built =
@@ -308,8 +350,8 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       Application.put_env(:dllb, :port, port)
       Application.put_env(:dllb, :pool_size, pool_size)
 
-      if dllb_mode == :per_project and Code.ensure_loaded?(Ragex.Dllb.ProjectManager) do
-        case Ragex.Dllb.ProjectManager.set_active_project(target_dir) do
+      if dllb_mode == :per_project and Code.ensure_loaded?(DllbPM) do
+        case DllbPM.set_active_project(target_dir) do
           :ok ->
             Logger.info("⚡🔌 Per-project Dllb instance active for #{target_dir}")
 
@@ -344,7 +386,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       if Process.whereis(Dllb.Pool) != nil or dllb_mode == :per_project do
         already_bootstrapped? =
           try do
-            case Ragex.Store.Backend.Dllb.query("SELECT * FROM ast_node LIMIT 1;") do
+            case Dllb.query("SELECT * FROM ast_node LIMIT 1;") do
               {:ok, _} -> true
               _ -> false
             end
@@ -357,9 +399,9 @@ defmodule DeepSeekHarness.MCP.ServerManager do
         if already_bootstrapped? do
           Logger.info("⚡🔌 Dllb schema ready for Ragex Knowledge Graph")
         else
-          Logger.info("⌛ Bootstrapping Dllb database schema...")
+          Logger.info("⌛ Bootstrapping Dllb database schema…")
 
-          case Ragex.Store.Backend.Dllb.bootstrap() do
+          case DllbStore.bootstrap() do
             :ok ->
               Logger.info("⚡🔌 Dllb schema bootstrapped for Ragex Knowledge Graph")
 
@@ -378,7 +420,8 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   # Helper Functions
 
   def discover_ragex_dir(start_dir \\ ".") do
-    env_path = System.get_env("RAGEX_PATH") || Application.get_env(:deep_seek_harness, :ragex_path)
+    env_path =
+      System.get_env("RAGEX_PATH") || Application.get_env(:deep_seek_harness, :ragex_path)
 
     candidates =
       [
@@ -405,7 +448,27 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     end
   end
 
-  defp count_existing_nodes do
+  # A brand-new per-project dllb pool may not have finished its first
+  # connection handshake the instant `wait_for_server/2` observes the TCP
+  # listener is up, so the very first stats query can transiently fail and
+  # come back as zero nodes even though the on-disk cache is populated. A
+  # false zero here means a full, unnecessary re-index every launch, so
+  # retry briefly before concluding the store is genuinely empty.
+  defp count_existing_nodes(attempts \\ 3) do
+    case query_node_count() do
+      nodes when nodes > 0 ->
+        nodes
+
+      0 when attempts > 1 ->
+        Process.sleep(150)
+        count_existing_nodes(attempts - 1)
+
+      0 ->
+        0
+    end
+  end
+
+  defp query_node_count do
     if Code.ensure_loaded?(Ragex.Graph.Store) do
       try do
         stats = Ragex.Graph.Store.stats()
@@ -478,7 +541,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   @doc "Executes a Ragex MCP tool by target name with args."
   def execute_ragex_tool(t_name, args) do
-    case Ragex.MCP.Handlers.Tools.call_tool(t_name, args) do
+    case MCPTools.call_tool(t_name, args) do
       {:ok, result} -> {:ok, format_mcp_content(result)}
       {:error, err} -> {:error, "Ragex tool error: #{inspect(err)}"}
       other -> {:ok, inspect(other, pretty: true)}

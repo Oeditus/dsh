@@ -616,7 +616,14 @@ defmodule DeepSeekHarness.Brain.Session do
       q = "#{reason}: Allow tool '#{tool_name}'?\nArgs: #{formatted_args}"
       opts = ["Allow execution", "Deny tool execution"]
 
-      ans = DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(q, opts, false)
+      # The spinner (started by the CLI while this turn runs) redraws itself
+      # on a timer from a different process. Pause it while the question
+      # modal renders, otherwise both writers race on the terminal and
+      # produce corrupted, unreadable output.
+      ans =
+        DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+          DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(q, opts, false)
+        end)
 
       case ans do
         %{selected: [sel]} ->

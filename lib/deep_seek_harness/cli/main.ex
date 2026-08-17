@@ -66,7 +66,18 @@ defmodule DeepSeekHarness.CLI.Main do
       DeepSeekHarness.Plugin.Loader.load_file(opts[:plugin])
     end
 
-    case Repl.handle_input(prompt, session_pid, "oneshot") do
+    result = Repl.handle_input(prompt, session_pid, "oneshot")
+
+    # System.halt/1 skips normal port cleanup, which would otherwise leave
+    # the per-project Ragex/dllb OS process running as an orphan and force
+    # a full re-index on the next launch instead of an instant cache hit.
+    try do
+      DeepSeekHarness.MCP.ServerManager.stop_ragex()
+    catch
+      _, _ -> :ok
+    end
+
+    case result do
       :continue -> System.halt(0)
       :exit -> System.halt(0)
     end
