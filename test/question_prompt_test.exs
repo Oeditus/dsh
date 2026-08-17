@@ -51,6 +51,13 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
       state = QuestionPrompt.select_index(state, 10)
       assert state.cursor == 2
     end
+
+    test "calculates terminal display width accounting for emojis and stripping ANSI codes" do
+      assert QuestionPrompt.display_width("Hello World") == 11
+      assert QuestionPrompt.display_width(" ❓ Question from AI ") == 21
+      assert QuestionPrompt.display_width("3. ✏️  Write custom response…") == 31
+      assert QuestionPrompt.display_width("\e[31mRed Text\e[0m") == 8
+    end
   end
 
   describe "QuestionPrompt answer formatting" do

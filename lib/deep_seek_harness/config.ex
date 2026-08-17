@@ -70,6 +70,15 @@ defmodule DeepSeekHarness.Config do
     end
   end
 
+  @doc "Persists a per-tool permission policy override in local workspace config (.dsh/config.json)."
+  def set_tool_permission(tool_name, policy, cwd \\ ".") do
+    current_cfg = load_config(cwd)
+    perms = Map.get(current_cfg, "tool_permissions", %{})
+    updated_perms = Map.put(perms, tool_name, policy)
+    updated_cfg = Map.put(current_cfg, "tool_permissions", updated_perms)
+    save_config(updated_cfg, cwd)
+  end
+
   defp read_json_config(path) do
     if File.exists?(path) do
       case File.read(path) do

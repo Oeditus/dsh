@@ -5,7 +5,8 @@ config :dllb,
   enabled: true,
   host: System.get_env("DLLB_HOST", "127.0.0.1"),
   port: String.to_integer(System.get_env("DLLB_PORT", "3009")),
-  pool_size: String.to_integer(System.get_env("DLLB_POOL_SIZE", "30"))
+  pool_size: String.to_integer(System.get_env("DLLB_POOL_SIZE", "30")),
+  timeout: :infinity
 
 # Configure ragex knowledge graph store backend to use global dllb server
 # Disable stdio server when embedded in dsh to prevent raw JSON-RPC dumps

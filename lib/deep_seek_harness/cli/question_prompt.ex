@@ -252,18 +252,41 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # TUI Box Renderer
   # ---------------------------------------------------------------------
 
+  @doc "Calculates terminal display width in columns, handling wide emojis and stripping ANSI escapes."
+  def display_width(str) when is_binary(str) do
+    str
+    |> strip_ansi()
+    |> String.graphemes()
+    |> Enum.reduce(0, fn g, acc -> acc + grapheme_width(g) end)
+  end
+
+  defp strip_ansi(str) do
+    String.replace(str, ~r/\e\[[0-9;]*[mGKH]/, "")
+  end
+
+  defp grapheme_width(g) do
+    cond do
+      g in ["❓", "✏️", "✏", "⚡", "🔌"] -> 2
+      String.match?(g, ~r/[\x{1F300}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]/u) -> 2
+      true -> 1
+    end
+  end
+
   def render_modal(state) do
-    box_width = 72
+    # Total box width including left/right border chars is 72.
+    # Interior content width inside borders is 70 display columns.
+    inner_width = 70
 
     if state.rendered_lines > 0 do
-      # Move cursor to column 0, move up rendered_lines, clear to bottom
+      # Move cursor to column 0, move UP rendered_lines, clear to bottom
       IO.write(:user, "\r\e[#{state.rendered_lines}A\e[0J")
     end
 
     header_title = " ❓ Question from AI "
+    header_len = display_width(header_title)
 
     header_padding =
-      String.duplicate("─", max(0, box_width - String.length(header_title) - 2))
+      String.duplicate("─", max(0, inner_width - 1 - header_len))
 
     header =
       "#{Formatter.cyan()}╭─#{Formatter.bold()}#{header_title}#{Formatter.reset()}#{Formatter.cyan()}#{header_padding}╮#{Formatter.reset()}"
@@ -275,20 +298,24 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         "[↑/↓ or 1-#{length(state.options)}: Select | Enter: Confirm]"
       end
 
+    footer_len = display_width(footer_text)
+
     footer_padding =
-      String.duplicate("─", max(0, box_width - String.length(footer_text) - 2))
+      String.duplicate("─", max(0, inner_width - 1 - footer_len))
 
     footer =
       "#{Formatter.cyan()}╰─#{Formatter.dim()}#{footer_text}#{Formatter.reset()}#{Formatter.cyan()}#{footer_padding}╯#{Formatter.reset()}"
 
     blank_line =
-      "#{Formatter.cyan()}│#{Formatter.reset()}#{String.duplicate(" ", box_width)}#{Formatter.cyan()}│#{Formatter.reset()}"
+      "#{Formatter.cyan()}│#{Formatter.reset()}#{String.duplicate(" ", inner_width)}#{Formatter.cyan()}│#{Formatter.reset()}"
 
-    q_wrapped = wrap_text(state.question, box_width - 4)
+    # Question lines are indented 2 spaces left and 2 spaces right (usable text width 66)
+    q_wrapped = wrap_text(state.question, inner_width - 4)
 
     q_lines =
       Enum.map(q_wrapped, fn line ->
-        pad = String.duplicate(" ", max(0, box_width - String.length(line) - 4))
+        len = display_width(line)
+        pad = String.duplicate(" ", max(0, inner_width - 4 - len))
 
         "#{Formatter.cyan()}│#{Formatter.reset()}  #{Formatter.bold()}#{line}#{Formatter.reset()}#{pad}  #{Formatter.cyan()}│#{Formatter.reset()}"
       end)
@@ -322,8 +349,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
             {"  ", "#{Formatter.dim()}#{label}#{Formatter.reset()}"}
           end
 
-        raw_label = " #{pointer}#{label}"
-        pad = String.duplicate(" ", max(0, box_width - String.length(raw_label) - 2))
+        # Visible content inside border: 1 space + 2 pointer chars + label + pad + 1 space = inner_width (70)
+        label_len = display_width(label)
+        pad = String.duplicate(" ", max(0, inner_width - 4 - label_len))
 
         "#{Formatter.cyan()}│#{Formatter.reset()} #{pointer}#{styled_label}#{pad} #{Formatter.cyan()}│#{Formatter.reset()}"
       end)
@@ -333,8 +361,8 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         [blank_line] ++
         q_lines ++ [blank_line] ++ opt_lines ++ [blank_line] ++ [footer]
 
-    IO.write(:user, "\r\n" <> Enum.join(lines, "\r\n") <> "\r\n")
-    %{state | rendered_lines: length(lines)}
+    IO.write(:user, Enum.join(lines, "\r\n"))
+    %{state | rendered_lines: length(lines) - 1}
   end
 
   defp wrap_text(text, max_len) do

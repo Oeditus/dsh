@@ -123,6 +123,7 @@ defmodule DeepSeekHarness.Brain.Session do
       session_id: session_id,
       model: opts[:model] || System.get_env("DEEPSEEK_MODEL") || "deepseek-chat",
       permission_mode: opts[:permission_mode] || :ask_confirm,
+      session_tool_permissions: %{},
       api_key: opts[:api_key] || System.get_env("DEEPSEEK_API_KEY"),
       hands: %HandsExecutor{mode: :local},
       messages: initial_messages,
@@ -542,8 +543,8 @@ defmodule DeepSeekHarness.Brain.Session do
   defp execute_tool_calls(tool_calls, state) do
     Enum.reduce(tool_calls, {[], state}, fn tc, {msg_acc, current_state} ->
       case tool_permitted?(tc.name, tc.arguments, current_state) do
-        :allow ->
-          exec_res = HandsExecutor.execute(current_state.hands, tc.name, tc.arguments)
+        {:allow, updated_state} ->
+          exec_res = HandsExecutor.execute(updated_state.hands, tc.name, tc.arguments)
 
           tool_msg =
             case exec_res do
@@ -558,17 +559,17 @@ defmodule DeepSeekHarness.Brain.Session do
                 }
             end
 
-          updated_state = AgentLoop.handle_tool_failure(tc.name, exec_res, current_state)
-          {msg_acc ++ [tool_msg], updated_state}
+          updated_state_after = AgentLoop.handle_tool_failure(tc.name, exec_res, updated_state)
+          {msg_acc ++ [tool_msg], updated_state_after}
 
-        {:deny, reason} ->
+        {:deny, reason, updated_state} ->
           tool_msg = %{
             "role" => "tool",
             "tool_call_id" => tc.id,
             "content" => "Tool execution denied: #{reason}"
           }
 
-          {msg_acc ++ [tool_msg], current_state}
+          {msg_acc ++ [tool_msg], updated_state}
       end
     end)
   end
@@ -577,23 +578,32 @@ defmodule DeepSeekHarness.Brain.Session do
   defp tool_permitted?(tool_name, args, state) do
     config = Config.load_config(state.cwd)
     tool_perms = Map.get(config, "tool_permissions", %{})
-    policy = Map.get(tool_perms, tool_name)
+    config_policy = Map.get(tool_perms, tool_name)
+    session_perms = Map.get(state, :session_tool_permissions, %{})
+    session_policy = Map.get(session_perms, tool_name)
+
+    policy = session_policy || config_policy
 
     cond do
       policy == "deny" ->
-        {:deny, "Tool '#{tool_name}' execution denied by configuration policy."}
+        {:deny, "Tool '#{tool_name}' execution denied by configuration policy.", state}
 
       policy == "allow" ->
-        :allow
+        {:allow, state}
 
       destructive_bash_command?(tool_name, args) ->
-        confirm_tool_with_user(tool_name, args, "Warning: Destructive shell command detected!")
+        confirm_tool_with_user(
+          tool_name,
+          args,
+          "Warning: Destructive shell command detected!",
+          state
+        )
 
       state.permission_mode == :ask_confirm or policy == "confirm" ->
-        confirm_tool_with_user(tool_name, args, "Confirmation required for tool execution")
+        confirm_tool_with_user(tool_name, args, "Confirmation required for tool execution", state)
 
       true ->
-        :allow
+        {:allow, state}
     end
   end
 
@@ -607,19 +617,21 @@ defmodule DeepSeekHarness.Brain.Session do
 
   defp destructive_bash_command?(_, _), do: false
 
-  defp confirm_tool_with_user(tool_name, args, reason) do
+  defp confirm_tool_with_user(tool_name, args, reason, state) do
     # Never ask for ask_question tool itself
     if tool_name == "ask_question" do
-      :allow
+      {:allow, state}
     else
       formatted_args = inspect(args, pretty: true)
       q = "#{reason}: Allow tool '#{tool_name}'?\nArgs: #{formatted_args}"
-      opts = ["Allow execution", "Deny tool execution"]
 
-      # The spinner (started by the CLI while this turn runs) redraws itself
-      # on a timer from a different process. Pause it while the question
-      # modal renders, otherwise both writers race on the terminal and
-      # produce corrupted, unreadable output.
+      opts = [
+        "Allow once",
+        "Allow always for this session",
+        "Allow always (save to project config)",
+        "Deny tool execution"
+      ]
+
       ans =
         DeepSeekHarness.CLI.Spinner.with_paused(fn ->
           DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(q, opts, false)
@@ -627,14 +639,25 @@ defmodule DeepSeekHarness.Brain.Session do
 
       case ans do
         %{selected: [sel]} ->
-          if String.contains?(String.downcase(sel), "allow") do
-            :allow
-          else
-            {:deny, "Tool execution denied by user."}
+          cond do
+            String.contains?(sel, "save to project config") ->
+              Config.set_tool_permission(tool_name, "allow", state.cwd)
+              perms = Map.put(Map.get(state, :session_tool_permissions, %{}), tool_name, "allow")
+              {:allow, %{state | session_tool_permissions: perms}}
+
+            String.contains?(sel, "this session") ->
+              perms = Map.put(Map.get(state, :session_tool_permissions, %{}), tool_name, "allow")
+              {:allow, %{state | session_tool_permissions: perms}}
+
+            String.contains?(String.downcase(sel), "allow") ->
+              {:allow, state}
+
+            true ->
+              {:deny, "Tool execution denied by user.", state}
           end
 
         _ ->
-          {:deny, "Tool execution denied by user."}
+          {:deny, "Tool execution denied by user.", state}
       end
     end
   end

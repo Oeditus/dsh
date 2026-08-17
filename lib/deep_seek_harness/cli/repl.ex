@@ -15,6 +15,7 @@ defmodule DeepSeekHarness.CLI.Repl do
   alias DeepSeekHarness.CLI.LineEditor
 
   def start(opts \\ []) do
+    MCPServerManager.await_ragex()
     IO.puts(Formatter.banner())
 
     session_id = opts[:session_id] || "main"

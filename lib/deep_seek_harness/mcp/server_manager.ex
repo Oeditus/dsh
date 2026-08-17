@@ -33,6 +33,13 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     GenServer.call(@name, {:start_ragex, target_dir, opts}, :infinity)
   end
 
+  @doc "Waits for background auto-start Ragex indexing to complete."
+  def await_ragex(timeout \\ :infinity) do
+    GenServer.call(@name, :await_ragex, timeout)
+  catch
+    :exit, _ -> :ok
+  end
+
   @doc "Lists active connected MCP servers."
   def list_servers do
     GenServer.call(@name, :list_servers, :infinity)
@@ -69,9 +76,10 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   def init(_opts) do
     if Application.get_env(:deep_seek_harness, :auto_start_ragex, true) do
       send(self(), :auto_start_ragex)
+      {:ok, %{servers: %{}, ragex_status: :starting, waiting_callers: []}}
+    else
+      {:ok, %{servers: %{}, ragex_status: :ready, waiting_callers: []}}
     end
-
-    {:ok, %{servers: %{}}}
   end
 
   @impl true
@@ -84,11 +92,11 @@ defmodule DeepSeekHarness.MCP.ServerManager do
           GenServer.cast(@name, {:ragex_started, dir, tools_registered})
 
         {:error, reason} ->
-          Logger.warning("⚡🔌 Ragex auto-start notice: #{inspect(reason)}")
+          GenServer.cast(@name, {:ragex_failed, reason})
       end
     end)
 
-    {:noreply, state}
+    {:noreply, %{state | ragex_status: :starting}}
   end
 
   def handle_info(msg, state) do
@@ -106,10 +114,29 @@ defmodule DeepSeekHarness.MCP.ServerManager do
         tools: tools_registered
       })
 
-    {:noreply, %{state | servers: new_servers}}
+    Enum.each(state.waiting_callers, fn caller -> GenServer.reply(caller, :ok) end)
+
+    {:noreply, %{state | servers: new_servers, ragex_status: :ready, waiting_callers: []}}
   end
 
   @impl true
+  def handle_cast({:ragex_failed, reason}, state) do
+    Logger.warning("⚡🔌 Ragex auto-start notice: #{inspect(reason)}")
+    Enum.each(state.waiting_callers, fn caller -> GenServer.reply(caller, {:error, reason}) end)
+    {:noreply, %{state | ragex_status: :ready, waiting_callers: []}}
+  end
+
+  @impl true
+  def handle_call(:await_ragex, from, state) do
+    case state.ragex_status do
+      :starting ->
+        {:noreply, %{state | waiting_callers: [from | state.waiting_callers]}}
+
+      _ ->
+        {:reply, :ok, state}
+    end
+  end
+
   def handle_call({:add_server, name, command, args, opts}, _from, state) do
     case start_and_register_mcp_server(name, command, args, opts) do
       {:ok, tools_registered, pid} ->
