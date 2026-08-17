@@ -32,6 +32,16 @@ defmodule DeepSeekHarness.CLI.LogFormatterTest do
     assert String.contains?(formatted, "Deprecated tool call")
   end
 
+  test "suppresses noisy low-level socket transport logs" do
+    event1 = %{level: :info, msg: "[HANDLER] Received data: ping"}
+    event2 = %{level: :info, msg: "[ACCEPT LOOP] Starting, socket: #Port<0.35>"}
+    event3 = %{level: :info, msg: "Client connected: #Port<0.39>"}
+
+    assert LogFormatter.format(event1, %{}) == ""
+    assert LogFormatter.format(event2, %{}) == ""
+    assert LogFormatter.format(event3, %{}) == ""
+  end
+
   test "installs log formatter handler without raising" do
     assert LogFormatter.install() == :ok or LogFormatter.install() == :error
   end
