@@ -561,6 +561,11 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/update", _session_pid, _session_id) do
+    DeepSeekHarness.CLI.Main.handle_self_update()
+    :continue
+  end
+
   def handle_input("/mode " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 

@@ -14,7 +14,9 @@ defmodule DeepSeekHarness.CLI.Main do
     # Ensure application dependencies are started
     Application.ensure_all_started(:deep_seek_harness)
 
-    args = Enum.reject(args, fn a -> a in ["eval", "--"] end)
+    if workspace = System.get_env("DSH_WORKSPACE") do
+      File.cd!(workspace)
+    end
 
     {opts, extra_args, _invalid} =
       OptionParser.parse(args,
@@ -24,11 +26,13 @@ defmodule DeepSeekHarness.CLI.Main do
           node: :string,
           connect: :string,
           plugin: :string,
+          update: :boolean,
           help: :boolean
         ],
         aliases: [
           p: :prompt,
           m: :model,
+          u: :update,
           h: :help
         ]
       )
@@ -36,6 +40,10 @@ defmodule DeepSeekHarness.CLI.Main do
     cond do
       opts[:help] ->
         print_usage()
+        System.halt(0)
+
+      opts[:update] || "update" in extra_args || "self-update" in extra_args ->
+        handle_self_update()
         System.halt(0)
 
       opts[:node] ->
@@ -53,6 +61,36 @@ defmodule DeepSeekHarness.CLI.Main do
 
       true ->
         Repl.start(opts)
+    end
+  end
+
+  def handle_self_update do
+    IO.puts(DeepSeekHarness.CLI.Formatter.format_info("Checking for DeepSeek Harness updates…"))
+
+    repo_dir =
+      System.get_env("DSH_REPO_DIR") ||
+        Application.get_env(:deep_seek_harness, :repo_dir) || File.cwd!()
+
+    if File.dir?(Path.join(repo_dir, ".git")) do
+      IO.puts(
+        DeepSeekHarness.CLI.Formatter.format_info(
+          "Pulling latest git changes and refreshing production release…"
+        )
+      )
+
+      script = """
+      (sleep 0.5 && cd "#{repo_dir}" && git pull --rebase && MIX_ENV=prod mix release --overwrite >/dev/null 2>&1) &
+      """
+
+      System.cmd("bash", ["-c", script], cd: repo_dir)
+
+      IO.puts(
+        DeepSeekHarness.CLI.Formatter.format_success(
+          "Update initiated! DSH release will be refreshed in the background."
+        )
+      )
+    else
+      IO.puts(DeepSeekHarness.CLI.Formatter.format_info("Standalone release active."))
     end
   end
 
