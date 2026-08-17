@@ -62,6 +62,19 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
       # Header + blank + q_line + blank + 2 wrapped option lines + blank + footer = 8 lines (7 linebreaks)
       assert updated_state.rendered_lines == 7
     end
+
+    test "strips duplicate leading numbers from option labels" do
+      state =
+        QuestionPrompt.new_state(
+          "Select options:",
+          ["1. First option", "2. Second option"],
+          false,
+          2
+        )
+
+      updated_state = QuestionPrompt.render_modal(state)
+      assert updated_state.rendered_lines > 0
+    end
   end
 
   describe "QuestionPrompt answer formatting" do

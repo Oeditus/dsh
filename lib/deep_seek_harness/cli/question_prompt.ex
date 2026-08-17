@@ -333,11 +333,13 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
             true -> ""
           end
 
+        clean_opt = String.replace(opt, ~r/^\d+[\.\)\-]\s*/, "")
+
         label =
           if is_custom do
-            "#{prefix}#{idx + 1}. ✏ #{opt}"
+            "#{prefix}#{idx + 1}. ✏ #{clean_opt}"
           else
-            "#{prefix}#{idx + 1}. #{opt}"
+            "#{prefix}#{idx + 1}. #{clean_opt}"
           end
 
         max_text_width = inner_width - 4
