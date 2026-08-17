@@ -555,8 +555,33 @@ defmodule DeepSeekHarness.Brain.Session do
 
   # Agent Execution Loop
 
-  defp run_agent_loop(state, depth) when depth <= 0,
-    do: {{:error, "Max tool iteration depth reached."}, state}
+  defp run_agent_loop(state, depth) when depth <= 0 do
+    question =
+      "Max tool iteration depth reached (#{state.max_tool_depth} turns). Would you like to continue running?"
+
+    choices = [
+      "Continue execution (50 more iterations)",
+      "Stop turn here"
+    ]
+
+    ans =
+      DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+        DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(question, choices, false)
+      end)
+
+    case ans do
+      %{selected: [sel]} ->
+        if String.contains?(sel, "Continue") do
+          Logger.info("[Brain.Session] User authorized 50 additional tool iterations.")
+          run_agent_loop(state, state.max_tool_depth)
+        else
+          {{:error, "Turn stopped by user at max tool iteration depth."}, state}
+        end
+
+      _ ->
+        {{:error, "Turn stopped by user at max tool iteration depth."}, state}
+    end
+  end
 
   defp run_agent_loop(state, depth) do
     opts = [model: state.model, api_key: state.api_key]
@@ -758,8 +783,8 @@ defmodule DeepSeekHarness.Brain.Session do
     if tool_name == "ask_question" do
       {:allow, state}
     else
-      formatted_args = inspect(args, pretty: true)
-      q = "#{reason}: Allow tool '#{tool_name}'?\nArgs: #{formatted_args}"
+      summary = format_tool_confirmation_summary(tool_name, args)
+      q = "#{reason}:\n#{summary}"
 
       opts = [
         "Allow once",
@@ -795,6 +820,127 @@ defmodule DeepSeekHarness.Brain.Session do
         _ ->
           {:deny, "Tool execution denied by user.", state}
       end
+    end
+  end
+
+  def format_tool_confirmation_summary(tool_name, args) when is_map(args) do
+    case tool_name do
+      name when name in ["replace_file_content", "replace_file", "edit_file"] ->
+        file =
+          args["TargetFile"] || args["path"] || args["AbsolutePath"] || args["file"] || "file"
+
+        target = args["TargetContent"] || args["target"] || ""
+        replacement = args["ReplacementContent"] || args["replacement"] || ""
+        start_line = args["StartLine"] || args["line_start"]
+        end_line = args["EndLine"] || args["line_end"]
+
+        lines_info = if start_line, do: " (lines #{start_line}-#{end_line})", else: ""
+
+        diff_summary =
+          cond do
+            target != "" and replacement != "" ->
+              t_preview = truncate_lines(target, 2)
+              r_preview = truncate_lines(replacement, 2)
+
+              """
+              Target:
+              - #{t_preview}
+              Replacement:
+              + #{r_preview}
+              """
+
+            replacement != "" ->
+              r_preview = truncate_lines(replacement, 3)
+
+              """
+              Replacement:
+              + #{r_preview}
+              """
+
+            true ->
+              ""
+          end
+
+        """
+        Tool: #{tool_name}
+        File: #{file}#{lines_info}
+        #{diff_summary}
+        """
+        |> String.trim()
+
+      name when name in ["write_file", "write_to_file", "create_file"] ->
+        file = args["TargetFile"] || args["path"] || args["AbsolutePath"] || "file"
+        content = args["CodeContent"] || args["content"] || ""
+        line_count = length(String.split(content, "\n"))
+        preview = truncate_lines(content, 3)
+
+        """
+        Tool: #{tool_name}
+        File: #{file} (#{line_count} lines)
+        Preview:
+        #{preview}
+        """
+        |> String.trim()
+
+      name when name in ["bash", "cmd", "run_command", "shell", "exec"] ->
+        cmd = args["CommandLine"] || args["command"] || args["cmd"] || ""
+
+        """
+        Tool: #{tool_name}
+        Command: $ #{cmd}
+        """
+        |> String.trim()
+
+      name when name in ["read_file", "view_file", "file_read"] ->
+        file = args["AbsolutePath"] || args["path"] || args["file"] || "file"
+        start_line = args["StartLine"]
+        end_line = args["EndLine"]
+        range = if start_line, do: " (lines #{start_line}-#{end_line})", else: ""
+
+        """
+        Tool: #{tool_name}
+        File: #{file}#{range}
+        """
+        |> String.trim()
+
+      _ ->
+        summary =
+          args
+          |> Enum.map_join("\n", fn {k, v} ->
+            str_v = if is_binary(v), do: truncate_str(v, 60), else: inspect(v)
+            "  #{k}: #{str_v}"
+          end)
+
+        """
+        Tool: #{tool_name}
+        #{summary}
+        """
+        |> String.trim()
+    end
+  end
+
+  def format_tool_confirmation_summary(tool_name, args) do
+    "Tool: #{tool_name}\nArgs: #{inspect(args)}"
+  end
+
+  defp truncate_lines(text, max_lines) when is_binary(text) do
+    lines = String.split(text, "\n")
+
+    if length(lines) <= max_lines do
+      text
+    else
+      preview = Enum.take(lines, max_lines) |> Enum.join("\n")
+      "#{preview}\n  ... [#{length(lines)} lines total]"
+    end
+  end
+
+  defp truncate_str(str, max_len) when is_binary(str) do
+    clean = String.replace(str, "\n", "\\n")
+
+    if String.length(clean) <= max_len do
+      clean
+    else
+      String.slice(clean, 0, max_len) <> "..."
     end
   end
 

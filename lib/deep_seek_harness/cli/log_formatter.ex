@@ -7,7 +7,7 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
 
   alias DeepSeekHarness.CLI.Spinner
 
-  @noisy_patterns ~r/(\[HANDLER\]|\[ACCEPT LOOP\]|Client connected|Client disconnected|Client connection|connection timeout|Waiting for data|Processing message|Sending response|Response sent)/i
+  @noisy_patterns ~r/(\[HANDLER\]|\[ACCEPT LOOP\]|Client connected|Client disconnected|Client connection|connection timeout|Waiting for data|Processing message|Sending response|Response sent|AI Cache)/i
 
   @doc "Formats Erlang/Elixir log events into agy-style single lines."
   def format(%{level: level, msg: msg}, _config) do
