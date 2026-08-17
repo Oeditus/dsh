@@ -596,8 +596,9 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   def execute_ragex_tool(t_name, args) do
     case MCPTools.call_tool(t_name, args) do
       {:ok, result} -> {:ok, format_mcp_content(result)}
+      {:error, %{type: :validation_error} = err} -> {:error, format_mcp_content(err)}
       {:error, err} -> {:error, "Ragex tool error: #{inspect(err)}"}
-      other -> {:ok, inspect(other, pretty: true)}
+      other -> {:ok, format_mcp_content(other)}
     end
   end
 
@@ -681,6 +682,23 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     )
 
     dynamic_mod_name
+  end
+
+  defp format_mcp_content(%{type: :validation_error, errors: errors} = err) do
+    hint =
+      Map.get(
+        err,
+        :hint,
+        "Line range line_start/line_end was off by a few lines. Ensure replacement lines align exactly with function def/defp/do/end block boundaries."
+      )
+
+    error_lines =
+      Enum.map_join(errors, "\n", fn e ->
+        line_info = if is_list(e[:line]), do: inspect(e[:line]), else: "#{e[:line] || "?"}"
+        "  ● Line #{line_info}: #{e[:message]}"
+      end)
+
+    "Validation Error: Code changes produced invalid Elixir syntax:\n#{error_lines}\n\nHINT: #{hint}"
   end
 
   defp format_mcp_content(content) when is_list(content) do
