@@ -18,7 +18,9 @@ defmodule DeepSeekHarness.CLI.Repl do
     MCPServerManager.await_ragex()
     IO.puts(Formatter.banner())
 
-    session_id = opts[:session_id] || "main"
+    session_id =
+      opts[:conversation] || opts[:resume] || opts[:session_id] ||
+        DeepSeekHarness.CLI.Main.generate_uuid()
 
     {:ok, session_pid} =
       SessionSupervisor.start_session(
@@ -48,7 +50,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     case LineEditor.get_line(prompt_str, history) do
       :eof ->
         graceful_shutdown()
-        IO.puts("\nGoodbye!")
+        print_resume_banner(session_id)
 
       {:error, reason} ->
         IO.puts(Formatter.format_error("Input error: #{inspect(reason)}"))
@@ -63,11 +65,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
           :exit ->
             graceful_shutdown()
-
-            IO.puts(
-              "#{Formatter.cyan()}Session ended. Exiting DeepSeek Harness.#{Formatter.reset()}"
-            )
-
+            print_resume_banner(session_id)
             :ok
         end
     end
@@ -722,6 +720,49 @@ defmodule DeepSeekHarness.CLI.Repl do
     handle_input("/session switch " <> target_id, session_pid, session_id)
   end
 
+  def handle_input("/resume " <> target_id, session_pid, session_id) do
+    clean_id =
+      target_id
+      |> String.trim()
+      |> String.replace(~r/^--conversation=|^ -c |^-c=/, "")
+
+    handle_input("/session switch " <> clean_id, session_pid, session_id)
+  end
+
+  def handle_input("/resume", session_pid, session_id) do
+    metas = DeepSeekHarness.Brain.SessionStore.list_session_metadata()
+
+    if Enum.empty?(metas) do
+      IO.puts(Formatter.format_info("No saved sessions available to resume."))
+      :continue
+    else
+      opts =
+        Enum.map(metas, fn m ->
+          dt = m.updated_at |> NaiveDateTime.to_iso8601() |> String.slice(0, 19)
+          "#{m.session_id} [#{m.model}, #{m.message_count} msgs, updated #{dt}]"
+        end)
+
+      ans =
+        DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+          DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
+            "Select conversation to resume:",
+            opts,
+            false,
+            false
+          )
+        end)
+
+      case ans do
+        %{selected: [sel]} ->
+          target_id = sel |> String.split(" ", parts: 2) |> List.first()
+          handle_input("/session switch " <> target_id, session_pid, session_id)
+
+        _ ->
+          :continue
+      end
+    end
+  end
+
   def handle_input("/session switch " <> target_id, _session_pid, _session_id) do
     id = String.trim(target_id)
     {:ok, new_pid} = DeepSeekHarness.Brain.SessionSupervisor.start_session(session_id: id)
@@ -1032,5 +1073,11 @@ defmodule DeepSeekHarness.CLI.Repl do
     end
 
     :continue
+  end
+
+  def print_resume_banner(session_id) do
+    IO.puts("\nResume with -c (or command below):")
+
+    IO.puts("#{Formatter.cyan()}dsh --conversation=#{session_id}#{Formatter.reset()}\n")
   end
 end

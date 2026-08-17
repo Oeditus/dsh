@@ -23,6 +23,8 @@ defmodule DeepSeekHarness.CLI.Main do
         switches: [
           prompt: :string,
           model: :string,
+          conversation: :string,
+          resume: :string,
           node: :string,
           connect: :string,
           plugin: :string,
@@ -32,6 +34,8 @@ defmodule DeepSeekHarness.CLI.Main do
         aliases: [
           p: :prompt,
           m: :model,
+          c: :conversation,
+          r: :resume,
           u: :update,
           h: :help
         ]
@@ -97,28 +101,35 @@ defmodule DeepSeekHarness.CLI.Main do
   defp run_one_shot(opts, extra_args) do
     prompt = opts[:prompt] || Enum.join(extra_args, " ")
     model = opts[:model] || "deepseek-chat"
+    session_id = opts[:conversation] || opts[:resume] || generate_uuid()
 
-    {:ok, session_pid} = SessionSupervisor.start_session(session_id: "oneshot", model: model)
+    {:ok, session_pid} = SessionSupervisor.start_session(session_id: session_id, model: model)
 
     if opts[:plugin] do
       DeepSeekHarness.Plugin.Loader.load_file(opts[:plugin])
     end
 
-    result = Repl.handle_input(prompt, session_pid, "oneshot")
+    result = Repl.handle_input(prompt, session_pid, session_id)
 
-    # System.halt/1 skips normal port cleanup, which would otherwise leave
-    # the per-project Ragex/dllb OS process running as an orphan and force
-    # a full re-index on the next launch instead of an instant cache hit.
     try do
       DeepSeekHarness.MCP.ServerManager.stop_ragex()
     catch
       _, _ -> :ok
     end
 
+    Repl.print_resume_banner(session_id)
+
     case result do
       :continue -> System.halt(0)
       :exit -> System.halt(0)
     end
+  end
+
+  def generate_uuid do
+    <<a::32, b::16, c::16, d::16, e::48>> = :crypto.strong_rand_bytes(16)
+
+    :io_lib.format("~8.16.0b-~4.16.0b-~4.16.0b-~4.16.0b-~12.16.0b", [a, b, c, d, e])
+    |> IO.iodata_to_binary()
   end
 
   defp print_usage do
@@ -127,6 +138,7 @@ defmodule DeepSeekHarness.CLI.Main do
 
     USAGE:
       dsh                             Launch interactive REPL mode
+      dsh -c <conversation_id>        Resume existing conversation
       dsh "Your prompt here"          One-shot mode
       dsh --prompt "Your prompt"      One-shot mode with flags
       dsh --model deepseek-reasoner   Specify model (deepseek-chat or deepseek-reasoner)
@@ -134,12 +146,13 @@ defmodule DeepSeekHarness.CLI.Main do
       dsh --plugin path/to/plugin.exs Load custom plugin on startup
 
     OPTIONS:
-      -p, --prompt STRING    Input prompt to send to agent
-      -m, --model STRING     Model selection (deepseek-chat, deepseek-reasoner)
-          --node STRING      Start local Erlang distributed node name
-          --connect STRING   Connect to remote Hands node
-          --plugin FILE      Load external Elixir plugin file (.ex or .exs)
-      -h, --help             Display this help message
+      -c, --conversation STRING  Resume specific conversation ID
+      -p, --prompt STRING        Input prompt to send to agent
+      -m, --model STRING         Model selection (deepseek-chat, deepseek-reasoner)
+          --node STRING          Start local Erlang distributed node name
+          --connect STRING       Connect to remote Hands node
+          --plugin FILE          Load external Elixir plugin file (.ex or .exs)
+      -h, --help                 Display this help message
     """)
   end
 end

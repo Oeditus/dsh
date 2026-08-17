@@ -42,6 +42,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/plugins",
     "/quit",
     "/ragex",
+    "/resume",
     "/review",
     "/rules",
     "/session",
