@@ -648,13 +648,8 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
     if Map.get(config, "enable_file_picker", true) do
       files =
-        Path.wildcard("**/*")
-        |> Enum.reject(fn path ->
-          String.starts_with?(path, ".git") or
-            String.contains?(path, "/deps/") or
-            String.contains?(path, "/_build/")
-        end)
-        |> Enum.take(25)
+        list_workspace_files()
+        |> Enum.take(30)
 
       opts =
         Enum.map(files, fn f ->
@@ -689,6 +684,31 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     else
       insert_char(state, "@")
     end
+  end
+
+  defp list_workspace_files do
+    case System.cmd("git", ["ls-files", "--cached", "--others", "--exclude-standard"],
+           stderr_to_stdout: true
+         ) do
+      {out, 0} ->
+        out
+        |> String.split("\n", trim: true)
+        |> Enum.reject(&String.starts_with?(&1, ".git"))
+
+      _ ->
+        fallback_wildcard_files()
+    end
+  rescue
+    _ -> fallback_wildcard_files()
+  end
+
+  defp fallback_wildcard_files do
+    Path.wildcard("**/*")
+    |> Enum.reject(fn path ->
+      String.starts_with?(path, ".git") or
+        String.contains?(path, "/deps/") or
+        String.contains?(path, "/_build/")
+    end)
   end
 
   def display_width(str) when is_binary(str) do
