@@ -2,12 +2,15 @@ defmodule DeepSeekHarness.Brain.Session do
   @moduledoc """
   The "Brain" actor of DeepSeek Harness.
   Manages agentic session state, temporal context checkpoints, conversation memory,
-  subagent spawning, project rules, context expansion, and execution loops.
+  subagent spawning, project rules, context expansion, permission authorization gates,
+  and execution loops.
   """
   use GenServer
   require Logger
 
+  alias DeepSeekHarness.Brain.AgentLoop
   alias DeepSeekHarness.Brain.ContextCompressor
+  alias DeepSeekHarness.Brain.SessionStore
   alias DeepSeekHarness.CLI.ContextExpander
   alias DeepSeekHarness.Client.DeepSeekAPI
   alias DeepSeekHarness.Config
@@ -68,9 +71,9 @@ defmodule DeepSeekHarness.Brain.Session do
     GenServer.call(pid, :undo)
   end
 
-  @doc "Spawns a subagent session actor for parallel sub-task execution."
-  def spawn_subagent(pid, prompt) do
-    GenServer.call(pid, {:spawn_subagent, prompt}, 180_000)
+  @doc "Spawns a subagent session actor for sub-task execution."
+  def spawn_subagent(pid, prompt, opts \\ []) do
+    GenServer.call(pid, {:spawn_subagent, prompt, opts}, 180_000)
   end
 
   @doc "Generates a comprehensive Code Review comparing two git branches."
@@ -130,8 +133,20 @@ defmodule DeepSeekHarness.Brain.Session do
       max_tool_depth: opts[:max_tool_depth] || 50,
       total_prompt_tokens: 0,
       total_completion_tokens: 0,
+      cwd: opts[:cwd] || ".",
       status: :idle
     }
+
+    # Attempt to restore session state if persisted
+    state =
+      case SessionStore.load_session(session_id, state.cwd) do
+        {:ok, saved_data} ->
+          Logger.info("[Brain.Session] Restored persisted session state for '#{session_id}'")
+          %{state | messages: saved_data["messages"] || initial_messages}
+
+        _ ->
+          state
+      end
 
     Logger.info(
       "[Brain.Session] Session actor initialized: #{session_id} (model: #{state.model})"
@@ -143,7 +158,7 @@ defmodule DeepSeekHarness.Brain.Session do
   @impl true
   def handle_call({:send_user_message, raw_text}, _from, state) do
     # Expand @filename, @relative_path, @file://..., @https://... references
-    {:ok, expanded_text, _attachments} = ContextExpander.expand(raw_text)
+    {:ok, expanded_text, _attachments} = ContextExpander.expand(raw_text, state.cwd)
 
     user_msg = %{"role" => "user", "content" => expanded_text}
     state = %{state | messages: state.messages ++ [user_msg], status: :thinking}
@@ -186,6 +201,7 @@ defmodule DeepSeekHarness.Brain.Session do
     case ContextCompressor.compress_messages(state.messages, opts) do
       {:ok, new_messages, summary} ->
         new_state = %{state | messages: new_messages}
+        SessionStore.save_session(new_state, state.cwd)
         {:reply, {:ok, summary}, new_state}
 
       {:error, err} ->
@@ -206,6 +222,7 @@ defmodule DeepSeekHarness.Brain.Session do
     }
 
     new_state = %{state | snapshots: [snapshot | state.snapshots]}
+    SessionStore.save_session(new_state, state.cwd)
     {:reply, {:ok, snapshot}, new_state}
   end
 
@@ -222,6 +239,7 @@ defmodule DeepSeekHarness.Brain.Session do
             snapshots: rest
         }
 
+        SessionStore.save_session(new_state, state.cwd)
         {:reply, {:ok, "Rolled back to checkpoint: '#{latest.label}'"}, new_state}
 
       [] ->
@@ -230,33 +248,58 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   @impl true
-  def handle_call({:spawn_subagent, prompt}, _from, state) do
+  def handle_call({:spawn_subagent, prompt, opts}, _from, state) do
     sub_id = "sub_#{System.unique_integer([:positive])}"
-    Logger.info("[Brain.Session] Spawning background subagent session '#{sub_id}'")
+    async? = Keyword.get(opts, :async, false)
 
-    case DeepSeekHarness.Brain.SessionSupervisor.start_session(
-           session_id: sub_id,
-           model: state.model
-         ) do
-      {:ok, sub_pid} ->
-        case send_user_message(sub_pid, prompt) do
-          {:ok, response} ->
+    Logger.info("[Brain.Session] Spawning subagent session '#{sub_id}' (async: #{async?})")
+
+    if async? do
+      parent_pid = self()
+
+      Task.start(fn ->
+        case DeepSeekHarness.Brain.SessionSupervisor.start_session(
+               session_id: sub_id,
+               model: state.model,
+               cwd: state.cwd
+             ) do
+          {:ok, sub_pid} ->
+            res = send_user_message(sub_pid, prompt)
+            send(parent_pid, {:subagent_completed, sub_id, res})
             DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
-            {:reply, {:ok, response.content}, state}
 
           {:error, err} ->
-            DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
-            {:reply, {:error, err}, state}
+            send(parent_pid, {:subagent_completed, sub_id, {:error, err}})
         end
+      end)
 
-      {:error, err} ->
-        {:reply, {:error, "Failed to spawn subagent: #{inspect(err)}"}, state}
+      {:reply, {:ok, "Subagent '#{sub_id}' spawned asynchronously."}, state}
+    else
+      case DeepSeekHarness.Brain.SessionSupervisor.start_session(
+             session_id: sub_id,
+             model: state.model,
+             cwd: state.cwd
+           ) do
+        {:ok, sub_pid} ->
+          case send_user_message(sub_pid, prompt) do
+            {:ok, response} ->
+              DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
+              {:reply, {:ok, response.content}, state}
+
+            {:error, err} ->
+              DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
+              {:reply, {:error, err}, state}
+          end
+
+        {:error, err} ->
+          {:reply, {:error, "Failed to spawn subagent: #{inspect(err)}"}, state}
+      end
     end
   end
 
   @impl true
   def handle_call({:generate_code_review, base_branch, head_branch}, _from, state) do
-    case DeepSeekHarness.Git.diff_branches(base_branch, head_branch) do
+    case DeepSeekHarness.Git.diff_branches(base_branch, head_branch, state.cwd) do
       {:ok, data} ->
         prompt = """
         Perform a thorough, expert production Code Review comparing base branch '#{data.base}' against head branch '#{data.head}'.
@@ -298,19 +341,20 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @impl true
   def handle_call(:get_token_stats, _from, state) do
-    # Estimate total token count from message string lengths (~4 chars per token)
-    est_prompt_tokens =
-      state.messages
-      |> Enum.map(fn m -> String.length(m["content"] || "") end)
-      |> Enum.sum()
-      |> div(4)
+    prompt_tokens = state.total_prompt_tokens
+    completion_tokens = state.total_completion_tokens
+    total = prompt_tokens + completion_tokens
+
+    # DeepSeek Pricing: V3 prompt $0.14/1M, completion $0.28/1M
+    cost_prompt = prompt_tokens * 0.00000014
+    cost_completion = completion_tokens * 0.00000028
+    total_cost = cost_prompt + cost_completion
 
     stats = %{
-      estimated_prompt_tokens: est_prompt_tokens,
-      tracked_prompt_tokens: state.total_prompt_tokens,
-      tracked_completion_tokens: state.total_completion_tokens,
-      total_tokens: est_prompt_tokens + state.total_completion_tokens,
-      estimated_cost_usd: (est_prompt_tokens + state.total_completion_tokens) * 0.0000005
+      tracked_prompt_tokens: prompt_tokens,
+      tracked_completion_tokens: completion_tokens,
+      total_tokens: total,
+      estimated_cost_usd: Float.round(total_cost, 6)
     }
 
     {:reply, stats, state}
@@ -369,6 +413,20 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   @impl true
+  def handle_info({:subagent_completed, sub_id, result}, state) do
+    Logger.info("[Brain.Session] Async subagent '#{sub_id}' completed with result.")
+
+    notice_content =
+      case result do
+        {:ok, text} -> "=== Async Subagent Result (#{sub_id}) ===\n#{text}\n"
+        {:error, err} -> "=== Async Subagent Failure (#{sub_id}) ===\n#{err}\n"
+      end
+
+    notice = %{"role" => "user", "content" => notice_content}
+    {:noreply, %{state | messages: state.messages ++ [notice]}}
+  end
+
+  @impl true
   def handle_info(msg, state) do
     Logger.debug("[Brain.Session] Unhandled message: #{inspect(msg)}")
     {:noreply, state}
@@ -389,6 +447,8 @@ defmodule DeepSeekHarness.Brain.Session do
 
     case DeepSeekAPI.chat_completion(state.messages, state.tools, opts) do
       {:ok, %{tool_calls: tool_calls} = response} when is_list(tool_calls) and tool_calls != [] ->
+        state = accumulate_usage(state, response[:usage])
+
         if response[:reasoning_content] do
           Logger.info("[DeepSeek-R1 Reasoning]\n#{response.reasoning_content}")
         end
@@ -413,7 +473,7 @@ defmodule DeepSeekHarness.Brain.Session do
 
         state_after_assistant = %{state | messages: state.messages ++ [assistant_msg]}
 
-        if duplicate_tool_calls?(state.messages, tool_calls) do
+        if AgentLoop.duplicate_tool_calls?(state.messages, tool_calls) do
           Logger.warning(
             "[Brain.Session] Detected duplicate tool call loop. Instructing model to finalize response."
           )
@@ -444,17 +504,33 @@ defmodule DeepSeekHarness.Brain.Session do
         end
 
       {:ok, response} ->
+        state = accumulate_usage(state, response[:usage])
+
         if response[:reasoning_content] do
           Logger.info("[DeepSeek-R1 Reasoning]\n#{response.reasoning_content}")
         end
 
         final_msg = %{"role" => "assistant", "content" => response.content}
         final_state = %{state | messages: state.messages ++ [final_msg], status: :idle}
+        SessionStore.save_session(final_state, state.cwd)
         {{:ok, response}, final_state}
 
       {:error, reason} ->
         {{:error, "Error communicating with DeepSeek API: #{reason}"}, %{state | status: :idle}}
     end
+  end
+
+  defp accumulate_usage(state, nil), do: state
+
+  defp accumulate_usage(state, usage) when is_map(usage) do
+    p = Map.get(usage, :prompt_tokens, 0)
+    c = Map.get(usage, :completion_tokens, 0)
+
+    %{
+      state
+      | total_prompt_tokens: state.total_prompt_tokens + p,
+        total_completion_tokens: state.total_completion_tokens + c
+    }
   end
 
   defp maybe_put_reasoning(msg, reasoning) when is_binary(reasoning) and reasoning != "" do
@@ -463,107 +539,98 @@ defmodule DeepSeekHarness.Brain.Session do
 
   defp maybe_put_reasoning(msg, _), do: msg
 
-  defp duplicate_tool_calls?(messages, new_tool_calls) do
-    case Enum.reverse(messages) do
-      [%{"tool_calls" => prev_calls} | _] when is_list(prev_calls) ->
-        prev_names_and_args =
-          Enum.map(prev_calls, fn tc ->
-            fn_data = Map.get(tc, "function", %{})
-            {Map.get(fn_data, "name"), Map.get(fn_data, "arguments")}
-          end)
-
-        new_names_and_args =
-          Enum.map(new_tool_calls, fn tc ->
-            {tc.name, Jason.encode!(tc.arguments)}
-          end)
-
-        prev_names_and_args == new_names_and_args and prev_names_and_args != []
-
-      _ ->
-        false
-    end
-  end
-
-  @standard_tools ~w(read_file write_file replace_file list_dir bash elixir_eval ask_question)
-
   defp execute_tool_calls(tool_calls, state) do
     Enum.reduce(tool_calls, {[], state}, fn tc, {msg_acc, current_state} ->
-      exec_res = HandsExecutor.execute(current_state.hands, tc.name, tc.arguments)
+      case tool_permitted?(tc.name, tc.arguments, current_state) do
+        :allow ->
+          exec_res = HandsExecutor.execute(current_state.hands, tc.name, tc.arguments)
 
-      tool_msg =
-        case exec_res do
-          {:ok, result} ->
-            %{"role" => "tool", "tool_call_id" => tc.id, "content" => result}
+          tool_msg =
+            case exec_res do
+              {:ok, result} ->
+                %{"role" => "tool", "tool_call_id" => tc.id, "content" => result}
 
-          {:error, err} ->
-            %{
-              "role" => "tool",
-              "tool_call_id" => tc.id,
-              "content" => "Tool execution failed: #{err}"
-            }
-        end
+              {:error, err} ->
+                %{
+                  "role" => "tool",
+                  "tool_call_id" => tc.id,
+                  "content" => "Tool execution failed: #{err}"
+                }
+            end
 
-      updated_state =
-        if non_standard_tool?(tc.name) and blank_result?(exec_res) do
-          current_counts = Map.get(current_state, :tool_failure_counts, %{})
-          new_fail_count = Map.get(current_counts, tc.name, 0) + 1
-          updated_counts = Map.put(current_counts, tc.name, new_fail_count)
+          updated_state = AgentLoop.handle_tool_failure(tc.name, exec_res, current_state)
+          {msg_acc ++ [tool_msg], updated_state}
 
-          if new_fail_count >= 3 do
-            Logger.warning(
-              "[Brain.Session] Non-standard tool '#{tc.name}' failed #{new_fail_count} times without results. Disabling tool and falling back to standard bash+grep."
-            )
+        {:deny, reason} ->
+          tool_msg = %{
+            "role" => "tool",
+            "tool_call_id" => tc.id,
+            "content" => "Tool execution denied: #{reason}"
+          }
 
-            # Disable failing non-standard tool from active tool definitions
-            remaining_tools =
-              Enum.reject(current_state.tools, fn t ->
-                Map.get(t, :name) == tc.name or Map.get(t, "name") == tc.name
-              end)
-
-            fallback_notice = %{
-              "role" => "user",
-              "content" =>
-                "SYSTEM NOTICE: Non-standard tool '#{tc.name}' failed to provide results after #{new_fail_count} attempts. Fallback mode activated: tool '#{tc.name}' has been disabled. Please use standard tools: bash (with grep, find, cat), read_file, or list_dir instead."
-            }
-
-            %{
-              current_state
-              | tool_failure_counts: updated_counts,
-                tools: remaining_tools,
-                messages: current_state.messages ++ [fallback_notice]
-            }
-          else
-            %{current_state | tool_failure_counts: updated_counts}
-          end
-        else
-          current_state
-        end
-
-      {msg_acc ++ [tool_msg], updated_state}
+          {msg_acc ++ [tool_msg], current_state}
+      end
     end)
   end
 
-  defp non_standard_tool?(name) when is_binary(name) do
-    name not in @standard_tools
+  # Permission Authorization Gate (Item 1, 4, 18)
+  defp tool_permitted?(tool_name, args, state) do
+    config = Config.load_config(state.cwd)
+    tool_perms = Map.get(config, "tool_permissions", %{})
+    policy = Map.get(tool_perms, tool_name)
+
+    cond do
+      policy == "deny" ->
+        {:deny, "Tool '#{tool_name}' execution denied by configuration policy."}
+
+      policy == "allow" ->
+        :allow
+
+      destructive_bash_command?(tool_name, args) ->
+        confirm_tool_with_user(tool_name, args, "Warning: Destructive shell command detected!")
+
+      state.permission_mode == :ask_confirm or policy == "confirm" ->
+        confirm_tool_with_user(tool_name, args, "Confirmation required for tool execution")
+
+      true ->
+        :allow
+    end
   end
 
-  defp non_standard_tool?(_), do: false
+  defp destructive_bash_command?("bash", %{"command" => cmd}) when is_binary(cmd) do
+    c = String.downcase(cmd)
 
-  defp blank_result?({:error, _}), do: true
-
-  defp blank_result?({:ok, res}) when is_binary(res) do
-    trimmed = String.trim(res)
-
-    trimmed == "" or String.starts_with?(trimmed, "Tool execution failed") or
-      String.starts_with?(trimmed, "Ragex tool error") or
-      String.contains?(trimmed, "dllb_disabled") or
-      String.contains?(trimmed, "manager_not_started")
+    String.contains?(c, "rm -rf") or String.contains?(c, "git push --force") or
+      String.contains?(c, "git reset --hard") or String.contains?(c, "drop database") or
+      String.contains?(c, "mkfs")
   end
 
-  defp blank_result?({:ok, nil}), do: true
-  defp blank_result?({:ok, []}), do: true
-  defp blank_result?({:ok, %{}}), do: true
-  defp blank_result?(_), do: false
+  defp destructive_bash_command?(_, _), do: false
+
+  defp confirm_tool_with_user(tool_name, args, reason) do
+    # Never ask for ask_question tool itself
+    if tool_name == "ask_question" do
+      :allow
+    else
+      formatted_args = inspect(args, pretty: true)
+      q = "#{reason}: Allow tool '#{tool_name}'?\nArgs: #{formatted_args}"
+      opts = ["Allow execution", "Deny tool execution"]
+
+      ans = DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(q, opts, false)
+
+      case ans do
+        %{selected: [sel]} ->
+          if String.contains?(String.downcase(sel), "allow") do
+            :allow
+          else
+            {:deny, "Tool execution denied by user."}
+          end
+
+        _ ->
+          {:deny, "Tool execution denied by user."}
+      end
+    end
+  end
 
   defp auto_checkpoint(state, label) do
     snapshot = %{
@@ -575,6 +642,8 @@ defmodule DeepSeekHarness.Brain.Session do
     }
 
     snapshots = Enum.take([snapshot | state.snapshots], 20)
-    %{state | snapshots: snapshots}
+    new_state = %{state | snapshots: snapshots}
+    SessionStore.save_session(new_state, state.cwd)
+    new_state
   end
 end

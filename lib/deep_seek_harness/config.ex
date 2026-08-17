@@ -7,6 +7,9 @@ defmodule DeepSeekHarness.Config do
     "model" => "deepseek-chat",
     # "auto_approve" | "ask_confirm"
     "permission_mode" => "ask_confirm",
+    # Per-tool overrides: e.g. %{"bash" => "confirm", "read_file" => "allow"}
+    "tool_permissions" => %{},
+    "sandbox_workspace" => false,
     "temperature" => 0.7,
     "system_prompt_addon" => "",
     "mcp_servers" => %{}

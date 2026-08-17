@@ -383,12 +383,18 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   # Helper Functions
 
   def discover_ragex_dir(start_dir \\ ".") do
-    candidates = [
-      "/opt/Proyectos/Oeditus/ragex",
-      Path.expand("../ragex", start_dir),
-      Path.expand("~/Proyectos/Oeditus/ragex", start_dir),
-      start_dir
-    ]
+    env_path = System.get_env("RAGEX_PATH") || Application.get_env(:deep_seek_harness, :ragex_path)
+
+    candidates =
+      [
+        env_path,
+        Path.expand("../ragex", start_dir),
+        Path.expand("./ragex", start_dir),
+        "/opt/Proyectos/Oeditus/ragex",
+        Path.expand("~/Proyectos/Oeditus/ragex", start_dir),
+        start_dir
+      ]
+      |> Enum.reject(&is_nil/1)
 
     found =
       Enum.find(candidates, fn path ->
@@ -470,38 +476,12 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   end
 
   defp build_mcp_ragex_tool_module(tool_name, t_name, t_desc, input_schema) do
-    dynamic_mod_name = String.to_atom("Elixir.DeepSeekHarness.Plugin.MCP_#{tool_name}")
-
-    :code.purge(dynamic_mod_name)
-    :code.delete(dynamic_mod_name)
-
-    Module.create(
-      dynamic_mod_name,
+    exec_ast =
       quote do
-        @behaviour DeepSeekHarness.Plugin.Behaviour
+        DeepSeekHarness.MCP.ServerManager.execute_ragex_tool(unquote(t_name), args)
+      end
 
-        def name, do: unquote(tool_name)
-        def description, do: unquote("[MCP:ragex] #{t_desc}")
-
-        def execute(args) do
-          DeepSeekHarness.MCP.ServerManager.execute_ragex_tool(unquote(t_name), args)
-        end
-
-        def tools do
-          [
-            %{
-              name: unquote(tool_name),
-              description: unquote("[MCP:ragex] #{t_desc}"),
-              parameters: unquote(Macro.escape(input_schema)),
-              execute: &execute/1
-            }
-          ]
-        end
-      end,
-      Macro.Env.location(__ENV__)
-    )
-
-    dynamic_mod_name
+    build_dynamic_tool_module(tool_name, "ragex", t_desc, input_schema, exec_ast)
   end
 
   defp build_mcp_client_tool_module(
@@ -512,6 +492,19 @@ defmodule DeepSeekHarness.MCP.ServerManager do
          input_schema,
          client_pid
        ) do
+    exec_ast =
+      quote do
+        DeepSeekHarness.MCP.ServerManager.execute_mcp_client_tool(
+          unquote(client_pid),
+          unquote(mcp_tool_name),
+          args
+        )
+      end
+
+    build_dynamic_tool_module(tool_name, server_name, desc, input_schema, exec_ast)
+  end
+
+  defp build_dynamic_tool_module(tool_name, server_tag, desc, input_schema, exec_ast) do
     dynamic_mod_name = String.to_atom("Elixir.DeepSeekHarness.Plugin.MCP_#{tool_name}")
 
     :code.purge(dynamic_mod_name)
@@ -523,21 +516,17 @@ defmodule DeepSeekHarness.MCP.ServerManager do
         @behaviour DeepSeekHarness.Plugin.Behaviour
 
         def name, do: unquote(tool_name)
-        def description, do: unquote("[MCP:#{server_name}] #{desc}")
+        def description, do: unquote("[MCP:#{server_tag}] #{desc}")
 
         def execute(args) do
-          DeepSeekHarness.MCP.ServerManager.execute_mcp_client_tool(
-            unquote(client_pid),
-            unquote(mcp_tool_name),
-            args
-          )
+          unquote(exec_ast)
         end
 
         def tools do
           [
             %{
               name: unquote(tool_name),
-              description: unquote("[MCP:#{server_name}] #{desc}"),
+              description: unquote("[MCP:#{server_tag}] #{desc}"),
               parameters: unquote(Macro.escape(input_schema)),
               execute: &execute/1
             }

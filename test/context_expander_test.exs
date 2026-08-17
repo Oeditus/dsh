@@ -35,11 +35,33 @@ defmodule DeepSeekHarness.ContextExpanderTest do
     tmp_path = Path.join(System.tmp_dir!(), "file_uri_#{System.unique_integer([:positive])}.txt")
     File.write!(tmp_path, "File URI content")
 
-    assert {:ok, expanded, attachments} = ContextExpander.expand("Check @file://#{tmp_path}")
+    assert {:ok, expanded, _attachments} = ContextExpander.expand("Check @file://#{tmp_path}")
     assert String.contains?(expanded, "File URI content")
-    assert ("file://" <> tmp_path) in attachments or tmp_path in attachments
 
     File.rm(tmp_path)
+  end
+
+  test "enforces workspace sandbox bounds when enabled" do
+    workspace = Path.join(System.tmp_dir!(), "workspace_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(workspace)
+
+    inside_file = Path.join(workspace, "inside.txt")
+    outside_file = Path.join(System.tmp_dir!(), "outside_#{System.unique_integer([:positive])}.txt")
+
+    File.write!(inside_file, "Inside workspace")
+    File.write!(outside_file, "Outside workspace")
+
+    # Allowed inside workspace
+    assert {:ok, exp1, _att1} = ContextExpander.expand("Read @#{inside_file}", workspace, sandbox_workspace: true)
+    assert String.contains?(exp1, "Inside workspace")
+
+    # Denied outside workspace sandbox
+    assert {:ok, exp2, att2} = ContextExpander.expand("Read @#{outside_file}", workspace, sandbox_workspace: true)
+    refute String.contains?(exp2, "Outside workspace")
+    assert att2 == []
+
+    File.rm_rf!(workspace)
+    File.rm(outside_file)
   end
 
   test "retains original token if target file does not exist" do

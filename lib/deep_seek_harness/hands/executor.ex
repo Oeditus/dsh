@@ -76,41 +76,24 @@ defmodule DeepSeekHarness.Hands.Executor do
      "Invalid Hands configuration: #{inspect(config)} for tool #{tool_name} (#{inspect(args)})"}
   end
 
+  @icon_map %{
+    "read_file" => "📖", "view_file" => "📖", "file_read" => "📖", "read_contents" => "📖", "get_file" => "📖",
+    "write_file" => "📝", "write_to_file" => "📝", "replace_file_content" => "📝", "replace_file" => "📝", "edit_file" => "📝", "create_file" => "📝", "save_file" => "📝",
+    "bash" => "🖥️", "cmd" => "🖥️", "run_command" => "🖥️", "shell" => "🖥️", "exec" => "🖥️", "execute_command" => "🖥️",
+    "grep_search" => "🔍", "grep" => "🔍", "search_files" => "🔍", "file_search" => "🔍", "ripgrep" => "🔍", "search" => "🔍",
+    "list_dir" => "📁", "ls" => "📁", "dir_list" => "📁", "list_directory" => "📁", "find_by_name" => "📁",
+    "git" => "🌿", "git_status" => "🌿", "git_diff" => "🌿", "git_commit" => "🌿", "git_log" => "🌿",
+    "http" => "🌐", "req" => "🌐", "fetch_url" => "🌐", "web_search" => "🌐", "read_url" => "🌐",
+    "subagent" => "🤖", "spawn_subagent" => "🤖", "agent" => "🤖",
+    "ask_question" => "❓", "ask" => "❓", "question" => "❓", "user_input" => "❓"
+  }
+
   @doc "Returns an icon emoji for a known tool."
   def tool_icon(name) when is_binary(name) do
     cond do
-      name in ~w(read_file view_file file_read read_contents get_file) ->
-        "📖"
-
-      name in ~w(write_file write_to_file replace_file_content edit_file create_file save_file) ->
-        "📝"
-
-      name in ~w(bash cmd run_command shell exec execute_command) ->
-        "🖥️"
-
-      name in ~w(grep_search grep search_files file_search ripgrep search) ->
-        "🔍"
-
-      name in ~w(list_dir ls dir_list list_directory find_by_name) ->
-        "📁"
-
-      name in ~w(git git_status git_diff git_commit git_log) ->
-        "🌿"
-
-      name in ~w(http req fetch_url web_search read_url) ->
-        "🌐"
-
-      name in ~w(subagent spawn_subagent agent) ->
-        "🤖"
-
-      name in ~w(ask_question ask question user_input) ->
-        "❓"
-
-      String.starts_with?(name, "mcp_") or name == "ragex" ->
-        "🔌"
-
-      true ->
-        "🛠️"
+      icon = Map.get(@icon_map, String.downcase(name)) -> icon
+      String.starts_with?(name, "mcp_") or name == "ragex" -> "🔌"
+      true -> "🛠️"
     end
   end
 

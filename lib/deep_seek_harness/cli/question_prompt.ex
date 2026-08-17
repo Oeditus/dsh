@@ -89,26 +89,30 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # ---------------------------------------------------------------------
 
   def format_answer(question, %{cancelled: true}) do
-    "Question: #{question}\nUser cancelled the question prompt."
+    Jason.encode!(%{
+      "question" => question,
+      "status" => "cancelled",
+      "selected_options" => [],
+      "custom_response" => nil
+    })
   end
 
   def format_answer(question, %{selected: selected, custom: custom}) when is_binary(custom) do
-    sel_str =
-      if selected != [] do
-        "Selected options: " <> Enum.join(selected, ", ") <> "\n"
-      else
-        ""
-      end
-
-    "Question: #{question}\n#{sel_str}User custom response: #{custom}"
+    Jason.encode!(%{
+      "question" => question,
+      "status" => "answered",
+      "selected_options" => selected,
+      "custom_response" => custom
+    })
   end
 
   def format_answer(question, %{selected: selected}) when is_list(selected) do
-    if selected == [] do
-      "Question: #{question}\nUser provided no selection."
-    else
-      "Question: #{question}\nUser selected: " <> Enum.join(selected, "; ")
-    end
+    Jason.encode!(%{
+      "question" => question,
+      "status" => "answered",
+      "selected_options" => selected,
+      "custom_response" => nil
+    })
   end
 
   # ---------------------------------------------------------------------

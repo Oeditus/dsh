@@ -54,31 +54,36 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
   end
 
   describe "QuestionPrompt answer formatting" do
-    test "formats standard selected options answer" do
+    test "formats standard selected options answer as JSON" do
       q = "Select target database:"
       ans = %{selected: ["PostgreSQL", "SQLite"]}
       formatted = QuestionPrompt.format_answer(q, ans)
+      assert {:ok, decoded} = Jason.decode(formatted)
 
-      assert formatted =~ "Question: Select target database:"
-      assert formatted =~ "User selected: PostgreSQL; SQLite"
+      assert decoded["question"] == "Select target database:"
+      assert decoded["selected_options"] == ["PostgreSQL", "SQLite"]
+      assert decoded["status"] == "answered"
     end
 
-    test "formats custom written response answer" do
+    test "formats custom written response answer as JSON" do
       q = "What features to add?"
       ans = %{selected: ["Auth"], custom: "GraphQL API"}
       formatted = QuestionPrompt.format_answer(q, ans)
+      assert {:ok, decoded} = Jason.decode(formatted)
 
-      assert formatted =~ "Question: What features to add?"
-      assert formatted =~ "Selected options: Auth"
-      assert formatted =~ "User custom response: GraphQL API"
+      assert decoded["question"] == "What features to add?"
+      assert decoded["selected_options"] == ["Auth"]
+      assert decoded["custom_response"] == "GraphQL API"
     end
 
-    test "formats cancelled answer" do
+    test "formats cancelled answer as JSON" do
       q = "Confirm deployment?"
       ans = %{cancelled: true}
       formatted = QuestionPrompt.format_answer(q, ans)
+      assert {:ok, decoded} = Jason.decode(formatted)
 
-      assert formatted =~ "User cancelled the question prompt."
+      assert decoded["question"] == "Confirm deployment?"
+      assert decoded["status"] == "cancelled"
     end
   end
 

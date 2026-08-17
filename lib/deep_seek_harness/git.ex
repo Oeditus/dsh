@@ -81,20 +81,13 @@ defmodule DeepSeekHarness.Git do
   defp colorize_diff(raw_diff) do
     raw_diff
     |> String.split("\n")
-    |> Enum.map_join("\n", fn line ->
-      cond do
-        String.starts_with?(line, "+") and not String.starts_with?(line, "+++") ->
-          IO.ANSI.green() <> line <> IO.ANSI.reset()
-
-        String.starts_with?(line, "-") and not String.starts_with?(line, "---") ->
-          IO.ANSI.red() <> line <> IO.ANSI.reset()
-
-        String.starts_with?(line, "@@") ->
-          IO.ANSI.cyan() <> line <> IO.ANSI.reset()
-
-        true ->
-          line
-      end
-    end)
+    |> Enum.map_join("\n", &colorize_line/1)
   end
+
+  defp colorize_line("+++" <> _ = line), do: line
+  defp colorize_line("---" <> _ = line), do: line
+  defp colorize_line("+" <> _ = line), do: IO.ANSI.green() <> line <> IO.ANSI.reset()
+  defp colorize_line("-" <> _ = line), do: IO.ANSI.red() <> line <> IO.ANSI.reset()
+  defp colorize_line("@@" <> _ = line), do: IO.ANSI.cyan() <> line <> IO.ANSI.reset()
+  defp colorize_line(line), do: line
 end

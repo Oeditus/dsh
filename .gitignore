@@ -40,3 +40,6 @@ oeditus_credo-*.tar
 
 # Local Ragex knowledge-graph/dllb database for this project (generated data).
 /.ragex/
+
+# DeepSeek Harness local session checkpoints and config
+/.dsh/

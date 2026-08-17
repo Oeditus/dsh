@@ -1,7 +1,7 @@
 defmodule DeepSeekHarness.CLI.ContextExpander do
   @moduledoc """
   Expands `@filename`, `@relative_path`, `@file://...`, and `@https://...` references in user prompts.
-  Allows seamless context embedding into agent prompts.
+  Includes workspace sandbox bounds checks and URL fetch notifications.
   """
   require Logger
 
@@ -9,7 +9,7 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
   @ref_regex ~r/@(file:\/\/\S+|https?:\/\/\S+|\/?[\w\.\-\/]+)/
 
   @doc "Parses and expands all @ references in the prompt text."
-  def expand(text, cwd \\ ".") do
+  def expand(text, cwd \\ ".", opts \\ []) do
     matches = Regex.scan(@ref_regex, text)
 
     if Enum.empty?(matches) do
@@ -17,12 +17,11 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
     else
       {expanded_text, attachments} =
         Enum.reduce(matches, {text, []}, fn [full_match, target], {acc_text, acc_attachments} ->
-          case resolve_reference(target, cwd) do
+          case resolve_reference(target, cwd, opts) do
             {:ok, content, label} ->
               block =
                 "\n\n=== Attached File/URI (#{label}) ===\n#{content}\n=======================\n"
 
-              # Replace the @reference in prompt with a clean label and append block
               clean_text = String.replace(acc_text, full_match, "[Ref: #{label}]")
               {clean_text <> block, [label | acc_attachments]}
 
@@ -39,14 +38,14 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
     end
   end
 
-  def resolve_reference("file://" <> path, _cwd) do
-    read_local_file(path, "file://" <> path)
+  def resolve_reference("file://" <> path, cwd, opts) do
+    resolve_path_reference(path, "file://" <> path, cwd, opts)
   end
 
-  def resolve_reference("http://" <> _ = url, _cwd), do: fetch_url(url)
-  def resolve_reference("https://" <> _ = url, _cwd), do: fetch_url(url)
+  def resolve_reference("http://" <> _ = url, _cwd, _opts), do: fetch_url(url)
+  def resolve_reference("https://" <> _ = url, _cwd, _opts), do: fetch_url(url)
 
-  def resolve_reference(rel_or_abs_path, cwd) do
+  def resolve_reference(rel_or_abs_path, cwd, opts) do
     expanded_path =
       if String.starts_with?(rel_or_abs_path, "/") do
         rel_or_abs_path
@@ -54,7 +53,23 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
         Path.expand(rel_or_abs_path, cwd)
       end
 
-    read_local_file(expanded_path, rel_or_abs_path)
+    resolve_path_reference(expanded_path, rel_or_abs_path, cwd, opts)
+  end
+
+  defp resolve_path_reference(expanded_path, label, cwd, opts) do
+    sandbox? = Keyword.get(opts, :sandbox_workspace, false)
+
+    if sandbox? and not in_workspace?(expanded_path, cwd) do
+      {:error, "File path '#{expanded_path}' is outside active workspace sandbox bounds."}
+    else
+      read_local_file(expanded_path, label)
+    end
+  end
+
+  defp in_workspace?(path, cwd) do
+    abs_path = Path.expand(path)
+    abs_cwd = Path.expand(cwd)
+    String.starts_with?(abs_path, abs_cwd)
   end
 
   defp read_local_file(path, label) do
@@ -80,6 +95,8 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
   end
 
   defp fetch_url(url) do
+    Logger.info("[ContextExpander] Resolving remote URL reference: #{url}")
+
     case Req.get(url, receive_timeout: 10_000) do
       {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
         truncated =

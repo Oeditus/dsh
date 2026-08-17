@@ -1,0 +1,87 @@
+defmodule DeepSeekHarness.Brain.SessionStore do
+  @moduledoc """
+  Handles disk persistence for session memory, history checkpoints, and snapshots.
+  Enables session resumption across CLI restarts (~/.dsh/sessions/<session_id>.json).
+  """
+  require Logger
+
+  @doc "Saves session state and snapshots to disk."
+  def save_session(session_state, cwd \\ ".") do
+    session_id = session_state.session_id
+    dir = session_dir(cwd)
+    file_path = Path.join(dir, "#{session_id}.json")
+
+    payload = %{
+      "session_id" => session_id,
+      "model" => session_state.model,
+      "permission_mode" => to_string(session_state.permission_mode),
+      "updated_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "step_count" => session_state.step_count,
+      "total_prompt_tokens" => session_state.total_prompt_tokens,
+      "total_completion_tokens" => session_state.total_completion_tokens,
+      "messages" => session_state.messages,
+      "snapshots" => serialize_snapshots(session_state.snapshots)
+    }
+
+    with :ok <- File.mkdir_p(dir),
+         {:ok, json} <- Jason.encode(payload, pretty: true),
+         :ok <- File.write(file_path, json) do
+      {:ok, file_path}
+    else
+      err ->
+        Logger.warning("[SessionStore] Failed to save session '#{session_id}': #{inspect(err)}")
+        {:error, err}
+    end
+  end
+
+  @doc "Loads a persisted session from disk."
+  def load_session(session_id, cwd \\ ".") do
+    file_path = Path.join(session_dir(cwd), "#{session_id}.json")
+
+    if File.exists?(file_path) do
+      with {:ok, content} <- File.read(file_path),
+           {:ok, data} when is_map(data) <- Jason.decode(content) do
+        {:ok, data}
+      else
+        err -> {:error, "Failed to decode session file '#{file_path}': #{inspect(err)}"}
+      end
+    else
+      {:error, "Session file '#{file_path}' does not exist."}
+    end
+  end
+
+  @doc "Lists all saved session IDs."
+  def list_sessions(cwd \\ ".") do
+    dir = session_dir(cwd)
+
+    if File.dir?(dir) do
+      case File.ls(dir) do
+        {:ok, files} ->
+          files
+          |> Enum.filter(&String.ends_with?(&1, ".json"))
+          |> Enum.map(&String.replace(&1, ".json", ""))
+
+        _ ->
+          []
+      end
+    else
+      []
+    end
+  end
+
+  def session_dir(cwd \\ ".") do
+    Path.join(cwd, ".dsh/sessions")
+  end
+
+  defp serialize_snapshots(snapshots) when is_list(snapshots) do
+    Enum.map(snapshots, fn s ->
+      %{
+        "id" => s[:id] || s["id"],
+        "label" => s[:label] || s["label"],
+        "timestamp" => s[:timestamp] || s["timestamp"],
+        "model" => s[:model] || s["model"],
+        "messages" => s[:messages] || s["messages"]
+      }
+    end)
+  end
+end
