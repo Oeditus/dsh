@@ -503,6 +503,14 @@ defmodule DeepSeekHarness.CLI.Repl do
         "r1" -> "deepseek-reasoner"
         "chat" -> "deepseek-chat"
         "v3" -> "deepseek-chat"
+        "coder" -> "deepseek-coder"
+        "v2.5" -> "deepseek-coder"
+        "openrouter-r1" -> "deepseek/deepseek-r1"
+        "openrouter-v3" -> "deepseek/deepseek-chat"
+        "siliconflow-r1" -> "deepseek-ai/DeepSeek-R1"
+        "siliconflow-v3" -> "deepseek-ai/DeepSeek-V3"
+        "together-r1" -> "deepseek-ai/DeepSeek-R1"
+        "ollama-r1" -> "deepseek-r1:70b"
         other -> other
       end
 
