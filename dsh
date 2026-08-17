@@ -14,7 +14,7 @@
 #   DLLB_HOST       dllb server host                (default 127.0.0.1)
 #   DLLB_PORT       dllb server port                (default 3009)
 #   DLLB_DIR        dllb server repo                (default: <dsh>/../dllb)
-#   DLLB_START      command used to start dllb       (default: ./start_dev.sh)
+#   DLLB_START      command used to start dllb       (default: ./start_prod.sh)
 #   DLLB_LOG        dllb log file                   (default: <dllb>/dllb.log)
 #   DLLB_WAIT       seconds to wait for dllb readiness (default 60)
 #
@@ -51,7 +51,7 @@ DLLB_HOST="${DLLB_HOST:-127.0.0.1}"
 DLLB_PORT="${DLLB_PORT:-3009}"
 DLLB_DIR_DEFAULT="$(cd -- "${SCRIPT_DIR}/../dllb" >/dev/null 2>&1 && pwd || echo "${SCRIPT_DIR}/../dllb")"
 DLLB_DIR="${DLLB_DIR:-${DLLB_DIR_DEFAULT}}"
-DLLB_START="${DLLB_START:-./start_dev.sh}"
+DLLB_START="${DLLB_START:-./start_prod.sh}"
 DLLB_LOG="${DLLB_LOG:-${DLLB_DIR}/dllb.log}"
 DLLB_WAIT="${DLLB_WAIT:-60}"
 
