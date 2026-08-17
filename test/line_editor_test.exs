@@ -208,4 +208,18 @@ defmodule DeepSeekHarness.LineEditorTest do
       assert :none = LineEditor.tab_complete("/zzz")
     end
   end
+
+  describe "syntax highlighting and ghost suggestions" do
+    test "highlights slash commands and shell commands" do
+      cfg = %{"enable_syntax_highlighting" => true}
+      assert LineEditor.highlight_input("/model chat", cfg) =~ "model"
+      assert LineEditor.highlight_input("!git status", cfg) =~ "git status"
+    end
+
+    test "computes ghost auto-suggestions from history" do
+      cfg = %{"enable_autosuggestions" => true}
+      history = ["git commit -m 'fix'"]
+      assert LineEditor.get_ghost_suggestion("git com", history, cfg) == "mit -m 'fix'"
+    end
+  end
 end

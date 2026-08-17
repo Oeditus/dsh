@@ -519,6 +519,48 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/config style " <> style, _session_pid, _session_id) do
+    s = String.trim(style)
+    cfg = DeepSeekHarness.Config.load_config()
+    updated = Map.put(cfg, "prompt_style", s)
+    DeepSeekHarness.Config.save_config(updated)
+    IO.puts(Formatter.format_success("Prompt style set to '#{s}'"))
+    :continue
+  end
+
+  def handle_input("/config toggle " <> key, _session_pid, _session_id) do
+    k = String.trim(key)
+    cfg = DeepSeekHarness.Config.load_config()
+    current = Map.get(cfg, k, true)
+    updated = Map.put(cfg, k, not current)
+    DeepSeekHarness.Config.save_config(updated)
+
+    IO.puts(Formatter.format_success("Toggled config setting '#{k}' to #{not current}"))
+
+    :continue
+  end
+
+  def handle_input("/config", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+
+    rows =
+      cfg
+      |> Enum.sort()
+      |> Enum.map_join("\n", fn {k, v} -> "- **`#{k}`**: `#{inspect(v)}`" end)
+
+    md = """
+    ### DSH CLI Configuration & UI Preferences
+    #{rows}
+
+    **Usage:**
+    - `/config style <starship|compact|minimal>` — Switch prompt visual layout
+    - `/config toggle <setting_key>` — Toggle feature on/off (e.g. `enable_autosuggestions`, `enable_context_gauge`, `enable_file_picker`)
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
   def handle_input("/mode " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 

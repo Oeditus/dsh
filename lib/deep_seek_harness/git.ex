@@ -14,6 +14,16 @@ defmodule DeepSeekHarness.Git do
     e -> {:error, "Git not available: #{Exception.message(e)}"}
   end
 
+  @doc "Returns current git branch name or empty string."
+  def current_branch(cwd \\ ".") do
+    case System.cmd("git", ["branch", "--show-current"], cd: cwd, stderr_to_stdout: true) do
+      {branch, 0} -> String.trim(branch)
+      _ -> ""
+    end
+  rescue
+    _ -> ""
+  end
+
   @doc """
   Runs an arbitrary git subcommand with its arguments, returning the raw
   stdout. This is the generic passthrough backing the `/git <subcommand>`

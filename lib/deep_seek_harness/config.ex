@@ -12,7 +12,13 @@ defmodule DeepSeekHarness.Config do
     "sandbox_workspace" => false,
     "temperature" => 0.7,
     "system_prompt_addon" => "",
-    "mcp_servers" => %{}
+    "mcp_servers" => %{},
+    "prompt_style" => "starship",
+    "enable_autosuggestions" => true,
+    "enable_syntax_highlighting" => true,
+    "enable_context_gauge" => true,
+    "enable_file_picker" => true,
+    "enable_code_highlighting" => true
   }
 
   @doc "Loads combined configuration (global + workspace override)."

@@ -125,6 +125,27 @@ defmodule DeepSeekHarness.CLI.Formatter do
 
   def format_markdown(text), do: inspect(text)
 
+  @doc "Formats context window memory usage percentage and token cost gauge bar."
+  def format_context_gauge(total_tokens, max_tokens \\ 128_000, cost_usd \\ 0.0) do
+    pct = min(100, round(total_tokens / max_tokens * 100))
+    bar_width = 16
+    filled = round(pct / 100 * bar_width)
+    empty = bar_width - filled
+
+    bar = String.duplicate("█", filled) <> String.duplicate("░", empty)
+
+    color =
+      cond do
+        pct >= 80 -> red()
+        pct >= 50 -> yellow()
+        true -> green()
+      end
+
+    cost_str = :erlang.float_to_binary(cost_usd, [{:decimals, 4}])
+
+    "#{color}[#{bar}] #{pct}%#{reset()} #{dim()}(#{total_tokens}/#{max_tokens} tokens | $#{cost_str} USD)#{reset()}"
+  end
+
   def format_agent_response(content) do
     rendered = format_markdown(content)
     "#{cyan()}#{bold()}󰚩 DeepSeek >#{reset()}\n#{rendered}"

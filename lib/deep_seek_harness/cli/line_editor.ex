@@ -91,14 +91,65 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   @doc "Formats a configurable prompt string using config template or default."
-  def build_prompt(session_id, model, hands_mode \\ "local") do
-    config = Config.load_config()
-    template = Map.get(config, "prompt_format", "user@{session} [{model}]> ")
+  def build_prompt(session_id, model, hands_mode \\ "local", cwd \\ ".") do
+    config = Config.load_config(cwd)
+    style = Map.get(config, "prompt_style", "starship")
 
-    template
-    |> String.replace("{session}", session_id)
-    |> String.replace("{model}", model)
-    |> String.replace("{mode}", to_string(hands_mode))
+    case style do
+      "starship" ->
+        build_starship_prompt(session_id, model, hands_mode, cwd, config)
+
+      "compact" ->
+        build_compact_prompt(session_id, model, cwd)
+
+      "minimal" ->
+        "#{Formatter.cyan()}❯#{Formatter.reset()} "
+
+      _ ->
+        template = Map.get(config, "prompt_format", "user@{session} [{model}]> ")
+
+        template
+        |> String.replace("{session}", session_id)
+        |> String.replace("{model}", model)
+        |> String.replace("{mode}", to_string(hands_mode))
+    end
+  end
+
+  defp build_starship_prompt(_session_id, model, hands_mode, cwd, config) do
+    folder = Path.basename(Path.expand(cwd))
+    branch = DeepSeekHarness.Git.current_branch(cwd)
+    branch_str = if branch != "", do: "  #{branch}", else: ""
+    sandbox = if Map.get(config, "sandbox_workspace", false), do: " 🔒 sandbox", else: ""
+
+    model_short =
+      case model do
+        "deepseek-chat" -> "🤖 V3"
+        "deepseek-reasoner" -> "🧠 R1"
+        "deepseek-coder" -> "💻 Coder"
+        other -> "🤖 #{other}"
+      end
+
+    mode_badge =
+      case to_string(hands_mode) do
+        "local" -> ""
+        other -> " 🌐 #{other}"
+      end
+
+    line1 =
+      "#{Formatter.cyan()}📁 #{folder}#{Formatter.reset()}" <>
+        "#{Formatter.magenta()}#{branch_str}#{Formatter.reset()}" <>
+        " #{Formatter.green()}#{model_short}#{Formatter.reset()}" <>
+        "#{Formatter.yellow()}#{sandbox}#{mode_badge}#{Formatter.reset()}"
+
+    "#{line1}\n#{Formatter.cyan()}❯#{Formatter.reset()} "
+  end
+
+  defp build_compact_prompt(_session_id, model, cwd) do
+    folder = Path.basename(Path.expand(cwd))
+    branch = DeepSeekHarness.Git.current_branch(cwd)
+    branch_str = if branch != "", do: "  #{branch}", else: ""
+
+    "#{Formatter.cyan()}#{folder}#{Formatter.magenta()}#{branch_str}#{Formatter.reset()} [#{model}] #{Formatter.cyan()}❯#{Formatter.reset()} "
   end
 
   # ---------------------------------------------------------------------
@@ -353,17 +404,18 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       :up -> raw_loop(navigate_unless_searching(state, :up))
       :down -> raw_loop(navigate_unless_searching(state, :down))
       :left -> raw_loop(edit_unless_searching(state, &move_left/1))
-      :right -> raw_loop(edit_unless_searching(state, &move_right/1))
+      :right -> raw_loop(edit_unless_searching(state, &accept_ghost_suggestion/1))
       :home -> raw_loop(edit_unless_searching(state, &move_to_start/1))
-      :end -> raw_loop(edit_unless_searching(state, &move_to_end/1))
+      :end -> raw_loop(edit_unless_searching(state, &accept_ghost_suggestion/1))
       :ctrl_a -> raw_loop(edit_unless_searching(state, &move_to_start/1))
-      :ctrl_e -> raw_loop(edit_unless_searching(state, &move_to_end/1))
+      :ctrl_e -> raw_loop(edit_unless_searching(state, &accept_ghost_suggestion/1))
       :ctrl_u -> raw_loop(edit_unless_searching(state, &kill_to_start/1))
       :ctrl_k -> raw_loop(edit_unless_searching(state, &kill_to_end/1))
       :ctrl_w -> raw_loop(edit_unless_searching(state, &delete_word_backward/1))
       :ctrl_r -> raw_loop(handle_ctrl_r(state))
       :backspace -> raw_loop(handle_backspace(state))
       :delete -> raw_loop(edit_unless_searching(state, &delete_forward/1))
+      {:char, 64} -> raw_loop(file_picker_modal(state))
       {:char, char_code} -> raw_loop(handle_char(state, <<char_code::utf8>>))
       _ -> raw_loop(state)
     end
@@ -513,14 +565,129 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp compute_display(state) do
+    config = Config.load_config()
     prompt_str = Formatter.format_user_prompt_str(state.prompt)
-    text_str = Enum.join(state.buffer)
+    raw_text = Enum.join(state.buffer)
+    highlighted_text = highlight_input(raw_text, config)
+
+    suggestion = get_ghost_suggestion(raw_text, state.history, config)
+
+    ghost_str =
+      if suggestion != "",
+        do: "#{Formatter.gray()}#{suggestion}#{Formatter.reset()}",
+        else: ""
+
     prompt_visible_len = strip_ansi_length(prompt_str)
 
     buffer_prefix_len =
       state.buffer |> Enum.take(state.cursor) |> Enum.join() |> String.length()
 
-    {prompt_str, text_str, prompt_visible_len + buffer_prefix_len}
+    {prompt_str, highlighted_text <> ghost_str, prompt_visible_len + buffer_prefix_len}
+  end
+
+  def accept_ghost_suggestion(%{cursor: cursor, buffer: buffer, history: history} = state) do
+    if cursor == length(buffer) do
+      raw_text = Enum.join(buffer)
+      config = Config.load_config()
+      suggestion = get_ghost_suggestion(raw_text, history, config)
+
+      if suggestion != "" do
+        new_chars = String.graphemes(raw_text <> suggestion)
+        %{state | buffer: new_chars, cursor: length(new_chars)}
+      else
+        move_right(state)
+      end
+    else
+      move_right(state)
+    end
+  end
+
+  def get_ghost_suggestion(buffer_text, history, config) do
+    if Map.get(config, "enable_autosuggestions", true) and buffer_text != "" do
+      match =
+        Enum.find(history, fn line ->
+          String.starts_with?(line, buffer_text) and line != buffer_text
+        end)
+
+      if match do
+        String.slice(match, String.length(buffer_text)..-1)
+      else
+        ""
+      end
+    else
+      ""
+    end
+  end
+
+  def highlight_input(input, config) do
+    if Map.get(config, "enable_syntax_highlighting", true) do
+      cond do
+        String.starts_with?(input, "/") ->
+          parts = String.split(input, " ", parts: 2)
+
+          case parts do
+            [cmd, rest] ->
+              "#{Formatter.cyan()}#{cmd}#{Formatter.reset()} #{rest}"
+
+            [cmd] ->
+              "#{Formatter.cyan()}#{cmd}#{Formatter.reset()}"
+          end
+
+        String.starts_with?(input, "!") ->
+          "#{Formatter.yellow()}#{input}#{Formatter.reset()}"
+
+        true ->
+          input
+      end
+    else
+      input
+    end
+  end
+
+  def file_picker_modal(state) do
+    config = Config.load_config()
+
+    if Map.get(config, "enable_file_picker", true) do
+      files =
+        Path.wildcard("**/*")
+        |> Enum.reject(&String.starts_with?(&1, ".git"))
+        |> Enum.reject(&String.contains?(&1, "/deps/"))
+        |> Enum.reject(&String.contains?(&1, "/_build/"))
+        |> Enum.take(25)
+
+      opts =
+        Enum.map(files, fn f ->
+          icon = if File.dir?(f), do: "📁", else: "📄"
+          "#{icon} #{f}"
+        end)
+
+      if opts == [] do
+        insert_char(state, "@")
+      else
+        ans =
+          DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+            DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
+              "Select file context to attach:",
+              opts,
+              false
+            )
+          end)
+
+        case ans do
+          %{selected: [sel]} ->
+            clean_path = sel |> String.split(" ", parts: 2) |> List.last()
+            inserted = "@" <> clean_path
+            chars = String.graphemes(inserted)
+            {left, right} = Enum.split(state.buffer, state.cursor)
+            %{state | buffer: left ++ chars ++ right, cursor: state.cursor + length(chars)}
+
+          _ ->
+            insert_char(state, "@")
+        end
+      end
+    else
+      insert_char(state, "@")
+    end
   end
 
   defp strip_ansi_length(str) do
