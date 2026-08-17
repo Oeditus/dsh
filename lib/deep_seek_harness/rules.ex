@@ -115,17 +115,21 @@ defmodule DeepSeekHarness.Rules do
     target_id = to_integer(id)
     rules = load_rules(cwd)
 
-    updated =
-      Enum.map(rules, fn r ->
-        if Map.get(r, "id") == target_id do
-          Map.put(r, "enabled", not Map.get(r, "enabled", true))
-        else
-          r
-        end
-      end)
+    if Enum.any?(rules, fn r -> Map.get(r, "id") == target_id end) do
+      updated =
+        Enum.map(rules, fn r ->
+          if Map.get(r, "id") == target_id do
+            Map.put(r, "enabled", not Map.get(r, "enabled", true))
+          else
+            r
+          end
+        end)
 
-    save_rules(updated, cwd)
-    {:ok, updated}
+      save_rules(updated, cwd)
+      {:ok, updated}
+    else
+      {:error, "Rule ##{id} not found."}
+    end
   end
 
   @doc "Builds prompt preamble text for a given command context (e.g. 'cr', 'all', or nil)."

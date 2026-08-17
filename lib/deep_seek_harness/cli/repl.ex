@@ -651,49 +651,6 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
-  defp handle_rules_delete do
-    rules = DeepSeekHarness.Rules.load_rules()
-
-    if Enum.empty?(rules) do
-      IO.puts(Formatter.format_info("No rules available to delete."))
-    else
-      opts =
-        Enum.map(rules, fn r ->
-          "[##{r["id"]}] (#{r["scope"]}): #{r["text"]}"
-        end)
-
-      ans =
-        DeepSeekHarness.CLI.Spinner.with_paused(fn ->
-          DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
-            "Select rules to delete:",
-            opts,
-            true,
-            false
-          )
-        end)
-
-      case ans do
-        %{selected: selected_items} when is_list(selected_items) and selected_items != [] ->
-          ids =
-            Enum.map(selected_items, fn item ->
-              case Regex.run(~r/\[#(\d+)\]/, item) do
-                [_, id_str] -> String.to_integer(id_str)
-                _ -> nil
-              end
-            end)
-            |> Enum.reject(&is_nil/1)
-
-          DeepSeekHarness.Rules.delete_rules(ids)
-          IO.puts(Formatter.format_success("Deleted #{length(ids)} rule(s)."))
-
-        _ ->
-          IO.puts(Formatter.format_info("No rules deleted."))
-      end
-    end
-
-    :continue
-  end
-
   def handle_input("/mode " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 
@@ -1029,6 +986,49 @@ defmodule DeepSeekHarness.CLI.Repl do
 
       {:error, err} ->
         IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  defp handle_rules_delete do
+    rules = DeepSeekHarness.Rules.load_rules()
+
+    if Enum.empty?(rules) do
+      IO.puts(Formatter.format_info("No rules available to delete."))
+    else
+      opts =
+        Enum.map(rules, fn r ->
+          "[##{r["id"]}] (#{r["scope"]}): #{r["text"]}"
+        end)
+
+      ans =
+        DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+          DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
+            "Select rules to delete:",
+            opts,
+            true,
+            false
+          )
+        end)
+
+      case ans do
+        %{selected: selected_items} when is_list(selected_items) and selected_items != [] ->
+          ids =
+            Enum.map(selected_items, fn item ->
+              case Regex.run(~r/\[#(\d+)\]/, item) do
+                [_, id_str] -> String.to_integer(id_str)
+                _ -> nil
+              end
+            end)
+            |> Enum.reject(&is_nil/1)
+
+          DeepSeekHarness.Rules.delete_rules(ids)
+          IO.puts(Formatter.format_success("Deleted #{length(ids)} rule(s)."))
+
+        _ ->
+          IO.puts(Formatter.format_info("No rules deleted."))
+      end
     end
 
     :continue
