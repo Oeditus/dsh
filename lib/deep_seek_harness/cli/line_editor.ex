@@ -28,7 +28,9 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/clipboard",
     "/commit",
     "/compact",
+    "/config",
     "/cost",
+    "/cr",
     "/diff",
     "/exit",
     "/help",
@@ -45,7 +47,8 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/skill",
     "/skills",
     "/subagent",
-    "/undo"
+    "/undo",
+    "/update"
   ]
 
   # ---------------------------------------------------------------------

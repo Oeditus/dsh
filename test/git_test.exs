@@ -6,6 +6,7 @@ defmodule DeepSeekHarness.GitTest do
   test "returns git status and diff" do
     assert {:ok, _status} = Git.status()
     assert {:ok, _diff} = Git.diff()
+    assert {:ok, _diff_head} = Git.diff("HEAD")
   end
 
   test "diff_branches compares HEAD against HEAD" do

@@ -41,8 +41,32 @@ defmodule DeepSeekHarness.Git do
     e -> {:error, "Git command failed: #{Exception.message(e)}"}
   end
 
-  @doc "Returns formatted git diff output."
-  def diff(cwd \\ ".") do
+  @doc "Returns formatted git diff output against working tree or target branch/commit."
+  def diff(target_or_cwd \\ nil, cwd \\ ".")
+
+  def diff(target, cwd) when is_binary(target) and target != "." and not is_nil(target) do
+    target_str = String.trim(target)
+
+    if target_str == "" or target_str == "." do
+      diff(nil, cwd)
+    else
+      case System.cmd("git", ["diff", target_str], cd: cwd, stderr_to_stdout: true) do
+        {out, 0} ->
+          if String.trim(out) == "" do
+            {:ok, "No diff changes against '#{target_str}'."}
+          else
+            {:ok, colorize_diff(out)}
+          end
+
+        {out, code} ->
+          {:error, "git diff #{target_str} exited with status #{code}: #{out}"}
+      end
+    end
+  rescue
+    e -> {:error, "Git diff failed: #{Exception.message(e)}"}
+  end
+
+  def diff(_, cwd) do
     case System.cmd("git", ["diff"], cd: cwd, stderr_to_stdout: true) do
       {out, 0} ->
         if String.trim(out) == "" do

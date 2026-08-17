@@ -128,6 +128,20 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/diff " <> target, _session_pid, _session_id) do
+    t = String.trim(target)
+
+    case Git.diff(t) do
+      {:ok, diff_out} ->
+        IO.puts("\n#{Formatter.bold()}Git Diff (#{t}):#{Formatter.reset()}\n#{diff_out}\n")
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
   def handle_input("/diff", _session_pid, _session_id) do
     case Git.diff() do
       {:ok, diff_out} ->
@@ -138,6 +152,16 @@ defmodule DeepSeekHarness.CLI.Repl do
     end
 
     :continue
+  end
+
+  def handle_input("/cr " <> base, session_pid, session_id) do
+    b = String.trim(base)
+    b = if b == "", do: "main", else: b
+    handle_input("/review #{b} HEAD", session_pid, session_id)
+  end
+
+  def handle_input("/cr", session_pid, session_id) do
+    handle_input("/review main HEAD", session_pid, session_id)
   end
 
   def handle_input("/git " <> args, _session_pid, _session_id) do
