@@ -166,33 +166,28 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   defp do_start_ragex(target_dir, opts) do
     if Code.ensure_loaded?(Ragex.MCP.Handlers.Tools) do
-      DeepSeekHarness.CLI.Spinner.run(
-        fn ->
-          orig_level = Logger.level()
-          Logger.configure(level: :warning)
+      orig_level = Logger.level()
+      Logger.configure(level: :warning)
 
-          try do
-            configure_ragex_store(target_dir)
+      try do
+        configure_ragex_store(target_dir)
+      after
+        Logger.configure(level: orig_level)
+      end
 
-            existing_nodes =
-              if Code.ensure_loaded?(Ragex.Graph.Store) do
-                try do
-                  stats = Ragex.Graph.Store.stats()
-                  Map.get(stats, :nodes, 0) + Map.get(stats, :total, 0)
-                rescue
-                  _ -> 0
-                catch
-                  _, _ -> 0
-                end
-              else
-                0
-              end
+      existing_nodes = count_existing_nodes()
 
-            if existing_nodes > 0 do
-              Logger.configure(level: orig_level)
+      if existing_nodes > 0 do
+        Logger.info(
+          "⚡🔌 Ragex Knowledge Graph loaded from store (#{existing_nodes} nodes ready)."
+        )
+      else
+        DeepSeekHarness.CLI.Spinner.run(
+          fn ->
+            orig_level = Logger.level()
+            Logger.configure(level: :warning)
 
-              Logger.info("⚡🔌 Ragex Knowledge Graph loaded from store (#{existing_nodes} nodes).")
-            else
+            try do
               case Ragex.Analyzers.Directory.analyze_directory(target_dir) do
                 {:ok, stats} ->
                   Logger.configure(level: orig_level)
@@ -205,14 +200,14 @@ defmodule DeepSeekHarness.MCP.ServerManager do
                   Logger.configure(level: orig_level)
                   Logger.warning("⚡🔌 Ragex indexing notice: #{inspect(reason)}")
               end
+            after
+              Logger.configure(level: orig_level)
             end
-          after
-            Logger.configure(level: orig_level)
-          end
-        end,
-        title: "Initializing Ragex Knowledge Graph...",
-        tip: false
-      )
+          end,
+          title: "Indexing Ragex Knowledge Graph...",
+          tip: false
+        )
+      end
 
       raw_tools = Ragex.MCP.Handlers.Tools.list_tools()
       tools_list = Map.get(raw_tools, :tools, [])
@@ -407,6 +402,30 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       {:ok, found}
     else
       {:error, "Ragex directory not found in candidate paths: #{inspect(candidates)}"}
+    end
+  end
+
+  defp count_existing_nodes do
+    if Code.ensure_loaded?(Ragex.Graph.Store) do
+      try do
+        stats = Ragex.Graph.Store.stats()
+
+        nodes =
+          Map.get(stats, :nodes) || Map.get(stats, "nodes") || Map.get(stats, :total_nodes) ||
+            Map.get(stats, :total) || 0
+
+        if is_integer(nodes) and nodes > 0 do
+          nodes
+        else
+          0
+        end
+      rescue
+        _ -> 0
+      catch
+        _, _ -> 0
+      end
+    else
+      0
     end
   end
 
