@@ -27,4 +27,21 @@ defmodule DeepSeekHarness.ConfigTest do
 
     File.rm_rf!(tmp_dir)
   end
+
+  test "sets per-tool permission policy in config" do
+    tmp_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "config_perm_test_#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(tmp_dir)
+
+    assert :ok = Config.set_tool_permission("read_file", "allow", tmp_dir)
+
+    loaded = Config.load_config(tmp_dir)
+    assert loaded["tool_permissions"]["read_file"] == "allow"
+
+    File.rm_rf!(tmp_dir)
+  end
 end

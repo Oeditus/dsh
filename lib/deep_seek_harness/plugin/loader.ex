@@ -35,6 +35,11 @@ defmodule DeepSeekHarness.Plugin.Loader do
     GenServer.call(@name, {:register_plugins, plugin_modules})
   end
 
+  @doc "Unregisters multiple plugin modules or tool names and updates active sessions."
+  def unregister_plugins(names_or_mods) when is_list(names_or_mods) do
+    GenServer.call(@name, {:unregister_plugins, names_or_mods})
+  end
+
   @doc "Loads and compiles an Elixir plugin source file (.ex or .exs)."
   def load_file(path) do
     GenServer.call(@name, {:load_file, path})
@@ -100,6 +105,27 @@ defmodule DeepSeekHarness.Plugin.Loader do
     notify_sessions_of_reload(new_state.tools_map)
     names = Enum.map(plugin_modules, &apply_name/1)
     {:reply, {:ok, names}, new_state}
+  end
+
+  @impl true
+  def handle_call({:unregister_plugins, names_or_mods}, _from, state) do
+    name_set = MapSet.new(Enum.map(names_or_mods, &to_string/1))
+
+    new_plugins =
+      Enum.reject(state.plugins, fn mod ->
+        to_string(mod) in name_set or
+          (function_exported?(mod, :name, 0) and mod.name() in name_set)
+      end)
+
+    new_tools_map =
+      Enum.reject(state.tools_map, fn {t_name, _info} ->
+        t_name in name_set
+      end)
+      |> Enum.into(%{})
+
+    new_state = %{state | plugins: new_plugins, tools_map: new_tools_map}
+    notify_sessions_of_reload(new_state.tools_map)
+    {:reply, :ok, new_state}
   end
 
   @impl true

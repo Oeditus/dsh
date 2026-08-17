@@ -18,4 +18,9 @@ defmodule DeepSeekHarness.MCPServerManagerTest do
     assert {:ok, results} = MCPServerManager.load_from_config()
     assert is_list(results) or is_map(results)
   end
+
+  test "handles removing connected MCP server gracefully" do
+    assert {:error, msg} = MCPServerManager.remove_server("non_existent_server")
+    assert msg =~ "not connected"
+  end
 end

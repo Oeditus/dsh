@@ -77,4 +77,27 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert {:ok, response} = Session.get_latest_response(pid)
     assert is_binary(response)
   end
+
+  test "toggles sandbox bounds, retrieves stats dashboard, turn tokens, and exports session", %{
+    pid: pid
+  } do
+    assert {:ok, true} = Session.set_sandbox_mode(pid, true)
+    stats = Session.get_stats(pid)
+    assert stats.sandbox_workspace == true
+    assert is_map(stats)
+
+    turns = Session.get_turn_tokens(pid)
+    assert is_list(turns)
+
+    assert {:ok, md_path} = Session.export_session(pid, :markdown)
+    assert File.exists?(md_path)
+    assert String.ends_with?(md_path, ".md")
+
+    assert {:ok, json_path} = Session.export_session(pid, :json)
+    assert File.exists?(json_path)
+    assert String.ends_with?(json_path, ".json")
+
+    File.rm(md_path)
+    File.rm(json_path)
+  end
 end

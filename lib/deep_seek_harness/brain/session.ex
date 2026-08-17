@@ -96,6 +96,26 @@ defmodule DeepSeekHarness.Brain.Session do
     GenServer.call(pid, :get_latest_response, :infinity)
   end
 
+  @doc "Toggles workspace sandbox bounds mode."
+  def set_sandbox_mode(pid, enabled) do
+    GenServer.call(pid, {:set_sandbox_mode, enabled}, :infinity)
+  end
+
+  @doc "Returns comprehensive session analytics and statistics dashboard metrics."
+  def get_stats(pid) do
+    GenServer.call(pid, :get_stats, :infinity)
+  end
+
+  @doc "Returns per-turn token usage breakdown."
+  def get_turn_tokens(pid) do
+    GenServer.call(pid, :get_turn_tokens, :infinity)
+  end
+
+  @doc "Exports session conversation history into JSON or Markdown file."
+  def export_session(pid, format \\ :markdown) do
+    GenServer.call(pid, {:export_session, format}, :infinity)
+  end
+
   # Server Callbacks
 
   @impl true
@@ -123,6 +143,7 @@ defmodule DeepSeekHarness.Brain.Session do
       session_id: session_id,
       model: opts[:model] || System.get_env("DEEPSEEK_MODEL") || "deepseek-chat",
       permission_mode: opts[:permission_mode] || :ask_confirm,
+      sandbox_workspace: opts[:sandbox_workspace] || false,
       session_tool_permissions: %{},
       api_key: opts[:api_key] || System.get_env("DEEPSEEK_API_KEY"),
       hands: %HandsExecutor{mode: :local},
@@ -134,6 +155,7 @@ defmodule DeepSeekHarness.Brain.Session do
       max_tool_depth: opts[:max_tool_depth] || 50,
       total_prompt_tokens: 0,
       total_completion_tokens: 0,
+      turn_history: [],
       cwd: opts[:cwd] || ".",
       status: :idle
     }
@@ -159,7 +181,8 @@ defmodule DeepSeekHarness.Brain.Session do
   @impl true
   def handle_call({:send_user_message, raw_text}, _from, state) do
     # Expand @filename, @relative_path, @file://..., @https://... references
-    {:ok, expanded_text, _attachments} = ContextExpander.expand(raw_text, state.cwd)
+    {:ok, expanded_text, _attachments} =
+      ContextExpander.expand(raw_text, state.cwd, sandbox_workspace: state.sandbox_workspace)
 
     user_msg = %{"role" => "user", "content" => expanded_text}
     state = %{state | messages: state.messages ++ [user_msg], status: :thinking}
@@ -396,6 +419,98 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   @impl true
+  def handle_call({:set_sandbox_mode, enabled}, _from, state) do
+    new_state = %{state | sandbox_workspace: enabled}
+    {:reply, {:ok, enabled}, new_state}
+  end
+
+  @impl true
+  def handle_call(:get_turn_tokens, _from, state) do
+    {:reply, state.turn_history, state}
+  end
+
+  @impl true
+  def handle_call(:get_stats, _from, state) do
+    prompt_tokens = state.total_prompt_tokens
+    completion_tokens = state.total_completion_tokens
+    total = prompt_tokens + completion_tokens
+
+    cost_prompt = prompt_tokens * 0.00000014
+    cost_completion = completion_tokens * 0.00000028
+    total_cost = cost_prompt + cost_completion
+
+    mcp_servers = DeepSeekHarness.MCP.ServerManager.list_servers()
+
+    stats = %{
+      session_id: state.session_id,
+      model: state.model,
+      permission_mode: state.permission_mode,
+      sandbox_workspace: state.sandbox_workspace,
+      message_count: length(state.messages),
+      snapshot_count: length(state.snapshots),
+      hands_mode: state.hands.mode,
+      step_count: state.step_count,
+      tracked_prompt_tokens: prompt_tokens,
+      tracked_completion_tokens: completion_tokens,
+      total_tokens: total,
+      estimated_cost_usd: Float.round(total_cost, 6),
+      tools_count: length(state.tools),
+      mcp_servers_count: map_size(mcp_servers),
+      turns_count: length(state.turn_history)
+    }
+
+    {:reply, stats, state}
+  end
+
+  @impl true
+  def handle_call({:export_session, format}, _from, state) do
+    export_dir = Path.join(state.cwd, ".dsh/exports")
+    File.mkdir_p!(export_dir)
+
+    timestamp = DateTime.utc_now() |> Calendar.strftime("%Y%m%d_%H%M%S")
+    ext = if format in [:json, "json"], do: "json", else: "md"
+    filename = "session_#{state.session_id}_#{timestamp}.#{ext}"
+    export_path = Path.join(export_dir, filename)
+
+    content =
+      if ext == "json" do
+        Jason.encode!(
+          %{
+            "session_id" => state.session_id,
+            "model" => state.model,
+            "exported_at" => DateTime.to_iso8601(DateTime.utc_now()),
+            "total_tokens" => state.total_prompt_tokens + state.total_completion_tokens,
+            "messages" => state.messages
+          },
+          pretty: true
+        )
+      else
+        formatted_messages =
+          Enum.map_join(state.messages, "\n\n", fn m ->
+            role = String.upcase(m["role"] || "unknown")
+            text = m["content"] || ""
+            "### #{role}\n#{text}"
+          end)
+
+        """
+        # Session Export: #{state.session_id}
+        - **Model**: `#{state.model}`
+        - **Exported At**: `#{DateTime.to_iso8601(DateTime.utc_now())}`
+        - **Total Tokens**: `#{state.total_prompt_tokens + state.total_completion_tokens}`
+
+        ---
+
+        #{formatted_messages}
+        """
+      end
+
+    case File.write(export_path, content) do
+      :ok -> {:reply, {:ok, export_path}, state}
+      {:error, err} -> {:reply, {:error, "Failed to write export file: #{inspect(err)}"}, state}
+    end
+  end
+
+  @impl true
   def handle_info({:hot_reload_tools, new_tools}, state) do
     Logger.debug(
       "[Brain.Session] Hot-reloaded tools dynamically without dropping conversation state! (Tools: #{length(new_tools)})"
@@ -527,10 +642,18 @@ defmodule DeepSeekHarness.Brain.Session do
     p = Map.get(usage, :prompt_tokens, 0)
     c = Map.get(usage, :completion_tokens, 0)
 
+    turn_entry = %{
+      turn: length(state.turn_history) + 1,
+      prompt_tokens: p,
+      completion_tokens: c,
+      total_tokens: p + c
+    }
+
     %{
       state
       | total_prompt_tokens: state.total_prompt_tokens + p,
-        total_completion_tokens: state.total_completion_tokens + c
+        total_completion_tokens: state.total_completion_tokens + c,
+        turn_history: state.turn_history ++ [turn_entry]
     }
   end
 
@@ -584,7 +707,14 @@ defmodule DeepSeekHarness.Brain.Session do
 
     policy = session_policy || config_policy
 
+    target_file = args["path"] || args["TargetFile"] || args["AbsolutePath"] || args["file"]
+
     cond do
+      state.sandbox_workspace and is_binary(target_file) and
+          not in_workspace?(target_file, state.cwd) ->
+        {:deny, "Access denied: file path '#{target_file}' is outside active sandbox bounds.",
+         state}
+
       policy == "deny" ->
         {:deny, "Tool '#{tool_name}' execution denied by configuration policy.", state}
 
@@ -605,6 +735,12 @@ defmodule DeepSeekHarness.Brain.Session do
       true ->
         {:allow, state}
     end
+  end
+
+  defp in_workspace?(path, cwd) do
+    abs_path = Path.expand(path, cwd)
+    abs_cwd = Path.expand(cwd)
+    String.starts_with?(abs_path, abs_cwd)
   end
 
   defp destructive_bash_command?("bash", %{"command" => cmd}) when is_binary(cmd) do

@@ -4,6 +4,7 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
   Handles message serialization, tool declarations, reasoning extraction (R1),
   real token usage tracking, SSE response streaming, and mock execution mode.
   """
+  require Logger
 
   @default_endpoint "https://api.deepseek.com/chat/completions"
   @default_model "deepseek-chat"
@@ -72,13 +73,34 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
       receive_timeout: :infinity
     ]
 
-    case Req.post(config.endpoint, req_opts) do
+    post_with_retry(config.endpoint, req_opts)
+  end
+
+  defp post_with_retry(endpoint, req_opts, attempts_left \\ 3, backoff_ms \\ 500) do
+    case Req.post(endpoint, req_opts) do
       {:ok, %Req.Response{status: 200, body: %{"choices" => [choice | _]} = resp_body}} ->
         usage = Map.get(resp_body, "usage", %{})
         parse_choice(choice, usage)
 
+      {:ok, %Req.Response{status: status, body: _err_body}}
+      when status in [429, 500, 502, 503, 504] and attempts_left > 1 ->
+        Logger.warning(
+          "[DeepSeekAPI] Transient HTTP #{status} error. Retrying in #{backoff_ms}ms... (#{attempts_left - 1} attempts left)"
+        )
+
+        Process.sleep(backoff_ms)
+        post_with_retry(endpoint, req_opts, attempts_left - 1, backoff_ms * 2)
+
       {:ok, %Req.Response{status: status, body: err_body}} ->
         {:error, "DeepSeek API returned HTTP status #{status}: #{inspect(err_body)}"}
+
+      {:error, reason} when attempts_left > 1 ->
+        Logger.warning(
+          "[DeepSeekAPI] Transport error #{inspect(reason)}. Retrying in #{backoff_ms}ms... (#{attempts_left - 1} attempts left)"
+        )
+
+        Process.sleep(backoff_ms)
+        post_with_retry(endpoint, req_opts, attempts_left - 1, backoff_ms * 2)
 
       {:error, reason} ->
         {:error, "HTTP request failed: #{inspect(reason)}"}

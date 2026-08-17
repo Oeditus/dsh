@@ -77,4 +77,11 @@ defmodule DeepSeekHarness.ContextExpanderTest do
     assert String.contains?(expanded, "@/tmp/non_existent_file_xyz_123.txt")
     assert attachments == []
   end
+
+  test "resolves URL references (@https://...)" do
+    assert {:ok, _content, label} =
+             ContextExpander.resolve_reference("https://example.com", ".", [])
+
+    assert label == "https://example.com"
+  end
 end

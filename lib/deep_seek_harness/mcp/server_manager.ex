@@ -50,6 +50,11 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     GenServer.call(@name, {:load_from_config, cwd}, :infinity)
   end
 
+  @doc "Removes a connected MCP server and unregisters its tools."
+  def remove_server(name) do
+    GenServer.call(@name, {:remove_server, name}, :infinity)
+  end
+
   @doc """
   Gracefully shuts down the Ragex MCP server, including stopping any
   per-project `dllb-server` OS process it spawned.
@@ -153,6 +158,27 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:remove_server, name}, _from, state) do
+    case Map.fetch(state.servers, name) do
+      {:ok, server_info} ->
+        tools = server_info[:tools] || []
+        PluginLoader.unregister_plugins(tools)
+
+        if pid = server_info[:pid] do
+          Process.exit(pid, :shutdown)
+        end
+
+        new_servers = Map.delete(state.servers, name)
+
+        {:reply, {:ok, "MCP server '#{name}' removed successfully."},
+         %{state | servers: new_servers}}
+
+      :error ->
+        {:reply, {:error, "MCP server '#{name}' is not connected."}, state}
     end
   end
 
@@ -534,16 +560,16 @@ defmodule DeepSeekHarness.MCP.ServerManager do
                 input_schema =
                   Map.get(t, "inputSchema", %{"type" => "object", "properties" => %{}})
 
-                dynamic_mod_name =
-                  build_mcp_client_tool_module(
-                    name,
-                    tool_name,
-                    t["name"],
-                    desc,
-                    input_schema,
-                    client_pid
-                  )
+                spec = %{
+                  server_name: name,
+                  tool_name: tool_name,
+                  mcp_tool_name: t["name"],
+                  desc: desc,
+                  input_schema: input_schema,
+                  client_pid: client_pid
+                }
 
+                dynamic_mod_name = build_mcp_client_tool_module(spec)
                 {tool_name, dynamic_mod_name}
               end)
 
@@ -577,10 +603,19 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   @doc "Executes an external stdio MCP tool by target name with args."
   def execute_mcp_client_tool(client_pid, mcp_tool_name, arguments) do
-    case MCPClient.call_mcp_tool(client_pid, mcp_tool_name, arguments) do
-      {:ok, %{"content" => content}} -> {:ok, format_mcp_content(content)}
-      {:ok, res} -> {:ok, inspect(res, pretty: true)}
-      {:error, err} -> {:error, "MCP tool error: #{inspect(err)}"}
+    if Process.alive?(client_pid) do
+      try do
+        case MCPClient.call_mcp_tool(client_pid, mcp_tool_name, arguments) do
+          {:ok, %{"content" => content}} -> {:ok, format_mcp_content(content)}
+          {:ok, res} -> {:ok, inspect(res, pretty: true)}
+          {:error, err} -> {:error, "MCP tool error: #{inspect(err)}"}
+        end
+      catch
+        kind, reason ->
+          {:error, "MCP client process failure (#{kind}): #{inspect(reason)}"}
+      end
+    else
+      {:error, "MCP client process for '#{mcp_tool_name}' is no longer running."}
     end
   end
 
@@ -593,14 +628,14 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     build_dynamic_tool_module(tool_name, "ragex", t_desc, input_schema, exec_ast)
   end
 
-  defp build_mcp_client_tool_module(
-         server_name,
-         tool_name,
-         mcp_tool_name,
-         desc,
-         input_schema,
-         client_pid
-       ) do
+  defp build_mcp_client_tool_module(%{
+         server_name: server_name,
+         tool_name: tool_name,
+         mcp_tool_name: mcp_tool_name,
+         desc: desc,
+         input_schema: input_schema,
+         client_pid: client_pid
+       }) do
     exec_ast =
       quote do
         DeepSeekHarness.MCP.ServerManager.execute_mcp_client_tool(

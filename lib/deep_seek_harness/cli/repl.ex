@@ -206,6 +206,100 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/stats", session_pid, _session_id) do
+    stats = Session.get_stats(session_pid)
+
+    md = """
+    ### Session Analytics & Statistics Dashboard
+    - **Session ID**: `#{stats.session_id}`
+    - **Model**: `#{stats.model}`
+    - **Permission Safety**: `#{stats.permission_mode}`
+    - **Sandbox Bounds**: `#{if stats.sandbox_workspace, do: "enabled", else: "disabled"}`
+    - **Messages Count**: `#{stats.message_count}`
+    - **Snapshots**: `#{stats.snapshot_count}`
+    - **Execution Mode**: `#{stats.hands_mode}`
+    - **Total Prompt Tokens**: `#{stats.tracked_prompt_tokens}`
+    - **Total Completion Tokens**: `#{stats.tracked_completion_tokens}`
+    - **Total Tokens**: `#{stats.total_tokens}`
+    - **Estimated Cost (USD)**: `$#{:erlang.float_to_binary(stats.estimated_cost_usd, [{:decimals, 6}])}`
+    - **Registered Tools**: `#{stats.tools_count}`
+    - **Connected MCP Servers**: `#{stats.mcp_servers_count}`
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/tokens", session_pid, _session_id) do
+    turns = Session.get_turn_tokens(session_pid)
+    stats = Session.get_token_stats(session_pid)
+
+    rows =
+      if Enum.empty?(turns) do
+        "| Turn #1 | 0 | 0 | 0 |"
+      else
+        Enum.map_join(turns, "\n", fn t ->
+          "| Turn ##{t.turn} | #{t.prompt_tokens} | #{t.completion_tokens} | #{t.total_tokens} |"
+        end)
+      end
+
+    md = """
+    ### Per-Turn Token Breakdown
+    | Turn | Prompt Tokens | Completion Tokens | Total Tokens |
+    |---|---|---|---|
+    #{rows}
+
+    **Session Cumulative Total**: `#{stats.total_tokens}` tokens (`$#{:erlang.float_to_binary(stats.estimated_cost_usd, [{:decimals, 6}])}`)
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/sandbox " <> mode, session_pid, _session_id) do
+    enabled =
+      case String.trim(mode) do
+        "on" -> true
+        "true" -> true
+        "enable" -> true
+        _ -> false
+      end
+
+    {:ok, val} = Session.set_sandbox_mode(session_pid, enabled)
+
+    status_str =
+      if val, do: "ENABLED (file refs & tools restricted to workspace)", else: "DISABLED"
+
+    IO.puts(Formatter.format_success("Workspace sandbox bounds set to: #{status_str}"))
+    :continue
+  end
+
+  def handle_input("/sandbox", session_pid, session_id) do
+    handle_input("/sandbox on", session_pid, session_id)
+  end
+
+  def handle_input("/export " <> format, session_pid, _session_id) do
+    fmt =
+      case String.trim(format) do
+        "json" -> :json
+        _ -> :markdown
+      end
+
+    case Session.export_session(session_pid, fmt) do
+      {:ok, path} ->
+        IO.puts(Formatter.format_success("Session history successfully exported to: #{path}"))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/export", session_pid, session_id) do
+    handle_input("/export markdown", session_pid, session_id)
+  end
+
   def handle_input("/permissions " <> mode, session_pid, _session_id) do
     perm =
       case String.trim(mode) do

@@ -7,36 +7,34 @@ defmodule DeepSeekHarness.Skill.Manager do
 
   @doc "Discovers all skills available in local workspace (.dsh/skills/*) and global user home (~/.dsh/skills/*)."
   def discover_skills(cwd \\ ".") do
-    search_paths = [
+    [
       Path.join(cwd, ".dsh/skills"),
       Path.join(cwd, ".gemini/antigravity-cli/builtin/skills"),
       Path.expand("~/.dsh/skills")
     ]
-
-    search_paths
     |> Enum.filter(&File.dir?/1)
-    |> Enum.flat_map(fn base_dir ->
-      case File.ls(base_dir) do
-        {:ok, entries} ->
-          Enum.flat_map(entries, fn entry ->
-            skill_dir = Path.join(base_dir, entry)
-            skill_md = Path.join(skill_dir, "SKILL.md")
-
-            if File.exists?(skill_md) do
-              case parse_skill_file(skill_md, entry) do
-                {:ok, skill} -> [skill]
-                _ -> []
-              end
-            else
-              []
-            end
-          end)
-
-        _ ->
-          []
-      end
-    end)
+    |> Enum.flat_map(&discover_skills_in_dir/1)
     |> Enum.uniq_by(& &1.name)
+  end
+
+  defp discover_skills_in_dir(base_dir) do
+    case File.ls(base_dir) do
+      {:ok, entries} -> Enum.flat_map(entries, &load_skill_entry(base_dir, &1))
+      _ -> []
+    end
+  end
+
+  defp load_skill_entry(base_dir, entry) do
+    skill_md = Path.join([base_dir, entry, "SKILL.md"])
+
+    if File.exists?(skill_md) do
+      case parse_skill_file(skill_md, entry) do
+        {:ok, skill} -> [skill]
+        _ -> []
+      end
+    else
+      []
+    end
   end
 
   @doc "Parses a single SKILL.md file and extracts name, description, and markdown body."
