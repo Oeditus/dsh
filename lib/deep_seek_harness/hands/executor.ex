@@ -143,8 +143,8 @@ defmodule DeepSeekHarness.Hands.Executor do
   def format_tool_call(tool_name, args) when is_map(args) do
     formatted_args =
       Enum.map_join(args, ", ", fn
-        {k, v} when is_binary(k) -> "#{k}: #{format_arg_val(v)}"
-        {k, v} -> "#{inspect(k)}: #{format_arg_val(v)}"
+        {k, v} when is_binary(k) -> "#{k}: #{format_arg_val(k, v)}"
+        {k, v} -> "#{inspect(k)}: #{format_arg_val(to_string(k), v)}"
       end)
 
     "#{tool_name}(#{formatted_args})"
@@ -154,16 +154,45 @@ defmodule DeepSeekHarness.Hands.Executor do
     "#{tool_name}(#{inspect(args)})"
   end
 
-  defp format_arg_val(val) when is_binary(val) do
-    if String.contains?(val, "\n") or String.length(val) > 80 do
-      trimmed = val |> String.slice(0, 60) |> String.replace("\n", "\\n")
-      inspect(trimmed <> "…")
+  defp format_arg_val(key, val) do
+    inspected = inspect(val)
+
+    if key in [
+         "changes",
+         "content",
+         "replacement",
+         "code",
+         "TargetContent",
+         "ReplacementContent",
+         "CodeContent"
+       ] or
+         String.contains?(inspected, "\n") or byte_size(inspected) > 60 do
+      make_payload_link(key, val)
     else
-      inspect(val)
+      inspected
     end
   end
 
-  defp format_arg_val(val), do: inspect(val)
+  defp make_payload_link(key, val) do
+    dir = Path.expand(".dsh/payloads")
+    File.mkdir_p!(dir)
+    timestamp = DateTime.utc_now() |> Calendar.strftime("%Y%m%d_%H%M%S_%f")
+    filename = "payload_#{key}_#{timestamp}.txt"
+    abs_path = Path.join(dir, filename)
+
+    content =
+      case val do
+        s when is_binary(s) -> s
+        other -> inspect(other, pretty: true)
+      end
+
+    File.write!(abs_path, content)
+
+    # OSC 8 Terminal Hyperlink format: \e]8;;file:///path\e\…\e]8;;\e\
+    "\e]8;;file://#{abs_path}\e\\…\e]8;;\e\\"
+  rescue
+    _ -> "…"
+  end
 
   defp format_output(output) when is_binary(output), do: output
   defp format_output(output), do: inspect(output, pretty: true)
