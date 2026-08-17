@@ -38,6 +38,16 @@ jobs:
   linters:
     name: Static Analysis
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        elixir: ['1.20']
+        otp: ['27', '28']
+    steps:
+      - uses: actions/checkout@v3
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{matrix.elixir}}
+          otp-version: ${{matrix.otp}}
       - name: Run tests
         run: mix test
 
