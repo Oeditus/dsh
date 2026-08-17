@@ -15,7 +15,13 @@ config :ragex,
   dllb_mode: :global,
   start_stdio_server: false
 
+# Configure EXLA to disable log sink when NIF is uncompiled/unavailable
+config :exla, start_log_sink: false
+config :nx, :default_backend, Nx.BinaryBackend
+
 if config_env() == :test do
   config :deep_seek_harness, auto_start_ragex: false
   config :dllb, enabled: false
+  config :nx, :default_backend, Nx.BinaryBackend
+  config :exla, start_log_sink: false
 end
