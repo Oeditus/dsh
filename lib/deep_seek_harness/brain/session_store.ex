@@ -34,6 +34,46 @@ defmodule DeepSeekHarness.Brain.SessionStore do
     end
   end
 
+  @doc "Appends a full untruncated step log to local transcript files (.dsh/sessions/<id>/transcript_full.jsonl and transcript_compact.jsonl)."
+  def append_transcript(session_id, step_type, payload, cwd \\ ".") do
+    dir = Path.join(session_dir(cwd), session_id)
+    File.mkdir_p!(dir)
+
+    entry = %{
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "type" => to_string(step_type),
+      "payload" => payload
+    }
+
+    full_path = Path.join(dir, "transcript_full.jsonl")
+    line = Jason.encode!(entry) <> "\n"
+    File.write!(full_path, line, [:append])
+
+    compact_path = Path.join(dir, "transcript_compact.jsonl")
+    compact_line = Jason.encode!(%{entry | "payload" => compact_payload(payload)}) <> "\n"
+    File.write!(compact_path, compact_line, [:append])
+  rescue
+    _ -> :ok
+  end
+
+  defp compact_payload(payload) when is_binary(payload) do
+    if byte_size(payload) > 500 do
+      String.slice(payload, 0, 500) <> "... [truncated]"
+    else
+      payload
+    end
+  end
+
+  defp compact_payload(map) when is_map(map) do
+    Enum.into(map, %{}, fn {k, v} -> {k, compact_payload(v)} end)
+  end
+
+  defp compact_payload(list) when is_list(list) do
+    Enum.map(list, &compact_payload/1)
+  end
+
+  defp compact_payload(val), do: val
+
   @doc "Loads a persisted session from disk."
   def load_session(session_id, cwd \\ ".") do
     file_path = Path.join(session_dir(cwd), "#{session_id}.json")

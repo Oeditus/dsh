@@ -84,4 +84,30 @@ defmodule DeepSeekHarness.ContextExpanderTest do
 
     assert label == "https://example.com"
   end
+
+  test "expands ambiguous error reference ('error above') with resolution status" do
+    messages = [
+      %{"role" => "tool", "content" => "Tool execution failed: syntax_error in mix.exs"}
+    ]
+
+    tracker = [
+      %{
+        id: 1,
+        turn: 2,
+        error: "mix.exs syntax_error",
+        status: :resolved,
+        resolved_at: 3,
+        resolution: "Resolved via successful replace_file execution"
+      }
+    ]
+
+    opts = [session_messages: messages, issue_tracker: tracker]
+
+    assert {:ok, expanded, attachments} =
+             ContextExpander.expand("Why did the error above happen?", ".", opts)
+
+    assert String.contains?(expanded, "RESOLVED in Turn 3")
+    assert String.contains?(expanded, "syntax_error")
+    assert "error_context" in attachments
+  end
 end

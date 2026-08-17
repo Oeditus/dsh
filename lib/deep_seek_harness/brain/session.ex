@@ -180,9 +180,16 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @impl true
   def handle_call({:send_user_message, raw_text}, _from, state) do
-    # Expand @filename, @relative_path, @file://..., @https://... references
-    {:ok, expanded_text, _attachments} =
-      ContextExpander.expand(raw_text, state.cwd, sandbox_workspace: state.sandbox_workspace)
+    # Expand @filename, @relative_path, @file://..., @https://... and ambiguous error references ("error above")
+    opts = [
+      sandbox_workspace: state.sandbox_workspace,
+      session_messages: state.messages,
+      issue_tracker: Map.get(state, :issue_tracker, [])
+    ]
+
+    {:ok, expanded_text, _attachments} = ContextExpander.expand(raw_text, state.cwd, opts)
+
+    SessionStore.append_transcript(state.session_id, "USER_INPUT", expanded_text, state.cwd)
 
     user_msg = %{"role" => "user", "content" => expanded_text}
     state = %{state | messages: state.messages ++ [user_msg], status: :thinking}
@@ -700,6 +707,13 @@ defmodule DeepSeekHarness.Brain.Session do
   defp execute_tool_calls(tool_calls, state) do
     {tool_messages, system_notices, final_state} =
       Enum.reduce(tool_calls, {[], [], state}, fn tc, {msg_acc, notice_acc, current_state} ->
+        SessionStore.append_transcript(
+          current_state.session_id,
+          "TOOL_CALL",
+          %{name: tc.name, args: tc.arguments},
+          current_state.cwd
+        )
+
         case tool_permitted?(tc.name, tc.arguments, current_state) do
           {:allow, updated_state} ->
             exec_res = HandsExecutor.execute(updated_state.hands, tc.name, tc.arguments)
@@ -717,12 +731,21 @@ defmodule DeepSeekHarness.Brain.Session do
                   }
               end
 
+            SessionStore.append_transcript(
+              updated_state.session_id,
+              "TOOL_RESULT",
+              tool_msg,
+              updated_state.cwd
+            )
+
             {updated_state_after, maybe_notice} =
               AgentLoop.handle_tool_failure(tc.name, exec_res, updated_state)
 
+            state_with_issues = update_issue_tracker(updated_state_after, tc, exec_res)
+
             new_notices = if maybe_notice, do: notice_acc ++ [maybe_notice], else: notice_acc
 
-            {msg_acc ++ [tool_msg], new_notices, updated_state_after}
+            {msg_acc ++ [tool_msg], new_notices, state_with_issues}
 
           {:deny, reason, updated_state} ->
             tool_msg = %{
@@ -731,12 +754,57 @@ defmodule DeepSeekHarness.Brain.Session do
               "content" => "Tool execution denied: #{reason}"
             }
 
+            SessionStore.append_transcript(
+              updated_state.session_id,
+              "TOOL_DENIED",
+              tool_msg,
+              updated_state.cwd
+            )
+
             {msg_acc ++ [tool_msg], notice_acc, updated_state}
         end
       end)
 
     all_messages = tool_messages ++ system_notices
     {all_messages, final_state}
+  end
+
+  defp update_issue_tracker(state, tc, exec_res) do
+    current_tracker = Map.get(state, :issue_tracker, [])
+
+    case exec_res do
+      {:error, err} ->
+        new_issue = %{
+          id: length(current_tracker) + 1,
+          turn: state.step_count + 1,
+          error: "#{tc.name}: #{err}",
+          status: :open,
+          resolved_at: nil,
+          resolution: nil
+        }
+
+        Map.put(state, :issue_tracker, current_tracker ++ [new_issue])
+
+      {:ok, _result} ->
+        target_file = tc.arguments["path"] || tc.arguments["TargetFile"] || ""
+
+        updated_tracker =
+          Enum.map(current_tracker, fn issue ->
+            if issue.status == :open and
+                 (target_file == "" or String.contains?(issue.error, target_file)) do
+              %{
+                issue
+                | status: :resolved,
+                  resolved_at: state.step_count + 1,
+                  resolution: "Resolved via successful #{tc.name} execution"
+              }
+            else
+              issue
+            end
+          end)
+
+        Map.put(state, :issue_tracker, updated_tracker)
+    end
   end
 
   # Permission Authorization Gate (Item 1, 4, 18)
