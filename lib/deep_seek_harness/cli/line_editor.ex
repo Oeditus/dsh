@@ -650,9 +650,11 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     if Map.get(config, "enable_file_picker", true) do
       files =
         Path.wildcard("**/*")
-        |> Enum.reject(&String.starts_with?(&1, ".git"))
-        |> Enum.reject(&String.contains?(&1, "/deps/"))
-        |> Enum.reject(&String.contains?(&1, "/_build/"))
+        |> Enum.reject(fn path ->
+          String.starts_with?(path, ".git") or
+            String.contains?(path, "/deps/") or
+            String.contains?(path, "/_build/")
+        end)
         |> Enum.take(25)
 
       opts =
