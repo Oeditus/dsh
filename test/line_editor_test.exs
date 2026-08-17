@@ -221,5 +221,14 @@ defmodule DeepSeekHarness.LineEditorTest do
       history = ["git commit -m 'fix'"]
       assert LineEditor.get_ghost_suggestion("git com", history, cfg) == "mit -m 'fix'"
     end
+
+    test "calculates physical terminal display width of prompts with wide emojis" do
+      prompt_str = "\e[36m📁 ragec\e[0m \e[32m🤖 deepseek-chat\e[0m ❯ "
+
+      raw_len = String.length(String.replace(prompt_str, ~r/\e\[[0-9;]*[mGKH]/, ""))
+      width = LineEditor.display_width(prompt_str)
+
+      assert width == raw_len + 2
+    end
   end
 end

@@ -691,11 +691,42 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
   end
 
-  defp strip_ansi_length(str) do
-    str
-    |> String.replace(~r/\e\[[0-9;]*[mGKH]/, "")
-    |> String.length()
+  def display_width(str) when is_binary(str) do
+    clean = String.replace(str, ~r/\e\[[0-9;]*[mGKH]/, "")
+
+    extra =
+      clean
+      |> String.graphemes()
+      |> Enum.count(fn g ->
+        g in [
+          "📁",
+          "🤖",
+          "🧠",
+          "💻",
+          "🔒",
+          "🌐",
+          "🐳",
+          "❓",
+          "✏️",
+          "✏",
+          "⚡",
+          "🔌",
+          "👁️",
+          "⚙",
+          "♻",
+          "📄",
+          "🛠️"
+        ]
+      end)
+
+    try do
+      Owl.Data.length(clean) + extra
+    rescue
+      _ -> String.length(clean) + extra
+    end
   end
+
+  defp strip_ansi_length(str), do: display_width(str)
 
   defp show_completions(matches) do
     IO.write(
