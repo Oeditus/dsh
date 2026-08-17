@@ -78,15 +78,10 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   def delete_session(session_id, cwd \\ ".") do
     file_path = Path.join(session_dir(cwd), "#{session_id}.json")
 
-    cond do
-      not File.exists?(file_path) ->
-        {:error, "Session '#{session_id}' has no persisted state to delete."}
-
-      true ->
-        case File.rm(file_path) do
-          :ok -> {:ok, file_path}
-          {:error, reason} -> {:error, "Failed to delete session file: #{inspect(reason)}"}
-        end
+    case File.rm(file_path) do
+      :ok -> {:ok, file_path}
+      {:error, :enoent} -> {:error, "Session '#{session_id}' has no persisted state to delete."}
+      {:error, reason} -> {:error, "Failed to delete session file: #{inspect(reason)}"}
     end
   end
 
