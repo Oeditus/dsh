@@ -54,17 +54,21 @@ defmodule DeepSeekHarness.Brain.AgentLoopTest do
         messages: []
       }
 
-      state1 = AgentLoop.handle_tool_failure("mcp_custom_tool", {:error, "failed"}, state)
+      {state1, nil} = AgentLoop.handle_tool_failure("mcp_custom_tool", {:error, "failed"}, state)
       assert state1.tool_failure_counts["mcp_custom_tool"] == 1
       assert length(state1.tools) == 2
 
-      state2 = AgentLoop.handle_tool_failure("mcp_custom_tool", {:error, "failed"}, state1)
+      {state2, nil} =
+        AgentLoop.handle_tool_failure("mcp_custom_tool", {:error, "failed"}, state1)
+
       assert state2.tool_failure_counts["mcp_custom_tool"] == 2
 
-      state3 = AgentLoop.handle_tool_failure("mcp_custom_tool", {:error, "failed"}, state2)
+      {state3, notice} =
+        AgentLoop.handle_tool_failure("mcp_custom_tool", {:error, "failed"}, state2)
+
       assert state3.tool_failure_counts["mcp_custom_tool"] == 3
       assert length(state3.tools) == 1
-      assert hd(state3.messages)["content"] =~ "Fallback mode activated"
+      assert notice["content"] =~ "Fallback mode activated"
     end
 
     test "does not count standard tools for failure circuit breaker" do
@@ -74,7 +78,7 @@ defmodule DeepSeekHarness.Brain.AgentLoopTest do
         messages: []
       }
 
-      state1 = AgentLoop.handle_tool_failure("read_file", {:error, "failed"}, state)
+      {state1, nil} = AgentLoop.handle_tool_failure("read_file", {:error, "failed"}, state)
       assert state1.tool_failure_counts == %{}
     end
   end

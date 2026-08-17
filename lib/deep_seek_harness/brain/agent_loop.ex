@@ -57,20 +57,21 @@ defmodule DeepSeekHarness.Brain.AgentLoop do
         fallback_notice = %{
           "role" => "user",
           "content" =>
-            "SYSTEM NOTICE: Non-standard tool '#{tool_name}' failed to provide results after #{new_fail_count} attempts. Fallback mode activated: tool '#{tool_name}' has been disabled. Please use standard tools: bash, read_file, or list_dir instead."
+            "SYSTEM NOTICE: Non-standard tool '#{tool_name}' failed to provide results after #{new_fail_count} attempts. Fallback mode activated: tool '#{tool_name}' has been disabled. Please use standard tools: bash, read_file, replace_file, or list_dir instead."
         }
 
-        %{
+        updated_state = %{
           state
           | tool_failure_counts: updated_counts,
-            tools: remaining_tools,
-            messages: state.messages ++ [fallback_notice]
+            tools: remaining_tools
         }
+
+        {updated_state, fallback_notice}
       else
-        %{state | tool_failure_counts: updated_counts}
+        {%{state | tool_failure_counts: updated_counts}, nil}
       end
     else
-      state
+      {state, nil}
     end
   end
 

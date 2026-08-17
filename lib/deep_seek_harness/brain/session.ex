@@ -698,37 +698,45 @@ defmodule DeepSeekHarness.Brain.Session do
   defp maybe_put_reasoning(msg, _), do: msg
 
   defp execute_tool_calls(tool_calls, state) do
-    Enum.reduce(tool_calls, {[], state}, fn tc, {msg_acc, current_state} ->
-      case tool_permitted?(tc.name, tc.arguments, current_state) do
-        {:allow, updated_state} ->
-          exec_res = HandsExecutor.execute(updated_state.hands, tc.name, tc.arguments)
+    {tool_messages, system_notices, final_state} =
+      Enum.reduce(tool_calls, {[], [], state}, fn tc, {msg_acc, notice_acc, current_state} ->
+        case tool_permitted?(tc.name, tc.arguments, current_state) do
+          {:allow, updated_state} ->
+            exec_res = HandsExecutor.execute(updated_state.hands, tc.name, tc.arguments)
 
-          tool_msg =
-            case exec_res do
-              {:ok, result} ->
-                %{"role" => "tool", "tool_call_id" => tc.id, "content" => result}
+            tool_msg =
+              case exec_res do
+                {:ok, result} ->
+                  %{"role" => "tool", "tool_call_id" => tc.id, "content" => result}
 
-              {:error, err} ->
-                %{
-                  "role" => "tool",
-                  "tool_call_id" => tc.id,
-                  "content" => "Tool execution failed: #{err}"
-                }
-            end
+                {:error, err} ->
+                  %{
+                    "role" => "tool",
+                    "tool_call_id" => tc.id,
+                    "content" => "Tool execution failed: #{err}"
+                  }
+              end
 
-          updated_state_after = AgentLoop.handle_tool_failure(tc.name, exec_res, updated_state)
-          {msg_acc ++ [tool_msg], updated_state_after}
+            {updated_state_after, maybe_notice} =
+              AgentLoop.handle_tool_failure(tc.name, exec_res, updated_state)
 
-        {:deny, reason, updated_state} ->
-          tool_msg = %{
-            "role" => "tool",
-            "tool_call_id" => tc.id,
-            "content" => "Tool execution denied: #{reason}"
-          }
+            new_notices = if maybe_notice, do: notice_acc ++ [maybe_notice], else: notice_acc
 
-          {msg_acc ++ [tool_msg], updated_state}
-      end
-    end)
+            {msg_acc ++ [tool_msg], new_notices, updated_state_after}
+
+          {:deny, reason, updated_state} ->
+            tool_msg = %{
+              "role" => "tool",
+              "tool_call_id" => tc.id,
+              "content" => "Tool execution denied: #{reason}"
+            }
+
+            {msg_acc ++ [tool_msg], notice_acc, updated_state}
+        end
+      end)
+
+    all_messages = tool_messages ++ system_notices
+    {all_messages, final_state}
   end
 
   # Permission Authorization Gate (Item 1, 4, 18)
