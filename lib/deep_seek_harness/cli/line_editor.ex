@@ -609,7 +609,8 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         end)
 
       if match do
-        String.slice(match, String.length(buffer_text)..-1)
+        len = String.length(buffer_text)
+        String.slice(match, len..-1//1)
       else
         ""
       end
