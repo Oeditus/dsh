@@ -69,6 +69,97 @@ defmodule DeepSeekHarness.Brain.SessionStore do
     end
   end
 
+  @doc """
+  Deletes a persisted session state file from disk.
+
+  Returns `{:ok, path}` on success, or `{:error, reason}` when the session
+  file does not exist or could not be removed.
+  """
+  def delete_session(session_id, cwd \\ ".") do
+    file_path = Path.join(session_dir(cwd), "#{session_id}.json")
+
+    cond do
+      not File.exists?(file_path) ->
+        {:error, "Session '#{session_id}' has no persisted state to delete."}
+
+      true ->
+        case File.rm(file_path) do
+          :ok -> {:ok, file_path}
+          {:error, reason} -> {:error, "Failed to delete session file: #{inspect(reason)}"}
+        end
+    end
+  end
+
+  @doc """
+  Returns metadata about all persisted sessions in the workspace.
+
+  Each entry is a map with `session_id`, `model`, `updated_at`, `message_count`,
+  and `step_count`. Entries are sorted most-recently-updated first. Useful for
+  building `/session list` output and for auto-resume prompts.
+  """
+  def list_session_metadata(cwd \\ ".") do
+    dir = session_dir(cwd)
+
+    if File.dir?(dir) do
+      case File.ls(dir) do
+        {:ok, files} ->
+          files
+          |> Enum.filter(&String.ends_with?(&1, ".json"))
+          |> Enum.map(&Path.join(dir, &1))
+          |> Enum.map(&read_session_metadata/1)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.sort_by(& &1[:updated_at], {:desc, NaiveDateTime})
+
+        _ ->
+          []
+      end
+    else
+      []
+    end
+  end
+
+  @doc """
+  Loads only the persisted session metadata (without the full message
+  history) for a given session id, or `nil` when no such session exists.
+  """
+  def load_session_metadata(session_id, cwd \\ ".") do
+    file_path = Path.join(session_dir(cwd), "#{session_id}.json")
+    read_session_metadata(file_path)
+  end
+
+  defp read_session_metadata(file_path) do
+    case File.read(file_path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, map} when is_map(map) ->
+            %{
+              session_id: map["session_id"],
+              model: map["model"],
+              updated_at: parse_timestamp(map["updated_at"]),
+              message_count: length(Map.get(map, "messages", [])),
+              step_count: Map.get(map, "step_count", 0)
+            }
+
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_timestamp(nil), do: NaiveDateTime.utc_now()
+
+  defp parse_timestamp(iso) when is_binary(iso) do
+    case NaiveDateTime.from_iso8601(iso) do
+      {:ok, dt} -> dt
+      _ -> NaiveDateTime.utc_now()
+    end
+  end
+
+  defp parse_timestamp(_), do: NaiveDateTime.utc_now()
+
   def session_dir(cwd \\ ".") do
     Path.join(cwd, ".dsh/sessions")
   end

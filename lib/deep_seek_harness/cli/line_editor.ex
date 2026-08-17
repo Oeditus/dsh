@@ -391,10 +391,29 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp handle_enter(state) do
-    render_final(state)
     line = Enum.join(state.buffer)
-    add_history(line)
-    line <> "\n"
+
+    if multiline_continuation?(line) do
+      render_final(state)
+      clean_current = String.trim_trailing(line, "\\")
+      next_line = read_tty_line("... > ", state.history)
+      full_line = clean_current <> "\n" <> next_line
+      add_history(full_line)
+      full_line
+    else
+      render_final(state)
+      add_history(line)
+      line <> "\n"
+    end
+  end
+
+  defp multiline_continuation?(line) when is_binary(line) do
+    String.ends_with?(line, "\\") or
+      (String.contains?(line, "\"\"\"") and count_occurrences(line, "\"\"\"") |> rem(2) == 1)
+  end
+
+  defp count_occurrences(str, sub) do
+    length(String.split(str, sub)) - 1
   end
 
   defp handle_tab(%{search_mode: true} = state), do: raw_loop(state)

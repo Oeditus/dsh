@@ -14,6 +14,23 @@ defmodule DeepSeekHarness.Git do
     e -> {:error, "Git not available: #{Exception.message(e)}"}
   end
 
+  @doc """
+  Runs an arbitrary git subcommand with its arguments, returning the raw
+  stdout. This is the generic passthrough backing the `/git <subcommand>`
+  REPL command. The `args` string is split on whitespace and passed directly
+  to `git`; no shell is involved, so no shell injection risk.
+  """
+  def run(args, cwd \\ ".") when is_binary(args) do
+    argv = String.split(args, " ", trim: true)
+
+    case System.cmd("git", argv, cd: cwd, stderr_to_stdout: true) do
+      {out, 0} -> {:ok, String.trim(out)}
+      {out, code} -> {:error, "git #{args} exited with status #{code}:\n#{String.trim(out)}"}
+    end
+  rescue
+    e -> {:error, "Git command failed: #{Exception.message(e)}"}
+  end
+
   @doc "Returns formatted git diff output."
   def diff(cwd \\ ".") do
     case System.cmd("git", ["diff"], cd: cwd, stderr_to_stdout: true) do

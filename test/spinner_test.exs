@@ -54,4 +54,19 @@ defmodule DeepSeekHarness.CLI.SpinnerTest do
     assert line =~ DeepSeekHarness.CLI.Formatter.gray()
     Spinner.stop()
   end
+
+  test "pauses and resumes spinner around nested function execution" do
+    {:ok, _pid} = Spinner.start(title: "Active task")
+    assert Spinner.active?()
+
+    result =
+      Spinner.with_paused(fn ->
+        refute Spinner.active?()
+        :paused_result
+      end)
+
+    assert result == :paused_result
+    assert Spinner.active?()
+    Spinner.stop()
+  end
 end

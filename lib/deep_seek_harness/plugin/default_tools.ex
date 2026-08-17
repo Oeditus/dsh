@@ -126,6 +126,55 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
           required: ["questions"]
         },
         execute: &ask_question/1
+      },
+      %{
+        name: "glob_search",
+        description: "Find files in the workspace matching a glob pattern (e.g. 'lib/**/*.ex').",
+        parameters: %{
+          type: "object",
+          properties: %{
+            pattern: %{type: "string", description: "Glob pattern to match files."}
+          },
+          required: ["pattern"]
+        },
+        execute: &glob_search/1
+      },
+      %{
+        name: "yaml_format",
+        description: "Formats JSON or YAML text with pretty indentation.",
+        parameters: %{
+          type: "object",
+          properties: %{
+            text: %{type: "string", description: "JSON or YAML formatted text."}
+          },
+          required: ["text"]
+        },
+        execute: &yaml_format/1
+      },
+      %{
+        name: "git_status",
+        description: "Returns active repository git status (short format).",
+        parameters: %{type: "object", properties: %{}},
+        execute: &git_status_tool/1
+      },
+      %{
+        name: "git_diff",
+        description: "Returns workspace git diff.",
+        parameters: %{type: "object", properties: %{}},
+        execute: &git_diff_tool/1
+      },
+      %{
+        name: "git_commit",
+        description:
+          "Stages workspace changes and creates a git commit with the specified message.",
+        parameters: %{
+          type: "object",
+          properties: %{
+            message: %{type: "string", description: "Commit message."}
+          },
+          required: ["message"]
+        },
+        execute: &git_commit_tool/1
       }
     ]
   end
@@ -219,6 +268,44 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
         end)
 
       {:ok, result}
+    end
+  end
+
+  def glob_search(%{"pattern" => pattern}) do
+    matches = Path.wildcard(pattern)
+
+    if Enum.empty?(matches) do
+      {:ok, "No files matched pattern: '#{pattern}'"}
+    else
+      {:ok, "Matched #{length(matches)} files:\n" <> Enum.join(matches, "\n")}
+    end
+  end
+
+  def yaml_format(%{"text" => text}) do
+    case Jason.decode(text) do
+      {:ok, data} -> {:ok, Jason.encode!(data, pretty: true)}
+      {:error, _} -> {:ok, String.trim(text)}
+    end
+  end
+
+  def git_status_tool(_args) do
+    case DeepSeekHarness.Git.status() do
+      {:ok, out} -> {:ok, out}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  def git_diff_tool(_args) do
+    case DeepSeekHarness.Git.diff() do
+      {:ok, out} -> {:ok, out}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  def git_commit_tool(%{"message" => message}) do
+    case DeepSeekHarness.Git.commit(message) do
+      {:ok, out} -> {:ok, out}
+      {:error, err} -> {:error, err}
     end
   end
 end

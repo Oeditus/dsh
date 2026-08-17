@@ -588,77 +588,86 @@ defmodule DeepSeekHarness.Brain.Session do
 
     case DeepSeekAPI.chat_completion(state.messages, state.tools, opts) do
       {:ok, %{tool_calls: tool_calls} = response} when is_list(tool_calls) and tool_calls != [] ->
-        state = accumulate_usage(state, response[:usage])
-
-        if response[:reasoning_content] do
-          Logger.info("[DeepSeek-R1 Reasoning]\n#{response.reasoning_content}")
-        end
-
-        assistant_msg =
-          %{
-            "role" => "assistant",
-            "content" => response.content || "",
-            "tool_calls" =>
-              Enum.map(tool_calls, fn tc ->
-                %{
-                  "id" => tc.id,
-                  "type" => "function",
-                  "function" => %{
-                    "name" => tc.name,
-                    "arguments" => Jason.encode!(tc.arguments)
-                  }
-                }
-              end)
-          }
-          |> maybe_put_reasoning(response[:reasoning_content])
-
-        state_after_assistant = %{state | messages: state.messages ++ [assistant_msg]}
-
-        if AgentLoop.duplicate_tool_calls?(state.messages, tool_calls) do
-          Logger.warning(
-            "[Brain.Session] Detected duplicate tool call loop. Instructing model to finalize response."
-          )
-
-          system_feedback = %{
-            "role" => "user",
-            "content" =>
-              "SYSTEM NOTICE: The tool call(s) #{inspect(Enum.map(tool_calls, & &1.name))} with the exact same arguments were already executed in the previous turn. Do NOT call the tool again. Synthesize your final answer using the results already provided."
-          }
-
-          state_with_feedback = %{
-            state_after_assistant
-            | messages: state_after_assistant.messages ++ [system_feedback]
-          }
-
-          run_agent_loop(state_with_feedback, depth - 1)
-        else
-          {tool_messages, updated_hands_state} =
-            execute_tool_calls(tool_calls, state_after_assistant)
-
-          state_after_tools = %{
-            updated_hands_state
-            | messages: updated_hands_state.messages ++ tool_messages,
-              step_count: updated_hands_state.step_count + 1
-          }
-
-          run_agent_loop(state_after_tools, depth - 1)
-        end
+        handle_tool_calls_turn(state, response, tool_calls, depth)
 
       {:ok, response} ->
-        state = accumulate_usage(state, response[:usage])
-
-        if response[:reasoning_content] do
-          Logger.info("[DeepSeek-R1 Reasoning]\n#{response.reasoning_content}")
-        end
-
-        final_msg = %{"role" => "assistant", "content" => response.content}
-        final_state = %{state | messages: state.messages ++ [final_msg], status: :idle}
-        SessionStore.save_session(final_state, state.cwd)
-        {{:ok, response}, final_state}
+        handle_text_response_turn(state, response)
 
       {:error, reason} ->
         {{:error, "Error communicating with DeepSeek API: #{reason}"}, %{state | status: :idle}}
     end
+  end
+
+  defp handle_tool_calls_turn(state, response, tool_calls, depth) do
+    state = accumulate_usage(state, response[:usage])
+
+    if response[:reasoning_content] do
+      Logger.info("[DeepSeek-R1 Reasoning]\n#{response.reasoning_content}")
+    end
+
+    assistant_msg = build_assistant_tool_msg(response, tool_calls)
+    state_after_assistant = %{state | messages: state.messages ++ [assistant_msg]}
+
+    if AgentLoop.duplicate_tool_calls?(state.messages, tool_calls) do
+      Logger.warning(
+        "[Brain.Session] Detected duplicate tool call loop. Instructing model to finalize response."
+      )
+
+      system_feedback = %{
+        "role" => "user",
+        "content" =>
+          "SYSTEM NOTICE: The tool call(s) #{inspect(Enum.map(tool_calls, & &1.name))} with the exact same arguments were already executed in the previous turn. Do NOT call the tool again. Synthesize your final answer using the results already provided."
+      }
+
+      state_with_feedback = %{
+        state_after_assistant
+        | messages: state_after_assistant.messages ++ [system_feedback]
+      }
+
+      run_agent_loop(state_with_feedback, depth - 1)
+    else
+      {tool_messages, updated_hands_state} = execute_tool_calls(tool_calls, state_after_assistant)
+
+      state_after_tools = %{
+        updated_hands_state
+        | messages: updated_hands_state.messages ++ tool_messages,
+          step_count: updated_hands_state.step_count + 1
+      }
+
+      run_agent_loop(state_after_tools, depth - 1)
+    end
+  end
+
+  defp handle_text_response_turn(state, response) do
+    state = accumulate_usage(state, response[:usage])
+
+    if response[:reasoning_content] do
+      Logger.info("[DeepSeek-R1 Reasoning]\n#{response.reasoning_content}")
+    end
+
+    final_msg = %{"role" => "assistant", "content" => response.content}
+    final_state = %{state | messages: state.messages ++ [final_msg], status: :idle}
+    SessionStore.save_session(final_state, state.cwd)
+    {{:ok, response}, final_state}
+  end
+
+  defp build_assistant_tool_msg(response, tool_calls) do
+    %{
+      "role" => "assistant",
+      "content" => response.content || "",
+      "tool_calls" =>
+        Enum.map(tool_calls, fn tc ->
+          %{
+            "id" => tc.id,
+            "type" => "function",
+            "function" => %{
+              "name" => tc.name,
+              "arguments" => Jason.encode!(tc.arguments)
+            }
+          }
+        end)
+    }
+    |> maybe_put_reasoning(response[:reasoning_content])
   end
 
   defp accumulate_usage(state, nil), do: state

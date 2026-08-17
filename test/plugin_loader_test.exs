@@ -60,4 +60,10 @@ defmodule DeepSeekHarness.PluginLoaderTest do
 
     File.rm(tmp_plugin_path)
   end
+
+  test "unregisters plugin modules and tool names live" do
+    assert :ok = PluginLoader.unregister_plugins(["non_existent_tool_xyz"])
+    tools = PluginLoader.list_tools()
+    refute Enum.any?(tools, fn t -> t.name == "non_existent_tool_xyz" end)
+  end
 end

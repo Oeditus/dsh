@@ -140,6 +140,30 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/git " <> args, _session_pid, _session_id) do
+    args = String.trim(args)
+
+    case Git.run(args) do
+      {:ok, out} ->
+        IO.puts("\n#{Formatter.bold()}$ git #{args}#{Formatter.reset()}\n#{out}\n")
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/git", _session_pid, _session_id) do
+    IO.puts(
+      Formatter.format_info(
+        "Usage: /git <subcommand> [args...]  (e.g. /git status, /git log --oneline -5, /git branch -a)"
+      )
+    )
+
+    :continue
+  end
+
   def handle_input("/review " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 
@@ -535,6 +559,49 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/session list", _session_pid, _session_id) do
+    metas = DeepSeekHarness.Brain.SessionStore.list_session_metadata()
+
+    rows =
+      if Enum.empty?(metas) do
+        "*No persisted sessions found in workspace.*"
+      else
+        Enum.map_join(metas, "\n", fn m ->
+          dt = m.updated_at |> NaiveDateTime.to_iso8601() |> String.slice(0, 19)
+
+          "- **`#{m.session_id}`** [#{m.model}]: #{m.message_count} msgs, step #{m.step_count} (Updated: `#{dt}`)"
+        end)
+      end
+
+    md = "### Persisted Workspace Sessions (#{length(metas)})\n\n#{rows}"
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/session resume " <> target_id, session_pid, session_id) do
+    handle_input("/session switch " <> target_id, session_pid, session_id)
+  end
+
+  def handle_input("/session switch " <> target_id, _session_pid, _session_id) do
+    id = String.trim(target_id)
+    {:ok, new_pid} = DeepSeekHarness.Brain.SessionSupervisor.start_session(session_id: id)
+    IO.puts(Formatter.format_success("Switched active REPL session to '#{id}'"))
+    {:switch_session, id, new_pid}
+  end
+
+  def handle_input("/session cleanup", _session_pid, _session_id) do
+    metas = DeepSeekHarness.Brain.SessionStore.list_session_metadata()
+    stale = Enum.filter(metas, fn m -> m.message_count <= 1 end)
+
+    removed_count =
+      Enum.count(stale, fn m ->
+        match?({:ok, _}, DeepSeekHarness.Brain.SessionStore.delete_session(m.session_id))
+      end)
+
+    IO.puts(Formatter.format_success("Cleaned up #{removed_count} stale/empty session(s)."))
+    :continue
+  end
+
   def handle_input("/session", session_pid, _session_id) do
     info = Session.get_info(session_pid)
 
@@ -552,6 +619,126 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
+  end
+
+  def handle_input("/history search " <> query, _session_pid, _session_id) do
+    q = String.downcase(String.trim(query))
+    history = DeepSeekHarness.CLI.LineEditor.load_history()
+    matches = Enum.filter(history, fn line -> String.contains?(String.downcase(line), q) end)
+
+    md =
+      if Enum.empty?(matches) do
+        "No history entries matching '#{query}'."
+      else
+        rows = Enum.map_join(matches, "\n", fn m -> "- `#{m}`" end)
+        "### History Search Results for '#{query}' (#{length(matches)})\n\n#{rows}"
+      end
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/history", _session_pid, _session_id) do
+    history = DeepSeekHarness.CLI.LineEditor.load_history()
+    recent = Enum.take(Enum.reverse(history), 15)
+
+    rows =
+      if Enum.empty?(recent) do
+        "*No REPL input history found.*"
+      else
+        recent
+        |> Enum.with_index(1)
+        |> Enum.map_join("\n", fn {line, idx} -> "  #{idx}. `#{line}`" end)
+      end
+
+    md = "### Recent Input History (Last 15)\n\n#{rows}"
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/env", _session_pid, _session_id) do
+    env_model = System.get_env("DEEPSEEK_MODEL") || "deepseek-chat (default)"
+
+    has_key? =
+      not is_nil(System.get_env("DEEPSEEK_API_KEY")) and
+        System.get_env("DEEPSEEK_API_KEY") != ""
+
+    dsh_env = System.get_env("DSH_ENV") || "prod"
+    cwd = File.cwd!()
+
+    md = """
+    ### Environment & Runtime Configuration
+    - **Operating System**: `#{:os.type() |> inspect()}`
+    - **Elixir Version**: `#{System.version()}`
+    - **OTP Release**: `#{System.otp_release()}`
+    - **Current Workspace CWD**: `#{cwd}`
+    - **Node Name**: `#{node()}`
+    - **Environment**: `#{dsh_env}`
+    - **DEEPSEEK_MODEL**: `#{env_model}`
+    - **API Key Set?**: `#{has_key?}`
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/plugins info", _session_pid, _session_id) do
+    tools = PluginLoader.list_tools()
+    rows = Enum.map_join(tools, "\n", fn t -> "- **`#{t.name}`**: #{t.description}" end)
+    md = "### Registered Plugin Tools Info (#{length(tools)})\n\n#{rows}"
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/ragex stats", _session_pid, _session_id) do
+    case MCPServerManager.execute_ragex_tool("graph_stats", %{}) do
+      {:ok, out} ->
+        IO.puts(
+          "\n" <> Formatter.format_markdown("### Ragex Knowledge Graph Stats\n\n#{out}") <> "\n"
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/ragex reindex", _session_pid, _session_id) do
+    IO.puts(Formatter.format_info("Re-indexing project codebase into Ragex Knowledge Graph…"))
+
+    case MCPServerManager.start_ragex(File.cwd!()) do
+      {:ok, _dir, _tools} ->
+        IO.puts(Formatter.format_success("Knowledge Graph re-indexing triggered successfully!"))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/ragex export " <> fmt, _session_pid, _session_id) do
+    format = String.trim(fmt)
+
+    case MCPServerManager.execute_ragex_tool("export_graph", %{"format" => format}) do
+      {:ok, out} ->
+        IO.puts(
+          "\n" <>
+            Formatter.format_markdown(
+              "### Knowledge Graph Export (#{format})\n\n```\n#{out}\n```"
+            ) <> "\n"
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/ragex export", session_pid, session_id) do
+    handle_input("/ragex export mermaid", session_pid, session_id)
   end
 
   def handle_input("/nodes", _session_pid, _session_id) do
