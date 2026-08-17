@@ -592,8 +592,9 @@ defmodule DeepSeekHarness.Brain.Session do
 
   defp run_agent_loop(state, depth) do
     opts = [model: state.model, api_key: state.api_key]
+    sanitized_messages = sanitize_messages(state.messages)
 
-    case DeepSeekAPI.chat_completion(state.messages, state.tools, opts) do
+    case DeepSeekAPI.chat_completion(sanitized_messages, state.tools, opts) do
       {:ok, %{tool_calls: tool_calls} = response} when is_list(tool_calls) and tool_calls != [] ->
         handle_tool_calls_turn(state, response, tool_calls, depth)
 
@@ -620,6 +621,15 @@ defmodule DeepSeekHarness.Brain.Session do
         "[Brain.Session] Detected duplicate tool call loop. Instructing model to finalize response."
       )
 
+      tool_cancel_messages =
+        Enum.map(tool_calls, fn tc ->
+          %{
+            "role" => "tool",
+            "tool_call_id" => tc.id,
+            "content" => "SYSTEM NOTICE: Duplicate tool call ignored."
+          }
+        end)
+
       system_feedback = %{
         "role" => "user",
         "content" =>
@@ -628,7 +638,7 @@ defmodule DeepSeekHarness.Brain.Session do
 
       state_with_feedback = %{
         state_after_assistant
-        | messages: state_after_assistant.messages ++ [system_feedback]
+        | messages: state_after_assistant.messages ++ tool_cancel_messages ++ [system_feedback]
       }
 
       run_agent_loop(state_with_feedback, depth - 1)
@@ -642,6 +652,51 @@ defmodule DeepSeekHarness.Brain.Session do
       }
 
       run_agent_loop(state_after_tools, depth - 1)
+    end
+  end
+
+  @doc "Sanitizes message history to ensure all assistant tool_calls are followed by matching tool response messages."
+  def sanitize_messages(messages) when is_list(messages) do
+    Enum.reduce(messages, [], fn msg, acc ->
+      case msg do
+        %{"role" => "user"} = user_msg ->
+          acc = fill_missing_tool_responses(acc)
+          acc ++ [user_msg]
+
+        %{"role" => "system"} = sys_msg ->
+          acc = fill_missing_tool_responses(acc)
+          acc ++ [sys_msg]
+
+        %{"role" => "assistant", "tool_calls" => calls} = ast_msg
+        when is_list(calls) and calls != [] ->
+          acc = fill_missing_tool_responses(acc)
+          acc ++ [ast_msg]
+
+        _ ->
+          acc ++ [msg]
+      end
+    end)
+    |> fill_missing_tool_responses()
+  end
+
+  defp fill_missing_tool_responses(messages) do
+    case Enum.reverse(messages) do
+      [%{"role" => "assistant", "tool_calls" => calls} | _rest] when is_list(calls) ->
+        tool_responses =
+          Enum.map(calls, fn tc ->
+            call_id = Map.get(tc, "id") || Map.get(tc, :id)
+
+            %{
+              "role" => "tool",
+              "tool_call_id" => call_id,
+              "content" => "SYSTEM NOTICE: Tool execution result unavailable."
+            }
+          end)
+
+        messages ++ tool_responses
+
+      _ ->
+        messages
     end
   end
 

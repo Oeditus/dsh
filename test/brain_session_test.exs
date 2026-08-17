@@ -100,4 +100,26 @@ defmodule DeepSeekHarness.BrainSessionTest do
     File.rm(md_path)
     File.rm(json_path)
   end
+
+  test "sanitizes message sequence to enforce tool_calls followed by tool responses" do
+    invalid_messages = [
+      %{"role" => "user", "content" => "Run tools"},
+      %{
+        "role" => "assistant",
+        "content" => "",
+        "tool_calls" => [%{"id" => "call_123", "function" => %{"name" => "bash"}}]
+      },
+      %{"role" => "user", "content" => "SYSTEM NOTICE: Duplicate tool call"}
+    ]
+
+    sanitized = Session.sanitize_messages(invalid_messages)
+    assert length(sanitized) == 4
+
+    [user1, assistant, tool, user2] = sanitized
+    assert user1["role"] == "user"
+    assert assistant["role"] == "assistant"
+    assert tool["role"] == "tool"
+    assert tool["tool_call_id"] == "call_123"
+    assert user2["role"] == "user"
+  end
 end
