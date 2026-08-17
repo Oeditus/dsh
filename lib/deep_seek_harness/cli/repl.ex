@@ -590,6 +590,110 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/rules add " <> rest, _session_pid, _session_id) do
+    case DeepSeekHarness.Rules.add_rule(rest) do
+      {:ok, rule} ->
+        IO.puts(
+          Formatter.format_success(
+            "Added rule ##{rule["id"]} [#{rule["scope"]}]: \"#{rule["text"]}\""
+          )
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/rules delete", _session_pid, _session_id), do: handle_rules_delete()
+  def handle_input("/rules rm", _session_pid, _session_id), do: handle_rules_delete()
+
+  def handle_input("/rules toggle " <> id_str, _session_pid, _session_id) do
+    case DeepSeekHarness.Rules.toggle_rule(id_str) do
+      {:ok, _rules} ->
+        IO.puts(Formatter.format_success("Toggled rule ##{id_str} status."))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/rules", _session_pid, _session_id) do
+    rules = DeepSeekHarness.Rules.load_rules()
+
+    rows =
+      if Enum.empty?(rules) do
+        "*No rules currently defined.*"
+      else
+        rules
+        |> Enum.map_join("\n", fn r ->
+          status = if r["enabled"], do: "enabled", else: "disabled"
+          "| ##{r["id"]} | `#{r["scope"]}` | #{status} | #{r["text"]} |"
+        end)
+      end
+
+    md = """
+    ### Active Prompt & Execution Rules (#{length(rules)})
+    | ID | Scope | Status | Rule Text |
+    |---|---|---|---|
+    #{rows}
+
+    **Commands:**
+    - `/rules add <scope: text>` — Add a new rule (e.g. `/rules add all: ...`, `/rules add cr: ...`)
+    - `/rules delete` or `/rules rm` — Interactively select rules to delete
+    - `/rules toggle <id>` — Toggle rule enabled/disabled
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  defp handle_rules_delete do
+    rules = DeepSeekHarness.Rules.load_rules()
+
+    if Enum.empty?(rules) do
+      IO.puts(Formatter.format_info("No rules available to delete."))
+    else
+      opts =
+        Enum.map(rules, fn r ->
+          "[##{r["id"]}] (#{r["scope"]}): #{r["text"]}"
+        end)
+
+      ans =
+        DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+          DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
+            "Select rules to delete:",
+            opts,
+            true,
+            false
+          )
+        end)
+
+      case ans do
+        %{selected: selected_items} when is_list(selected_items) and selected_items != [] ->
+          ids =
+            Enum.map(selected_items, fn item ->
+              case Regex.run(~r/\[#(\d+)\]/, item) do
+                [_, id_str] -> String.to_integer(id_str)
+                _ -> nil
+              end
+            end)
+            |> Enum.reject(&is_nil/1)
+
+          DeepSeekHarness.Rules.delete_rules(ids)
+          IO.puts(Formatter.format_success("Deleted #{length(ids)} rule(s)."))
+
+        _ ->
+          IO.puts(Formatter.format_info("No rules deleted."))
+      end
+    end
+
+    :continue
+  end
+
   def handle_input("/mode " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 

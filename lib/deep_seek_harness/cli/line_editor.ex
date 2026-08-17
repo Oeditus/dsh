@@ -43,6 +43,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/quit",
     "/ragex",
     "/review",
+    "/rules",
     "/session",
     "/skill",
     "/skills",

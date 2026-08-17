@@ -189,9 +189,14 @@ defmodule DeepSeekHarness.Brain.Session do
 
     {:ok, expanded_text, _attachments} = ContextExpander.expand(raw_text, state.cwd, opts)
 
-    SessionStore.append_transcript(state.session_id, "USER_INPUT", expanded_text, state.cwd)
+    rules_preamble = DeepSeekHarness.Rules.build_preamble("all", state.cwd)
 
-    user_msg = %{"role" => "user", "content" => expanded_text}
+    final_user_text =
+      if rules_preamble != "", do: rules_preamble <> expanded_text, else: expanded_text
+
+    SessionStore.append_transcript(state.session_id, "USER_INPUT", final_user_text, state.cwd)
+
+    user_msg = %{"role" => "user", "content" => final_user_text}
     state = %{state | messages: state.messages ++ [user_msg], status: :thinking}
 
     state = auto_checkpoint(state, "Pre-turn ##{state.step_count + 1}")
@@ -359,7 +364,10 @@ defmodule DeepSeekHarness.Brain.Session do
         6. **GitHub PR Review Formatted Block**: A ready-to-post Markdown comment block formatted for GitHub Pull Request review.
         """
 
-        user_msg = %{"role" => "user", "content" => prompt}
+        rules_preamble = DeepSeekHarness.Rules.build_preamble("cr", state.cwd)
+        final_prompt = if rules_preamble != "", do: rules_preamble <> prompt, else: prompt
+
+        user_msg = %{"role" => "user", "content" => final_prompt}
         state_with_msg = %{state | messages: state.messages ++ [user_msg], status: :thinking}
 
         {final_response, new_state} = run_agent_loop(state_with_msg, state.max_tool_depth)
