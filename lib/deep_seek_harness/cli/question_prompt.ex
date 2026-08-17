@@ -252,24 +252,11 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # TUI Box Renderer
   # ---------------------------------------------------------------------
 
-  @doc "Calculates terminal display width in columns, handling wide emojis and stripping ANSI escapes."
+  @doc "Calculates terminal display width in columns, handling wide emojis and stripping ANSI escapes via Owl."
   def display_width(str) when is_binary(str) do
-    str
-    |> strip_ansi()
-    |> String.graphemes()
-    |> Enum.reduce(0, fn g, acc -> acc + grapheme_width(g) end)
-  end
-
-  defp strip_ansi(str) do
-    String.replace(str, ~r/\e\[[0-9;]*[mGKH]/, "")
-  end
-
-  defp grapheme_width(g) do
-    cond do
-      g in ["❓", "✏️", "✏", "⚡", "🔌"] -> 2
-      String.match?(g, ~r/[\x{1F300}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]/u) -> 2
-      true -> 1
-    end
+    Owl.Data.length(str)
+  rescue
+    _ -> String.length(str)
   end
 
   def render_modal(state) do
@@ -323,7 +310,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     opt_lines =
       state.options
       |> Enum.with_index()
-      |> Enum.map(fn {opt, idx} ->
+      |> Enum.flat_map(fn {opt, idx} ->
         is_current = idx == state.cursor
         is_checked = MapSet.member?(state.selected, idx)
         is_custom = idx == state.custom_idx
@@ -337,23 +324,36 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
         label =
           if is_custom do
-            "#{prefix}#{idx + 1}. ✏️  #{opt}"
+            "#{prefix}#{idx + 1}. ✏ #{opt}"
           else
             "#{prefix}#{idx + 1}. #{opt}"
           end
 
-        {pointer, styled_label} =
-          if is_current do
-            {"❯ ", "#{Formatter.green()}#{Formatter.bold()}#{label}#{Formatter.reset()}"}
-          else
-            {"  ", "#{Formatter.dim()}#{label}#{Formatter.reset()}"}
-          end
+        max_text_width = inner_width - 4
+        wrapped_lines = wrap_text(label, max_text_width)
 
-        # Visible content inside border: 1 space + 2 pointer chars + label + pad + 1 space = inner_width (70)
-        label_len = display_width(label)
-        pad = String.duplicate(" ", max(0, inner_width - 4 - label_len))
+        wrapped_lines
+        |> Enum.with_index()
+        |> Enum.map(fn {sub_line, sub_idx} ->
+          pointer =
+            if sub_idx == 0 and is_current do
+              "❯ "
+            else
+              "  "
+            end
 
-        "#{Formatter.cyan()}│#{Formatter.reset()} #{pointer}#{styled_label}#{pad} #{Formatter.cyan()}│#{Formatter.reset()}"
+          styled_sub_line =
+            if is_current do
+              "#{Formatter.green()}#{Formatter.bold()}#{sub_line}#{Formatter.reset()}"
+            else
+              "#{Formatter.dim()}#{sub_line}#{Formatter.reset()}"
+            end
+
+          len = display_width(sub_line)
+          pad = String.duplicate(" ", max(0, max_text_width - len))
+
+          "#{Formatter.cyan()}│#{Formatter.reset()} #{pointer}#{styled_sub_line}#{pad} #{Formatter.cyan()}│#{Formatter.reset()}"
+        end)
       end)
 
     lines =
@@ -373,7 +373,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         current == "" ->
           {acc, word}
 
-        String.length(current) + 1 + String.length(word) <= max_len ->
+        display_width(current) + 1 + display_width(word) <= max_len ->
           {acc, current <> " " <> word}
 
         true ->

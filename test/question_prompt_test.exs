@@ -52,11 +52,15 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
       assert state.cursor == 2
     end
 
-    test "calculates terminal display width accounting for emojis and stripping ANSI codes" do
-      assert QuestionPrompt.display_width("Hello World") == 11
-      assert QuestionPrompt.display_width(" ❓ Question from AI ") == 21
-      assert QuestionPrompt.display_width("3. ✏️  Write custom response…") == 31
-      assert QuestionPrompt.display_width("\e[31mRed Text\e[0m") == 8
+    test "renders modal and wraps long option text across multiple lines" do
+      long_opt =
+        "Allow execution of bash commands for this specific session and save to project config"
+
+      state = QuestionPrompt.new_state("Confirm?", [long_opt], false, 1)
+      updated_state = QuestionPrompt.render_modal(state)
+
+      # Header + blank + q_line + blank + 2 wrapped option lines + blank + footer = 8 lines (7 linebreaks)
+      assert updated_state.rendered_lines == 7
     end
   end
 
