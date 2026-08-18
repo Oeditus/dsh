@@ -272,7 +272,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
         Logger.configure(level: orig_level)
       end
 
-      existing_nodes = count_existing_nodes()
+      existing_nodes = count_existing_nodes(target_dir)
 
       if existing_nodes > 0 do
         Logger.info("⚡🔌 Ragex Knowledge Graph loaded from store (#{existing_nodes} nodes ready).")
@@ -501,23 +501,31 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     end
   end
 
-  # A brand-new per-project dllb pool may not have finished its first
-  # connection handshake the instant `wait_for_server/2` observes the TCP
-  # listener is up, so the very first stats query can transiently fail and
-  # come back as zero nodes even though the on-disk cache is populated. A
-  # false zero here means a full, unnecessary re-index every launch, so
-  # retry briefly before concluding the store is genuinely empty.
-  defp count_existing_nodes(attempts \\ 3) do
-    case query_node_count() do
-      nodes when nodes > 0 ->
+  # A newly launched per-project dllb-server OS process requires a short window
+  # to load its .ragex/dllb.redb database file into memory and establish pool sockets.
+  # If a .ragex database exists on disk, retry querying the node count up to 15 times
+  # (3.0s total window) to prevent false zero counts that force unwanted re-indexing.
+  defp count_existing_nodes(target_dir, attempts \\ 15) do
+    has_ragex_db? =
+      File.exists?(Path.join(target_dir, ".ragex")) or
+        File.exists?(Path.join(target_dir, ".ragex/dllb.redb"))
+
+    nodes = query_node_count()
+
+    cond do
+      nodes > 0 ->
         nodes
 
-      0 when attempts > 1 ->
-        Process.sleep(150)
-        count_existing_nodes(attempts - 1)
+      has_ragex_db? and attempts > 1 ->
+        Process.sleep(200)
+        count_existing_nodes(target_dir, attempts - 1)
 
-      0 ->
-        0
+      attempts > 1 and not has_ragex_db? and attempts > 12 ->
+        Process.sleep(100)
+        count_existing_nodes(target_dir, attempts - 1)
+
+      true ->
+        nodes
     end
   end
 
