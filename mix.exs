@@ -47,7 +47,9 @@ defmodule DeepSeekHarness.MixProject do
       {:ragex, "~> 0.26"},
       {:dllb, "~> 0.9"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:oeditus_credo, "~> 0.11", only: [:dev, :test], runtime: false},
+      {:propwise, "~> 0.4", only: [:dev, :test], runtime: false}
     ]
   end
 

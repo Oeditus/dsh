@@ -140,6 +140,23 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
         execute: &glob_search/1
       },
       %{
+        name: "run_linter",
+        description:
+          "Run native Elixir linters and tools (oeditus_credo, propwise, credo, dialyzer) against whole project, diff, or CR targets.",
+        parameters: %{
+          type: "object",
+          properties: %{
+            args: %{
+              type: "string",
+              description:
+                "Linter command arguments (e.g. 'propwise cr main', 'oeditus_credo diff', 'propwise', 'all cr main')."
+            }
+          },
+          required: ["args"]
+        },
+        execute: &linter_tool/1
+      },
+      %{
         name: "yaml_format",
         description: "Formats JSON or YAML text with pretty indentation.",
         parameters: %{
@@ -304,6 +321,13 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
 
   def git_commit_tool(%{"message" => message}) do
     case DeepSeekHarness.Git.commit(message) do
+      {:ok, out} -> {:ok, out}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  def linter_tool(%{"args" => args}) do
+    case DeepSeekHarness.Linter.run(args) do
       {:ok, out} -> {:ok, out}
       {:error, err} -> {:error, err}
     end

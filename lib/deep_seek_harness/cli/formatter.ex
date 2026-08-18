@@ -26,6 +26,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
     "Use /skills [name] to list available skills or execute a skill instruction",
     "Use /compact to compress conversation context to save tokens",
     "Use /diff to show colorized git diff of workspace changes",
+    "Use /linter <tool> [cr|diff|project] to run native Elixir linters (oeditus_credo, propwise, credo)",
     "Use /review <base> [head] to compare two git branches and generate a detailed Code Review",
     "Use /commit <message> to auto-commit staged workspace changes to git",
     "Use /cost to display token usage and session cost statistics",

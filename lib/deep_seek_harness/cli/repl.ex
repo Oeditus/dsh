@@ -186,6 +186,35 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/linter " <> args, _session_pid, _session_id) do
+    args = String.trim(args)
+
+    IO.puts(Formatter.format_info("Running linter tool: #{args}…"))
+
+    case DeepSeekHarness.Linter.run(args) do
+      {:ok, out} ->
+        IO.puts("\n#{out}\n")
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/linter", _session_pid, _session_id) do
+    IO.puts(DeepSeekHarness.Linter.help_text())
+    :continue
+  end
+
+  def handle_input("/lint " <> args, session_pid, session_id) do
+    handle_input("/linter " <> args, session_pid, session_id)
+  end
+
+  def handle_input("/lint", session_pid, session_id) do
+    handle_input("/linter", session_pid, session_id)
+  end
+
   def handle_input("/review " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 

@@ -34,6 +34,8 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/diff",
     "/exit",
     "/help",
+    "/lint",
+    "/linter",
     "/mcp",
     "/mode",
     "/model",
