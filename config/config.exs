@@ -8,11 +8,11 @@ config :dllb,
   pool_size: String.to_integer(System.get_env("DLLB_POOL_SIZE", "30")),
   timeout: :infinity
 
-# Configure ragex knowledge graph store backend to use global dllb server
+# Configure ragex knowledge graph store backend to use per-project dllb server daemon
 # Disable stdio server when embedded in dsh to prevent raw JSON-RPC dumps
 config :ragex,
   store_backend: :dllb,
-  dllb_mode: :global,
+  dllb_mode: :per_project,
   start_stdio_server: false
 
 # Configure EXLA to disable log sink when NIF is uncompiled/unavailable

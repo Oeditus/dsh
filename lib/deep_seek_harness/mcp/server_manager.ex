@@ -406,13 +406,18 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       if dllb_mode == :per_project and Code.ensure_loaded?(DllbPM) do
         case DllbPM.set_active_project(target_dir) do
           :ok ->
-            Logger.info("⚡🔌 Per-project Dllb instance active for #{target_dir}")
+            db_path = Path.join(target_dir, ".ragex/dllb.redb")
+
+            Logger.info(
+              "⚡🔌 Per-project Dllb daemon active for '#{target_dir}' (database: #{db_path})"
+            )
 
           {:error, reason} ->
-            Logger.warning("⚡🔌 Per-project Dllb notice: #{inspect(reason)}")
+            Logger.warning("⚡🔌 Per-project Dllb startup notice: #{inspect(reason)}")
         end
       else
-        # Ensure Dllb.Pool is started under Dllb.Supervisor if not running
+        Logger.info("⚡🔌 Connecting to global Dllb server on #{host}:#{port}…")
+
         if Process.whereis(Dllb.Pool) == nil and Process.whereis(Dllb.Supervisor) != nil do
           pool_opts = [
             host: host,
@@ -424,7 +429,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
           case Supervisor.start_child(Dllb.Supervisor, Dllb.Pool.child_spec(pool_opts)) do
             {:ok, _pid} ->
-              Logger.info("⚡🔌 Dllb.Pool started on #{host}:#{port} (pool size: #{pool_size})")
+              Logger.info("⚡🔌 Dllb.Pool connected on #{host}:#{port} (pool size: #{pool_size})")
 
             {:error, {:already_started, _pid}} ->
               :ok
