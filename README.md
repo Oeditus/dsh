@@ -70,28 +70,131 @@ DeepSeek Harness supports the full suite of official DeepSeek models, local open
 
 ## Installation & Setup
 
-### One-Command Global Developer Install
+This guide provides step-by-step instructions to get **DeepSeek Harness (`dsh`)** up and running on your system, along with its database backend **`dllb`** (which powers **Ragex** code analysis and knowledge graph indexing).
 
-```bash
-# Clone the repository
-git clone https://github.com/Oeditus/ragec.git
-cd ragec
+---
 
-# Install dependencies and build global binary executable (~/.local/bin/dsh)
-mix deps.get
-mix dsh.install
-```
+### Prerequisites (What You Need First)
 
-Ensure `~/.local/bin` is in your `$PATH`:
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
+Before installing `dsh` or `dllb`, ensure your machine has the following tools installed:
 
-### Standalone Shell Installer Script
+1. **Elixir & Erlang/OTP**: 
+   - `dsh` is built using the Elixir programming language on top of the Erlang runtime engine.
+   - **Required versions**: Elixir `1.18+` and Erlang/OTP `27+`.
+   - *How to install*: Use your system package manager (e.g. `brew install elixir` on macOS or `sudo apt install elixir` on Ubuntu) or a version manager like [`asdf`](https://asdf-vm.com/) / [`mise`](https://mise.jdx.dev/).
+2. **Git**: Required to download the project source code.
+3. **C/C++ Build Tools & Libraries** *(Linux only)*:
+   - Required for compiling native code dependencies: `build-essential` and `libgit2-dev`.
+   - *Ubuntu/Debian command*: `sudo apt-get install -y build-essential libgit2-dev`
+
+---
+
+### 1. Installing `dsh` (DeepSeek Harness)
+
+Choose **one** of the two installation methods below:
+
+#### Option A: Quick Automated Installer (Recommended)
+
+Run this single command in your terminal to automatically clone, build, and install `dsh`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Oeditus/ragec/main/install.sh | bash
 ```
+
+#### Option B: Manual Installation from Source
+
+If you prefer installing manually from the source code:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Oeditus/ragec.git
+cd ragec
+
+# 2. Fetch project dependencies
+mix deps.get
+
+# 3. Compile and install dsh globally to ~/.local/bin/dsh
+mix dsh.install
+```
+
+#### 📍 Adding `~/.local/bin` to Your System `$PATH`
+
+After installation, ensure `~/.local/bin` is included in your shell path so you can run `dsh` from any terminal directory:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+> **Tip:** Add the line above to your shell configuration file (e.g. `~/.bashrc` or `~/.zshrc`) so it is available automatically in every new terminal window.
+
+---
+
+### 2. Installing `dllb` for `ragex` Code Indexing
+
+#### What is `dllb` and why do I need it?
+`dsh` features a powerful code intelligence engine called **Ragex** (`/ragex`). To store code symbol relationship graphs, perform fast full-text code searches, and cache project metadata across restarts, Ragex uses a lightweight, high-performance database server called **`dllb-server`** (written in Rust).
+
+Installing `dllb-server` enables persistent, per-project database indexing.
+
+#### Option A: Download Pre-Compiled Binary (Easiest)
+
+1. Go to the [`dllb` GitHub Releases](https://github.com/Oeditus/dllb/releases) page.
+2. Download the `dllb-server` binary for your platform (e.g., Linux or macOS).
+3. Move the binary into your `~/.local/bin` directory (or any directory in your system `$PATH`) and make it executable:
+
+```bash
+# Move to local bin directory
+mv dllb-server ~/.local/bin/
+
+# Make executable
+chmod +x ~/.local/bin/dllb-server
+```
+
+#### Option B: Compile `dllb-server` from Source (Rust / Cargo)
+
+If you have the **Rust toolchain** installed (`cargo`):
+
+```bash
+# 1. Clone the dllb repository
+git clone https://github.com/Oeditus/dllb.git
+cd dllb
+
+# 2. Build the optimized release binary
+cargo build --release -p dllb-server
+
+# 3. Option i: Copy the compiled binary to your PATH
+cp target/release/dllb-server ~/.local/bin/
+
+# OR Option ii: Leave it in sibling directory `../dllb/target/release/dllb-server`
+```
+
+#### How Ragex Finds `dllb-server` (Path Resolution Precedence)
+
+When you run `/ragex` inside `dsh`, Ragex looks for the `dllb-server` executable automatically in this order:
+
+1. **Custom Environment Variable**: `DLLB_SERVER_BIN=/path/to/dllb-server`
+2. **System `$PATH`**: Directories in your `$PATH` (e.g. `~/.local/bin/dllb-server` or `/usr/local/bin/dllb-server`).
+3. **Sibling Repository Path**: Relative path `../dllb/target/release/dllb-server` or `../dllb/target/debug/dllb-server`.
+
+---
+
+### 3. Verifying Your Installation
+
+1. **Check `dsh` CLI**:
+   ```bash
+   dsh --version
+   ```
+2. **Start `dsh` in any project**:
+   ```bash
+   cd /path/to/your/project
+   dsh
+   ```
+3. **Test Ragex Code Indexing**:
+   Inside the `dsh` REPL session, type:
+   ```text
+   /ragex
+   ```
+   You should see confirmation that Ragex and the `dllb` knowledge graph backend have been successfully initialized!
 
 ---
 
