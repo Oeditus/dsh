@@ -721,7 +721,13 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         String.starts_with?(path, "deps") or
         String.contains?(path, "/deps/") or
         String.starts_with?(path, ".elixir_ls") or
-        String.contains?(path, "/.elixir_ls/")
+        String.contains?(path, "/.elixir_ls/") or
+        String.starts_with?(path, "node_modules") or
+        String.contains?(path, "/node_modules/") or
+        String.starts_with?(path, "dist") or
+        String.contains?(path, "/dist/") or
+        String.starts_with?(path, "build") or
+        String.contains?(path, "/build/")
     end)
   rescue
     _ -> fallback_wildcard_files()
@@ -736,7 +742,13 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         String.starts_with?(path, "deps") or
         String.contains?(path, "/deps/") or
         String.starts_with?(path, ".elixir_ls") or
-        String.contains?(path, "/.elixir_ls/")
+        String.contains?(path, "/.elixir_ls/") or
+        String.starts_with?(path, "node_modules") or
+        String.contains?(path, "/node_modules/") or
+        String.starts_with?(path, "dist") or
+        String.contains?(path, "/dist/") or
+        String.starts_with?(path, "build") or
+        String.contains?(path, "/build/")
     end)
   end
 

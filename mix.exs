@@ -44,7 +44,7 @@ defmodule DeepSeekHarness.MixProject do
       {:makeup_cure, ">= 0.0.0", optional: true},
       {:owl, "~> 0.13"},
       {:egit, "~> 0.2"},
-      {:ragex, "~> 0.25"},
+      {:ragex, "~> 0.26"},
       {:dllb, "~> 0.9"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}

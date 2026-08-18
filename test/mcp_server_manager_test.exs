@@ -23,4 +23,31 @@ defmodule DeepSeekHarness.MCPServerManagerTest do
     assert {:error, msg} = MCPServerManager.remove_server("non_existent_server")
     assert msg =~ "not connected"
   end
+
+  test "formats validation errors with dynamic language (JS/TS support)" do
+    err_atom = %{
+      type: :validation_error,
+      language: :javascript,
+      errors: [%{line: 12, message: "Unexpected token"}]
+    }
+
+    # Verify via private format_mcp_content or through validation error payload:
+    formatted_atom_str = :erlang.apply(MCPServerManager, :format_mcp_content, [err_atom])
+
+    assert formatted_atom_str =~
+             "Validation Error: Code changes produced invalid javascript syntax:"
+
+    assert formatted_atom_str =~ "● Line 12: Unexpected token"
+
+    err_string_keys = %{
+      "type" => "validation_error",
+      "language" => "typescript",
+      "errors" => [%{"line" => 42, "message" => "Type mismatch"}]
+    }
+
+    formatted_str = :erlang.apply(MCPServerManager, :format_mcp_content, [err_string_keys])
+
+    assert formatted_str =~ "Validation Error: Code changes produced invalid typescript syntax:"
+    assert formatted_str =~ "● Line 42: Type mismatch"
+  end
 end
