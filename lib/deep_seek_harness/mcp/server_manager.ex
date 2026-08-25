@@ -373,6 +373,8 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     use_dllb? = Code.ensure_loaded?(Dllb)
     backend = if use_dllb?, do: :dllb, else: :ets
 
+    ensure_dllb_server_binary()
+
     host = System.get_env("DLLB_HOST", Application.get_env(:dllb, :host, "127.0.0.1"))
 
     port =
@@ -737,4 +739,34 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   end
 
   defp format_mcp_content(content), do: inspect(content, pretty: true)
+
+  defp ensure_dllb_server_binary do
+    case Application.get_env(:ragex, :dllb_server_bin) || System.get_env("DLLB_SERVER_BIN") do
+      bin when is_binary(bin) and bin != "" ->
+        :ok
+
+      _ ->
+        repo_dir =
+          System.get_env("DSH_REPO_DIR") ||
+            Application.get_env(:deep_seek_harness, :repo_dir)
+
+        candidates =
+          [
+            repo_dir && Path.expand("../dllb/target/release/dllb-server", repo_dir),
+            repo_dir && Path.expand("../dllb/target/debug/dllb-server", repo_dir),
+            "/opt/Proyectos/Oeditus/dllb/target/release/dllb-server",
+            "/opt/Proyectos/Oeditus/dllb/target/debug/dllb-server"
+          ]
+          |> Enum.reject(&is_nil/1)
+
+        case Enum.find(candidates, &File.exists?/1) do
+          nil ->
+            :ok
+
+          found_bin ->
+            Application.put_env(:ragex, :dllb_server_bin, found_bin)
+            System.put_env("DLLB_SERVER_BIN", found_bin)
+        end
+    end
+  end
 end

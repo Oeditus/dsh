@@ -34,8 +34,16 @@ cat <<EOF > "$WRAPPER"
 set -e
 export DSH_WORKSPACE="\$PWD"
 export DSH_REPO_DIR="$INSTALL_DIR"
+export DLLB_DIR="\${DLLB_DIR:-\$(cd "$INSTALL_DIR/../dllb" 2>/dev/null && pwd || echo "$INSTALL_DIR/../dllb")}"
+if [ -z "\${DLLB_SERVER_BIN:-}" ]; then
+  if [ -f "\$DLLB_DIR/target/release/dllb-server" ]; then
+    export DLLB_SERVER_BIN="\$DLLB_DIR/target/release/dllb-server"
+  elif [ -f "\$DLLB_DIR/target/debug/dllb-server" ]; then
+    export DLLB_SERVER_BIN="\$DLLB_DIR/target/debug/dllb-server"
+  fi
+fi
 cd "\$PWD"
-exec "$RELEASE_BIN" eval "DeepSeekHarness.CLI.Main.main(System.argv())" "\$@"
+exec "$INSTALL_DIR/dsh" --prod "\$@"
 EOF
 
 chmod +x "$WRAPPER"

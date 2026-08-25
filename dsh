@@ -29,7 +29,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_ENV="${DSH_ENV:-auto}"
+TARGET_ENV="${DSH_ENV:-prod}"
+export DSH_REPO_DIR="${DSH_REPO_DIR:-${SCRIPT_DIR}}"
 
 ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -54,13 +55,26 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---- dllb server lazy startup --------------------------------------------
-DLLB_HOST="${DLLB_HOST:-127.0.0.1}"
-DLLB_PORT="${DLLB_PORT:-3009}"
+export DLLB_HOST="${DLLB_HOST:-127.0.0.1}"
+export DLLB_PORT="${DLLB_PORT:-3009}"
 DLLB_DIR_DEFAULT="$(cd -- "${SCRIPT_DIR}/../dllb" >/dev/null 2>&1 && pwd || echo "${SCRIPT_DIR}/../dllb")"
-DLLB_DIR="${DLLB_DIR:-${DLLB_DIR_DEFAULT}}"
-DLLB_START="${DLLB_START:-./start_prod.sh}"
-DLLB_LOG="${DLLB_LOG:-${DLLB_DIR}/dllb.log}"
-DLLB_WAIT="${DLLB_WAIT:-60}"
+export DLLB_DIR="${DLLB_DIR:-${DLLB_DIR_DEFAULT}}"
+if [[ -f "${DLLB_DIR}/target/release/dllb-server" ]]; then
+  DLLB_START_DEFAULT="${DLLB_DIR}/target/release/dllb-server"
+else
+  DLLB_START_DEFAULT="./start_prod.sh"
+fi
+export DLLB_START="${DLLB_START:-${DLLB_START_DEFAULT}}"
+export DLLB_LOG="${DLLB_LOG:-${DLLB_DIR}/dllb.log}"
+export DLLB_WAIT="${DLLB_WAIT:-60}"
+
+if [[ -z "${DLLB_SERVER_BIN:-}" ]]; then
+  if [[ -f "${DLLB_DIR}/target/release/dllb-server" ]]; then
+    export DLLB_SERVER_BIN="${DLLB_DIR}/target/release/dllb-server"
+  elif [[ -f "${DLLB_DIR}/target/debug/dllb-server" ]]; then
+    export DLLB_SERVER_BIN="${DLLB_DIR}/target/debug/dllb-server"
+  fi
+fi
 
 port_up() {
   local host="$1" port="$2"
