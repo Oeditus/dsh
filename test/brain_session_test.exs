@@ -122,4 +122,19 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert tool["tool_call_id"] == "call_123"
     assert user2["role"] == "user"
   end
+
+  test "whitelists all ragex tools automatically without asking for user confirmation" do
+    # Verify that ragex tool names starting with mcp_ragex_, ragex_, or ragex are permitted
+    state = %{
+      cwd: File.cwd!(),
+      sandbox_workspace: false,
+      permission_mode: :ask_confirm,
+      session_tool_permissions: %{}
+    }
+
+    assert {:allow, _} = Session.tool_permitted?("mcp_ragex_search_code", %{}, state)
+    assert {:allow, _} = Session.tool_permitted?("mcp_ragex_ast_search", %{}, state)
+    assert {:allow, _} = Session.tool_permitted?("ragex_symbol_location", %{}, state)
+    assert {:allow, _} = Session.tool_permitted?("ragex", %{}, state)
+  end
 end

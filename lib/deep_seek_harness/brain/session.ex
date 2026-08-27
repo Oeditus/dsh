@@ -470,7 +470,7 @@ defmodule DeepSeekHarness.Brain.Session do
       total_tokens: total,
       estimated_cost_usd: Float.round(total_cost, 6),
       tools_count: length(state.tools),
-      mcp_servers_count: map_size(mcp_servers),
+      mcp_servers_count: Enum.count(mcp_servers),
       turns_count: length(state.turn_history)
     }
 
@@ -871,7 +871,8 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   # Permission Authorization Gate (Item 1, 4, 18)
-  defp tool_permitted?(tool_name, args, state) do
+  @doc false
+  def tool_permitted?(tool_name, args, state) do
     config = Config.load_config(state.cwd)
     tool_perms = Map.get(config, "tool_permissions", %{})
     config_policy = Map.get(tool_perms, tool_name)
@@ -891,7 +892,7 @@ defmodule DeepSeekHarness.Brain.Session do
       policy == "deny" ->
         {:deny, "Tool '#{tool_name}' execution denied by configuration policy.", state}
 
-      policy == "allow" ->
+      policy == "allow" or ragex_tool?(tool_name) ->
         {:allow, state}
 
       destructive_bash_command?(tool_name, args) ->
@@ -910,6 +911,14 @@ defmodule DeepSeekHarness.Brain.Session do
     end
   end
 
+  defp ragex_tool?(tool_name) when is_binary(tool_name) do
+    String.starts_with?(tool_name, "mcp_ragex_") or
+      String.starts_with?(tool_name, "ragex_") or
+      tool_name == "ragex"
+  end
+
+  defp ragex_tool?(_), do: false
+
   defp in_workspace?(path, cwd) do
     abs_path = Path.expand(path, cwd)
     abs_cwd = Path.expand(cwd)
@@ -927,8 +936,8 @@ defmodule DeepSeekHarness.Brain.Session do
   defp destructive_bash_command?(_, _), do: false
 
   defp confirm_tool_with_user(tool_name, args, reason, state) do
-    # Never ask for ask_question tool itself
-    if tool_name == "ask_question" do
+    # Never ask for ask_question or ragex tools
+    if tool_name == "ask_question" or ragex_tool?(tool_name) do
       {:allow, state}
     else
       summary = format_tool_confirmation_summary(tool_name, args)
