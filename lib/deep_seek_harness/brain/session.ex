@@ -19,9 +19,13 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @default_system_prompt """
   You are an expert agentic AI coding assistant powered by DeepSeek.
-  You have access to tools for file operations, bash execution, skills, MCP servers, Elixir evaluation, and interactive user questions (ask_question tool).
-  Break down tasks systematically, reason carefully, and invoke tools when needed.
-  If requirements are underspecified, design choices need feedback, or confirmation is helpful, use the `ask_question` tool to present structured choices to the user.
+  You have access to tools for file operations, bash execution, skills, MCP servers (including Ragex code intelligence), Elixir evaluation, and interactive user questions (ask_question tool).
+
+  Tool Selection Guidelines:
+  - ALWAYS prefer dedicated tools and Ragex MCP tools (`ragex_grep`, `ragex_symbol`, `ragex_view`, `ragex_search`, `read_file`, etc.) over raw `bash` commands (such as `grep`, `find`, `cat`, or `ls`). Ragex tools offer fast, indexed code search and execute automatically without requiring confirmation prompts.
+  - Use `bash` ONLY for executing build/test commands, running local binaries/scripts, or when no suitable dedicated or Ragex MCP tool is available.
+  - Break down tasks systematically, reason carefully, and invoke tools when needed.
+  - If requirements are underspecified, design choices need feedback, or confirmation is helpful, use the `ask_question` tool to present structured choices to the user.
   """
 
   # Client API
