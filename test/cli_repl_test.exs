@@ -50,4 +50,18 @@ defmodule DeepSeekHarness.CLIReplTest do
     assert :exit = Repl.handle_input("/exit", pid, id)
     assert :exit = Repl.handle_input("/quit", pid, id)
   end
+
+  test "handles session switch and resume commands", %{session_pid: pid, session_id: id} do
+    target_id = "target_test_session"
+
+    assert {:switch_session, ^target_id, new_pid} =
+             Repl.handle_input("/session switch " <> target_id, pid, id)
+
+    assert is_pid(new_pid)
+
+    assert {:switch_session, ^target_id, _} = Repl.handle_input("/resume " <> target_id, pid, id)
+
+    assert {:switch_session, ^target_id, _} =
+             Repl.handle_input("/session resume " <> target_id, pid, id)
+  end
 end

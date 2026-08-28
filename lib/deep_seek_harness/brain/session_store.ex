@@ -167,12 +167,15 @@ defmodule DeepSeekHarness.Brain.SessionStore do
       {:ok, content} ->
         case Jason.decode(content) do
           {:ok, map} when is_map(map) ->
+            messages = Map.get(map, "messages", [])
+
             %{
               session_id: map["session_id"],
               model: map["model"],
               updated_at: parse_timestamp(map["updated_at"]),
-              message_count: length(Map.get(map, "messages", [])),
-              step_count: Map.get(map, "step_count", 0)
+              message_count: length(messages),
+              step_count: Map.get(map, "step_count", 0),
+              title: extract_first_user_message(messages)
             }
 
           _ ->
@@ -181,6 +184,60 @@ defmodule DeepSeekHarness.Brain.SessionStore do
 
       _ ->
         nil
+    end
+  end
+
+  @doc "Extracts and truncates the first user message content from session history."
+  def extract_first_user_message(messages) when is_list(messages) do
+    user_msg =
+      Enum.find(messages, fn
+        %{"role" => "user"} = msg -> get_message_text(msg["content"]) != ""
+        %{role: "user"} = msg -> get_message_text(msg[:content] || msg["content"]) != ""
+        _ -> false
+      end)
+
+    case user_msg do
+      %{"content" => content} -> sanitize_title(get_message_text(content))
+      %{content: content} -> sanitize_title(get_message_text(content))
+      _ -> nil
+    end
+  end
+
+  def extract_first_user_message(_), do: nil
+
+  defp get_message_text(content) when is_binary(content), do: content
+
+  defp get_message_text(content) when is_list(content) do
+    Enum.map_join(content, " ", fn
+      %{"text" => text} when is_binary(text) -> text
+      %{text: text} when is_binary(text) -> text
+      _ -> ""
+    end)
+  end
+
+  defp get_message_text(_), do: ""
+
+  defp sanitize_title(text) when is_binary(text) do
+    cleaned =
+      text
+      |> String.replace(~r/[\r\n\t]+/, " ")
+      |> String.replace(~r/\s+/, " ")
+      |> String.trim()
+
+    if cleaned == "" do
+      nil
+    else
+      truncate_text(cleaned, 60)
+    end
+  end
+
+  defp sanitize_title(_), do: nil
+
+  defp truncate_text(text, max_len) do
+    if String.length(text) > max_len do
+      String.slice(text, 0, max_len - 3) <> "..."
+    else
+      text
     end
   end
 

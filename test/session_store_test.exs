@@ -50,4 +50,29 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
     assert {:error, msg} = SessionStore.load_session("non_existent", tmp_dir)
     assert msg =~ "does not exist"
   end
+
+  test "extracts and truncates first user message title", %{tmp_dir: tmp_dir} do
+    long_msg = String.duplicate("A long user prompt ", 10)
+
+    session_state = %{
+      session_id: "test_sess_title",
+      model: "deepseek-chat",
+      permission_mode: :auto_approve,
+      step_count: 2,
+      total_prompt_tokens: 10,
+      total_completion_tokens: 10,
+      messages: [
+        %{"role" => "system", "content" => "System instructions..."},
+        %{"role" => "user", "content" => long_msg}
+      ],
+      snapshots: []
+    }
+
+    {:ok, _} = SessionStore.save_session(session_state, tmp_dir)
+    [meta] = SessionStore.list_session_metadata(tmp_dir)
+
+    assert meta.session_id == "test_sess_title"
+    assert String.ends_with?(meta.title, "...")
+    assert String.length(meta.title) == 60
+  end
 end

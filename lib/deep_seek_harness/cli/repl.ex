@@ -63,6 +63,9 @@ defmodule DeepSeekHarness.CLI.Repl do
           :continue ->
             loop(session_pid, session_id, updated_history)
 
+          {:switch_session, new_id, new_pid} ->
+            loop(new_pid, new_id, updated_history)
+
           :exit ->
             graceful_shutdown()
             print_resume_banner(session_id)
@@ -268,10 +271,11 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/cost", session_pid, _session_id) do
     stats = Session.get_token_stats(session_pid)
+    prompt_tokens = stats[:tracked_prompt_tokens] || stats[:estimated_prompt_tokens] || 0
 
     md = """
     ### Session Token & Cost Statistics
-    - **Estimated Context Tokens**: `#{stats.estimated_prompt_tokens}`
+    - **Estimated Context Tokens**: `#{prompt_tokens}`
     - **Completion Tokens**: `#{stats.tracked_completion_tokens}`
     - **Total Session Tokens**: `#{stats.total_tokens}`
     - **Estimated Cost (USD)**: `$#{:erlang.float_to_binary(stats.estimated_cost_usd, [{:decimals, 6}])}`
@@ -735,8 +739,9 @@ defmodule DeepSeekHarness.CLI.Repl do
       else
         Enum.map_join(metas, "\n", fn m ->
           dt = m.updated_at |> NaiveDateTime.to_iso8601() |> String.slice(0, 19)
+          title_prefix = if m[:title], do: "**\"#{m.title}\"** ", else: ""
 
-          "- **`#{m.session_id}`** [#{m.model}]: #{m.message_count} msgs, step #{m.step_count} (Updated: `#{dt}`)"
+          "- #{title_prefix}`#{m.session_id}` [#{m.model}]: #{m.message_count} msgs, step #{m.step_count} (Updated: `#{dt}`)"
         end)
       end
 
@@ -765,11 +770,12 @@ defmodule DeepSeekHarness.CLI.Repl do
       IO.puts(Formatter.format_info("No saved sessions available to resume."))
       :continue
     else
-      opts =
-        Enum.map(metas, fn m ->
-          dt = m.updated_at |> NaiveDateTime.to_iso8601() |> String.slice(0, 19)
-          "#{m.session_id} [#{m.model}, #{m.message_count} msgs, updated #{dt}]"
+      meta_map =
+        Enum.into(metas, %{}, fn m ->
+          {format_session_picker_label(m), m.session_id}
         end)
+
+      opts = Enum.map(metas, &format_session_picker_label/1)
 
       ans =
         DeepSeekHarness.CLI.Spinner.with_paused(fn ->
@@ -783,7 +789,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
       case ans do
         %{selected: [sel]} ->
-          target_id = sel |> String.split(" ", parts: 2) |> List.first()
+          target_id = Map.get(meta_map, sel) || sel |> String.split(" ", parts: 2) |> List.first()
           handle_input("/session switch " <> target_id, session_pid, session_id)
 
         _ ->
@@ -794,7 +800,13 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/session switch " <> target_id, _session_pid, _session_id) do
     id = String.trim(target_id)
-    {:ok, new_pid} = DeepSeekHarness.Brain.SessionSupervisor.start_session(session_id: id)
+
+    new_pid =
+      case DeepSeekHarness.Brain.SessionSupervisor.start_session(session_id: id) do
+        {:ok, pid} -> pid
+        {:error, {:already_started, pid}} -> pid
+      end
+
     IO.puts(Formatter.format_success("Switched active REPL session to '#{id}'"))
     {:switch_session, id, new_pid}
   end
@@ -1102,6 +1114,12 @@ defmodule DeepSeekHarness.CLI.Repl do
     end
 
     :continue
+  end
+
+  defp format_session_picker_label(m) do
+    dt = m.updated_at |> NaiveDateTime.to_iso8601() |> String.slice(0, 19)
+    name = if m[:title], do: "\"#{m.title}\"", else: "Untitled Session"
+    "#{name} (#{m.session_id}) [#{m.model}, #{m.message_count} msgs, updated #{dt}]"
   end
 
   def print_resume_banner(session_id) do
