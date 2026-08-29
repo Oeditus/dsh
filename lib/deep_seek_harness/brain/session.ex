@@ -772,8 +772,11 @@ defmodule DeepSeekHarness.Brain.Session do
   defp maybe_put_reasoning(msg, _), do: msg
 
   defp execute_tool_calls(tool_calls, state) do
-    {tool_messages, system_notices, final_state} =
-      Enum.reduce(tool_calls, {[], [], state}, fn tc, {msg_acc, notice_acc, current_state} ->
+    alias DeepSeekHarness.TaskEngine.Orchestrator
+
+    # Step 1: Check permissions and log TOOL_CALL transcripts for all tool calls
+    {permitted_calls, denied_results, state_after_permissions} =
+      Enum.reduce(tool_calls, {[], [], state}, fn tc, {allowed_acc, denied_acc, current_state} ->
         SessionStore.append_transcript(
           current_state.session_id,
           "TOOL_CALL",
@@ -783,36 +786,7 @@ defmodule DeepSeekHarness.Brain.Session do
 
         case tool_permitted?(tc.name, tc.arguments, current_state) do
           {:allow, updated_state} ->
-            exec_res = HandsExecutor.execute(updated_state.hands, tc.name, tc.arguments)
-
-            tool_msg =
-              case exec_res do
-                {:ok, result} ->
-                  %{"role" => "tool", "tool_call_id" => tc.id, "content" => result}
-
-                {:error, err} ->
-                  %{
-                    "role" => "tool",
-                    "tool_call_id" => tc.id,
-                    "content" => "Tool execution failed: #{err}"
-                  }
-              end
-
-            SessionStore.append_transcript(
-              updated_state.session_id,
-              "TOOL_RESULT",
-              tool_msg,
-              updated_state.cwd
-            )
-
-            {updated_state_after, maybe_notice} =
-              AgentLoop.handle_tool_failure(tc.name, exec_res, updated_state)
-
-            state_with_issues = update_issue_tracker(updated_state_after, tc, exec_res)
-
-            new_notices = if maybe_notice, do: notice_acc ++ [maybe_notice], else: notice_acc
-
-            {msg_acc ++ [tool_msg], new_notices, state_with_issues}
+            {allowed_acc ++ [tc], denied_acc, updated_state}
 
           {:deny, reason, updated_state} ->
             tool_msg = %{
@@ -828,9 +802,62 @@ defmodule DeepSeekHarness.Brain.Session do
               updated_state.cwd
             )
 
-            {msg_acc ++ [tool_msg], notice_acc, updated_state}
+            {allowed_acc, denied_acc ++ [{tc, tool_msg}], updated_state}
         end
       end)
+
+    # Step 2: Execute permitted tools concurrently off the main loop via TaskEngine
+    executed_batch = Orchestrator.execute_batch(permitted_calls, state_after_permissions)
+
+    # Step 3: Collate results in original order, update transcripts, failure handles, & issue tracking
+    {tool_messages, system_notices, final_state} =
+      Enum.reduce(
+        tool_calls,
+        {[], [], state_after_permissions},
+        fn tc, {msg_acc, notice_acc, curr_state} ->
+          case Enum.find(denied_results, fn {denied_tc, _} -> denied_tc.id == tc.id end) do
+            {_denied_tc, tool_msg} ->
+              {msg_acc ++ [tool_msg], notice_acc, curr_state}
+
+            nil ->
+              case Enum.find(executed_batch, fn {exec_tc, _} -> exec_tc.id == tc.id end) do
+                {_exec_tc, exec_res} ->
+                  tool_msg =
+                    case exec_res do
+                      {:ok, result} ->
+                        %{"role" => "tool", "tool_call_id" => tc.id, "content" => result}
+
+                      {:error, err} ->
+                        %{
+                          "role" => "tool",
+                          "tool_call_id" => tc.id,
+                          "content" => "Tool execution failed: #{err}"
+                        }
+                    end
+
+                  SessionStore.append_transcript(
+                    curr_state.session_id,
+                    "TOOL_RESULT",
+                    tool_msg,
+                    curr_state.cwd
+                  )
+
+                  {curr_state_after, maybe_notice} =
+                    AgentLoop.handle_tool_failure(tc.name, exec_res, curr_state)
+
+                  state_with_issues = update_issue_tracker(curr_state_after, tc, exec_res)
+
+                  new_notices =
+                    if maybe_notice, do: notice_acc ++ [maybe_notice], else: notice_acc
+
+                  {msg_acc ++ [tool_msg], new_notices, state_with_issues}
+
+                nil ->
+                  {msg_acc, notice_acc, curr_state}
+              end
+          end
+        end
+      )
 
     all_messages = tool_messages ++ system_notices
     {all_messages, final_state}

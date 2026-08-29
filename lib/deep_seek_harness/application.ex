@@ -18,6 +18,8 @@ defmodule DeepSeekHarness.Application do
       DeepSeekHarness.Plugin.Loader,
       # MCP Server Manager
       DeepSeekHarness.MCP.ServerManager,
+      # OTP Task Subsystem (Task.Supervisor & LockRegistry)
+      DeepSeekHarness.TaskEngine.Supervisor,
       # Supervisor for session actors ("Brains")
       DeepSeekHarness.Brain.SessionSupervisor
     ]

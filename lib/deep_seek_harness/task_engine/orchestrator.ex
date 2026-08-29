@@ -1,0 +1,106 @@
+defmodule DeepSeekHarness.TaskEngine.Orchestrator do
+  @moduledoc """
+  Main orchestrator process for executing tool call batches concurrently.
+  Spawns worker subprocesses under TaskEngine.TaskSupervisor, manages resource locking
+  via TaskEngine.LockRegistry, handles timeouts, and aggregates results.
+  """
+  alias DeepSeekHarness.Hands.Executor, as: HandsExecutor
+  alias DeepSeekHarness.TaskEngine.TaskSupervisor
+
+  @doc """
+  Executes a list of tool call structs concurrently in separate processes.
+  Returns a list of tuples `{tool_call, execution_result}` in original order.
+  """
+  def execute_batch(tool_calls, session_state, opts \\ []) when is_list(tool_calls) do
+    timeout = opts[:timeout] || 60_000
+
+    # Pair each tool call with an index to preserve original order
+    indexed_calls = Enum.with_index(tool_calls)
+
+    tasks =
+      Enum.map(indexed_calls, fn {tc, idx} ->
+        task =
+          Task.Supervisor.async_nolink(TaskSupervisor, fn ->
+            result = run_single_tool(tc, session_state)
+            {idx, tc, result}
+          end)
+
+        {task, idx, tc}
+      end)
+
+    # Wait for all subprocesses concurrently
+    task_structs = Enum.map(tasks, fn {task, _idx, _tc} -> task end)
+
+    yielded_map =
+      task_structs
+      |> Task.yield_many(timeout)
+      |> Enum.into(%{})
+
+    # Collect and sort results by original index
+    results =
+      Enum.map(tasks, fn {task, idx, tc} ->
+        res =
+          case Map.get(yielded_map, task) do
+            {:ok, {_idx, _tc, exec_result}} ->
+              exec_result
+
+            nil ->
+              Task.shutdown(task, :brutal_kill)
+              {:error, "Tool execution timed out after #{timeout}ms"}
+
+            {:exit, reason} ->
+              {:error, "Tool process crashed: #{inspect(reason)}"}
+          end
+
+        {idx, tc, res}
+      end)
+
+    results
+    |> Enum.sort_by(fn {idx, _tc, _res} -> idx end)
+    |> Enum.map(fn {_idx, tc, res} -> {tc, res} end)
+  end
+
+  defp run_single_tool(tc, session_state) do
+    lock_key = get_lock_resource(tc.name, tc.arguments)
+
+    if lock_key do
+      acquire_lock(lock_key)
+    end
+
+    try do
+      HandsExecutor.execute(session_state.hands, tc.name, tc.arguments)
+    after
+      if lock_key do
+        release_lock(lock_key)
+      end
+    end
+  end
+
+  defp get_lock_resource(tool_name, args) when is_map(args) do
+    if tool_name in ["write_file", "replace_file", "write_to_file", "replace_file_content"] do
+      path = Map.get(args, "target_file") || Map.get(args, "path") || Map.get(args, "TargetFile")
+      if is_binary(path), do: "file_lock:" <> Path.expand(path)
+    else
+      nil
+    end
+  end
+
+  defp get_lock_resource(_, _), do: nil
+
+  defp acquire_lock(resource_key) when is_binary(resource_key) do
+    case Registry.register(DeepSeekHarness.TaskEngine.LockRegistry, resource_key, :locked) do
+      {:ok, _owner} ->
+        :ok
+
+      {:error, {:already_registered, _pid}} ->
+        Process.sleep(10)
+        acquire_lock(resource_key)
+    end
+  end
+
+  defp release_lock(resource_key) when is_binary(resource_key) do
+    Registry.unregister(DeepSeekHarness.TaskEngine.LockRegistry, resource_key)
+  rescue
+    _ -> :ok
+  end
+end
