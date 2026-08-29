@@ -9,6 +9,7 @@ defmodule DeepSeekHarness.CLI.SpinnerTest do
     :ok
   end
 
+  @tag ragex: true
   test "starts and stops spinner safely" do
     assert :ok = Spinner.stop()
     refute Spinner.active?()
@@ -46,6 +47,7 @@ defmodule DeepSeekHarness.CLI.SpinnerTest do
     assert formatted_none == "⠋ Thinking…"
   end
 
+  @tag ragex: true
   test "spinner includes gray tip when active" do
     {:ok, _pid} = Spinner.start(title: "Processing task", tip: "Use /help for commands")
     line = Spinner.current_line()

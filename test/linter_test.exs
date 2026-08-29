@@ -29,6 +29,7 @@ defmodule DeepSeekHarness.LinterTest do
       assert String.contains?(err, "Unknown linter tool")
     end
 
+    @tag ragex: true
     test "accepts aliases for oeditus_credo" do
       {:ok, out1} = Linter.run("oeditus_credo cr main")
       {:ok, out2} = Linter.run("oeditus cr main")
@@ -39,6 +40,7 @@ defmodule DeepSeekHarness.LinterTest do
       assert is_binary(out3)
     end
 
+    @tag ragex: true
     test "handles propwise on cr mode cleanly" do
       {:ok, out} = Linter.run("propwise cr main")
       assert is_binary(out)

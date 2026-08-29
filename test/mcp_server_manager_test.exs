@@ -3,6 +3,7 @@ defmodule DeepSeekHarness.MCPServerManagerTest do
 
   alias DeepSeekHarness.MCP.ServerManager, as: MCPServerManager
 
+  @tag ragex: true
   test "discovers ragex directory path" do
     assert {:ok, dir} = MCPServerManager.discover_ragex_dir(".")
     assert String.contains?(dir, "ragex")

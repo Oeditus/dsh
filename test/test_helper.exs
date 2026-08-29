@@ -7,4 +7,8 @@ Application.put_env(:deep_seek_harness, :system_halt_enabled, false)
 Application.put_env(:nx, :default_backend, Nx.BinaryBackend)
 Application.put_env(:exla, :start_log_sink, false)
 
+if System.get_env("CI") || System.get_env("GITHUB_ACTIONS") do
+  ExUnit.configure(exclude: [ragex: true])
+end
+
 ExUnit.start()
