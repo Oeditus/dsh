@@ -183,43 +183,39 @@ defmodule DeepSeekHarness.MCP.ServerManager do
   end
 
   @impl true
-  def handle_call({:start_ragex, target_dir, opts}, _from, state) do
-    case do_start_ragex(target_dir, opts) do
-      {:ok, dir, tools_registered} ->
-        new_servers =
-          Map.put(state.servers, "ragex", %{
-            command: "in_process",
-            args: [],
-            cwd: dir,
-            tools: tools_registered
-          })
+  def handle_call({:start_ragex, target_dir, opts}, from, state) do
+    case state.ragex_status do
+      :starting ->
+        {:noreply, %{state | waiting_callers: [from | state.waiting_callers]}}
 
-        {:reply, {:ok, dir, tools_registered}, %{state | servers: new_servers}}
+      _ ->
+        Task.start(fn ->
+          case do_start_ragex(target_dir, opts) do
+            {:ok, dir, tools_registered} ->
+              GenServer.cast(@name, {:ragex_started, dir, tools_registered})
 
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+            {:error, reason} ->
+              GenServer.cast(@name, {:ragex_failed, reason})
+          end
+        end)
+
+        {:noreply, %{state | ragex_status: :starting, waiting_callers: [from]}}
     end
   end
 
   @impl true
   def handle_call(:stop_ragex, _from, state) do
-    case Map.get(state.servers, "ragex") do
-      %{cwd: cwd} when is_binary(cwd) ->
-        if Code.ensure_loaded?(DllbPM) do
-          try do
-            DllbPM.stop_instance(cwd)
-          rescue
-            _ -> :ok
-          catch
-            _, _ -> :ok
-          end
-        end
-
-        {:reply, :ok, %{state | servers: Map.delete(state.servers, "ragex")}}
-
-      _ ->
-        {:reply, :ok, state}
+    if Code.ensure_loaded?(DllbPM) do
+      try do
+        DllbPM.stop_all_instances()
+      rescue
+        _ -> :ok
+      catch
+        _, _ -> :ok
+      end
     end
+
+    {:reply, :ok, %{state | servers: Map.delete(state.servers, "ragex")}}
   end
 
   @impl true
@@ -268,6 +264,10 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
       try do
         configure_ragex_store(target_dir)
+
+        if Code.ensure_loaded?(Ragex.Graph.Store) do
+          Ragex.Graph.Store.load_project(target_dir)
+        end
       after
         Logger.configure(level: orig_level)
       end
