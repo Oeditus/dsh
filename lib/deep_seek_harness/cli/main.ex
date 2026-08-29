@@ -54,18 +54,25 @@ defmodule DeepSeekHarness.CLI.Main do
         NodeManager.start_node(opts[:node])
         if opts[:connect], do: NodeManager.connect(opts[:connect])
 
-        if opts[:prompt] || extra_args != [] do
+        if has_prompt?(opts, extra_args) do
           run_one_shot(opts, extra_args)
         else
           Repl.start(opts)
         end
 
-      opts[:prompt] || extra_args != [] ->
+      has_prompt?(opts, extra_args) ->
         run_one_shot(opts, extra_args)
 
       true ->
         Repl.start(opts)
     end
+  end
+
+  defp has_prompt?(opts, extra_args) do
+    prompt_opt = opts[:prompt]
+    non_empty_extra = Enum.filter(extra_args, &(String.trim(&1) != ""))
+
+    (is_binary(prompt_opt) and String.trim(prompt_opt) != "") or non_empty_extra != []
   end
 
   def handle_self_update do
