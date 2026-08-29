@@ -126,23 +126,13 @@ release_needs_build() {
     return 0
   fi
 
-  local rel_mtime
-  rel_mtime="$(stat -c %Y "${rel_bin}" 2>/dev/null || stat -f %m "${rel_bin}" 2>/dev/null || echo 0)"
+  local newer_count
+  newer_count="$(find "${SCRIPT_DIR}/lib" "${SCRIPT_DIR}/config" "${SCRIPT_DIR}/priv" "${SCRIPT_DIR}/mix.exs" "${SCRIPT_DIR}/mix.lock" -type f -newer "${rel_bin}" 2>/dev/null | wc -l || echo 0)"
 
-  local glob
-  for glob in "${SCRIPT_DIR}"/mix.exs "${SCRIPT_DIR}"/mix.lock \
-              "${SCRIPT_DIR}"/lib/**/*.ex "${SCRIPT_DIR}"/lib/**/*.exs \
-              "${SCRIPT_DIR}"/config/**/*.exs "${SCRIPT_DIR}"/priv/**/*; do
-    # If no files match a glob, bash leaves the literal pattern; skip it.
-    [[ -e "${glob}" ]] || continue
-
-    local src_mtime
-    src_mtime="$(stat -c %Y "${glob}" 2>/dev/null || stat -f %m "${glob}" 2>/dev/null || echo 0)"
-    if (( src_mtime > rel_mtime )); then
-      echo "[INFO] Rebuilding release: ${glob} is newer than the release binary."
-      return 0
-    fi
-  done
+  if (( newer_count > 0 )); then
+    echo "[INFO] Rebuilding release: ${newer_count} source file(s) newer than release binary."
+    return 0
+  fi
 
   return 1
 }
@@ -157,6 +147,7 @@ build_release() {
   (
     cd "${SCRIPT_DIR}"
     rm -rf "_build/${env}/rel/dsh"
+    MIX_ENV="${env}" mix compile
     MIX_ENV="${env}" mix release dsh --overwrite
   )
 }
