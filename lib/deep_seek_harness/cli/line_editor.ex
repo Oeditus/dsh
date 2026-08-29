@@ -835,7 +835,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     base =
       "#{Formatter.magenta()}󰈤#{perm_label}#{Formatter.reset()} " <>
         "#{Formatter.blue()}#{if sandbox?, do: "󰌾", else: "󰌿"}#{Formatter.reset()} " <>
-        "#{Formatter.cyan()}󰌘#{mcp_count}#{Formatter.reset()} " <>
+        "#{Formatter.cyan()}🔌#{mcp_count}#{Formatter.reset()} " <>
         "#{Formatter.cyan()}󰒓#{tools_count}#{Formatter.reset()}"
 
     if Map.get(context, :git_dirty?, false) do

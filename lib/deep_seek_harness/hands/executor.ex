@@ -89,12 +89,12 @@ defmodule DeepSeekHarness.Hands.Executor do
     "edit_file" => "󰏫",
     "create_file" => "󰏫",
     "save_file" => "󰏫",
-    "bash" => "󰆍",
-    "cmd" => "󰆍",
-    "run_command" => "󰆍",
-    "shell" => "󰆍",
-    "exec" => "󰆍",
-    "execute_command" => "󰆍",
+    "bash" => "⚙",
+    "cmd" => "⚙",
+    "run_command" => "⚙",
+    "shell" => "⚙",
+    "exec" => "⚙",
+    "execute_command" => "⚙",
     "grep_search" => "󰍉",
     "grep" => "󰍉",
     "search_files" => "󰍉",
@@ -129,7 +129,7 @@ defmodule DeepSeekHarness.Hands.Executor do
   def tool_icon(name) when is_binary(name) do
     cond do
       icon = Map.get(@icon_map, String.downcase(name)) -> icon
-      String.starts_with?(name, "mcp_") or name == "ragex" -> "󰌘"
+      String.starts_with?(name, "mcp_") or name == "ragex" -> "🔌"
       true -> "󰒓"
     end
   end

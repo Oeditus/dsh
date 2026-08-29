@@ -126,7 +126,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   @impl true
   def handle_cast({:ragex_failed, reason}, state) do
-    Logger.warning("󱐋󰌘 Ragex auto-start notice: #{inspect(reason)}")
+    Logger.warning("󱐋🔌 Ragex auto-start notice: #{inspect(reason)}")
     Enum.each(state.waiting_callers, fn caller -> GenServer.reply(caller, {:error, reason}) end)
     {:noreply, %{state | ragex_status: :ready, waiting_callers: []}}
   end
@@ -275,7 +275,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
       existing_nodes = count_existing_nodes(target_dir)
 
       if existing_nodes > 0 do
-        Logger.info("󱐋󰌘 Ragex Knowledge Graph loaded from store (#{existing_nodes} nodes ready).")
+        Logger.info("󱐋🔌 Ragex Knowledge Graph loaded from store (#{existing_nodes} nodes ready).")
       else
         DeepSeekHarness.CLI.Spinner.run(
           fn ->
@@ -288,12 +288,12 @@ defmodule DeepSeekHarness.MCP.ServerManager do
                   Logger.configure(level: orig_level)
 
                   Logger.info(
-                    "󱐋󰌘 Ragex indexing complete! Indexed #{stats.success} files into Knowledge Graph."
+                    "󱐋🔌 Ragex indexing complete! Indexed #{stats.success} files into Knowledge Graph."
                   )
 
                 {:error, reason} ->
                   Logger.configure(level: orig_level)
-                  Logger.warning("󱐋󰌘 Ragex indexing notice: #{inspect(reason)}")
+                  Logger.warning("󱐋🔌 Ragex indexing notice: #{inspect(reason)}")
               end
             after
               Logger.configure(level: orig_level)
@@ -497,14 +497,14 @@ defmodule DeepSeekHarness.MCP.ServerManager do
             db_path = Path.join(target_dir, ".ragex/dllb.redb")
 
             Logger.info(
-              "󱐋󰌘 Per-project Dllb daemon active for '#{target_dir}' (database: #{db_path})"
+              "󱐋🔌 Per-project Dllb daemon active for '#{target_dir}' (database: #{db_path})"
             )
 
           {:error, reason} ->
-            Logger.warning("󱐋󰌘 Per-project Dllb startup notice: #{inspect(reason)}")
+            Logger.warning("󱐋🔌 Per-project Dllb startup notice: #{inspect(reason)}")
         end
       else
-        Logger.info("󱐋󰌘 Connecting to global Dllb server on #{host}:#{port}…")
+        Logger.info("󱐋🔌 Connecting to global Dllb server on #{host}:#{port}…")
 
         if Process.whereis(Dllb.Pool) == nil and Process.whereis(Dllb.Supervisor) != nil do
           pool_opts = [
@@ -517,13 +517,13 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
           case Supervisor.start_child(Dllb.Supervisor, Dllb.Pool.child_spec(pool_opts)) do
             {:ok, _pid} ->
-              Logger.info("󱐋󰌘 Dllb.Pool connected on #{host}:#{port} (pool size: #{pool_size})")
+              Logger.info("󱐋🔌 Dllb.Pool connected on #{host}:#{port} (pool size: #{pool_size})")
 
             {:error, {:already_started, _pid}} ->
               :ok
 
             {:error, reason} ->
-              Logger.warning("󱐋󰌘 Failed to start Dllb.Pool: #{inspect(reason)}")
+              Logger.warning("󱐋🔌 Failed to start Dllb.Pool: #{inspect(reason)}")
           end
         end
       end
@@ -543,23 +543,23 @@ defmodule DeepSeekHarness.MCP.ServerManager do
           end
 
         if already_bootstrapped? do
-          Logger.info("󱐋󰌘 Dllb schema ready for Ragex Knowledge Graph")
+          Logger.info("󱐋🔌 Dllb schema ready for Ragex Knowledge Graph")
         else
           Logger.info("⌛ Bootstrapping Dllb database schema…")
 
           case DllbStore.bootstrap() do
             :ok ->
-              Logger.info("󱐋󰌘 Dllb schema bootstrapped for Ragex Knowledge Graph")
+              Logger.info("󱐋🔌 Dllb schema bootstrapped for Ragex Knowledge Graph")
 
             {:error, reason} ->
-              Logger.warning("󱐋󰌘 Dllb schema bootstrap notice: #{inspect(reason)}")
+              Logger.warning("󱐋🔌 Dllb schema bootstrap notice: #{inspect(reason)}")
           end
         end
       end
     end
 
     Logger.info(
-      "󱐋󰌘 Ragex Knowledge Graph backend configured: #{backend} (mode: #{dllb_mode}, dllb active: #{use_dllb?})"
+      "󱐋🔌 Ragex Knowledge Graph backend configured: #{backend} (mode: #{dllb_mode}, dllb active: #{use_dllb?})"
     )
   end
 
