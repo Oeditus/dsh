@@ -583,12 +583,32 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/config style", _session_pid, _session_id) do
+    IO.puts(
+      Formatter.format_error(
+        "Usage: /config style <starship|extended|compact|minimal>"
+      )
+    )
+
+    :continue
+  end
+
   def handle_input("/config prompt " <> format_str, _session_pid, _session_id) do
     fmt = String.trim(format_str)
     cfg = DeepSeekHarness.Config.load_config()
     updated = Map.merge(cfg, %{"prompt_style" => "custom", "prompt_format" => fmt})
     DeepSeekHarness.Config.save_config(updated)
     IO.puts(Formatter.format_success("Custom prompt format set to '#{fmt}'"))
+    :continue
+  end
+
+  def handle_input("/config prompt", _session_pid, _session_id) do
+    IO.puts(
+      Formatter.format_error(
+        "Usage: /config prompt <template> (placeholders: {session}, {model}, {mode}, {tasks})"
+      )
+    )
+
     :continue
   end
 
@@ -600,6 +620,16 @@ defmodule DeepSeekHarness.CLI.Repl do
     DeepSeekHarness.Config.save_config(updated)
 
     IO.puts(Formatter.format_success("Toggled config setting '#{k}' to #{not current}"))
+
+    :continue
+  end
+
+  def handle_input("/config toggle", _session_pid, _session_id) do
+    IO.puts(
+      Formatter.format_error(
+        "Usage: /config toggle <setting_key> (e.g. enable_autosuggestions, enable_syntax_highlighting)"
+      )
+    )
 
     :continue
   end
