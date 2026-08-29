@@ -61,6 +61,18 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
   end
 
   defp run_single_tool(tc, session_state) do
+    summary = format_short_summary(tc.name, tc.arguments)
+
+    task_info = %{
+      id: tc.id,
+      name: tc.name,
+      summary: summary,
+      started_at: System.system_time(:second)
+    }
+
+    # Register task for real-time tracking while process is alive
+    Registry.register(DeepSeekHarness.TaskEngine.TaskRegistry, "active_task", task_info)
+
     lock_key = get_lock_resource(tc.name, tc.arguments)
 
     if lock_key do
@@ -75,6 +87,38 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
       end
     end
   end
+
+  @doc "Formats a short human-readable summary of a tool call for real-time status display."
+  def format_short_summary(tool_name, args) when is_map(args) do
+    target =
+      Map.get(args, "target_file") ||
+        Map.get(args, "path") ||
+        Map.get(args, "TargetFile") ||
+        Map.get(args, "query") ||
+        Map.get(args, "command") ||
+        ""
+
+    cleaned_target =
+      target
+      |> to_string()
+      |> String.replace(~r/[\r\n\t]+/, " ")
+      |> String.trim()
+
+    truncated =
+      if String.length(cleaned_target) > 25 do
+        String.slice(cleaned_target, 0, 22) <> "..."
+      else
+        cleaned_target
+      end
+
+    if truncated != "" do
+      "#{tool_name}(\"#{truncated}\")"
+    else
+      tool_name
+    end
+  end
+
+  def format_short_summary(tool_name, _), do: tool_name
 
   defp get_lock_resource(tool_name, args) when is_map(args) do
     if tool_name in ["write_file", "replace_file", "write_to_file", "replace_file_content"] do

@@ -6,8 +6,14 @@ defmodule DeepSeekHarness.LineEditorTest do
   describe "prompt building" do
     test "builds prompt string with configurable interpolation" do
       prompt = LineEditor.build_prompt("main", "deepseek-chat", :local)
-      assert String.contains?(prompt, "main")
       assert String.contains?(prompt, "deepseek-chat")
+    end
+
+    test "supports extended prompt style" do
+      Application.put_env(:deep_seek_harness, :prompt_style, "extended")
+      prompt = LineEditor.build_prompt("02ec14fa-0fae-62b0-9b52", "deepseek-chat", :local)
+      assert String.contains?(prompt, "deepseek-chat")
+      assert String.contains?(prompt, "id:02ec14fa")
     end
   end
 

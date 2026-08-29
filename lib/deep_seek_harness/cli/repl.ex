@@ -583,6 +583,15 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/config prompt " <> format_str, _session_pid, _session_id) do
+    fmt = String.trim(format_str)
+    cfg = DeepSeekHarness.Config.load_config()
+    updated = Map.merge(cfg, %{"prompt_style" => "custom", "prompt_format" => fmt})
+    DeepSeekHarness.Config.save_config(updated)
+    IO.puts(Formatter.format_success("Custom prompt format set to '#{fmt}'"))
+    :continue
+  end
+
   def handle_input("/config toggle " <> key, _session_pid, _session_id) do
     k = String.trim(key)
     cfg = DeepSeekHarness.Config.load_config()
@@ -608,8 +617,9 @@ defmodule DeepSeekHarness.CLI.Repl do
     #{rows}
 
     **Usage:**
-    - `/config style <starship|compact|minimal>` — Switch prompt visual layout
-    - `/config toggle <setting_key>` — Toggle feature on/off (e.g. `enable_autosuggestions`, `enable_context_gauge`, `enable_file_picker`)
+    - `/config style <starship|extended|compact|minimal>` — Switch prompt visual layout style
+    - `/config prompt <template>` — Set custom prompt template (placeholders: `{session}`, `{model}`, `{mode}`, `{tasks}`)
+    - `/config toggle <setting_key>` — Toggle feature on/off (e.g. `enable_autosuggestions`, `enable_syntax_highlighting`)
     """
 
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")

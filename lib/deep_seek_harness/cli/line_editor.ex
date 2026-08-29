@@ -106,6 +106,9 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       "starship" ->
         build_starship_prompt(session_id, model, hands_mode, cwd, config)
 
+      "extended" ->
+        build_extended_prompt(session_id, model, hands_mode, cwd, config)
+
       "compact" ->
         build_compact_prompt(session_id, model, cwd)
 
@@ -114,11 +117,15 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
       _ ->
         template = Map.get(config, "prompt_format", "user@{session} [{model}]> ")
+        active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
+        task_count = length(active_tasks)
+        task_str = if task_count > 0, do: "⚡#{task_count} running", else: "idle"
 
         template
         |> String.replace("{session}", session_id)
         |> String.replace("{model}", model)
         |> String.replace("{mode}", to_string(hands_mode))
+        |> String.replace("{tasks}", task_str)
     end
   end
 
@@ -127,6 +134,16 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     branch = DeepSeekHarness.Git.current_branch(cwd)
     branch_str = if branch != "", do: "  #{branch}", else: ""
     sandbox = if Map.get(config, "sandbox_workspace", false), do: " 🔒 sandbox", else: ""
+
+    active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
+    task_count = length(active_tasks)
+
+    task_badge =
+      if task_count > 0 do
+        " #{Formatter.yellow()}⚡#{task_count} running#{Formatter.reset()}"
+      else
+        ""
+      end
 
     model_icon =
       case model do
@@ -145,7 +162,43 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       "#{Formatter.cyan()}📁 #{folder}#{Formatter.reset()}" <>
         "#{Formatter.magenta()}#{branch_str}#{Formatter.reset()}" <>
         " #{Formatter.green()}#{model_icon} #{model}#{Formatter.reset()}" <>
-        "#{Formatter.yellow()}#{sandbox}#{mode_badge}#{Formatter.reset()}"
+        "#{Formatter.yellow()}#{sandbox}#{mode_badge}#{Formatter.reset()}" <>
+        task_badge
+
+    "#{line} #{Formatter.cyan()}❯#{Formatter.reset()} "
+  end
+
+  defp build_extended_prompt(session_id, model, hands_mode, cwd, config) do
+    folder = Path.basename(Path.expand(cwd))
+    branch = DeepSeekHarness.Git.current_branch(cwd)
+    branch_str = if branch != "", do: "  #{branch}", else: ""
+    sandbox = if Map.get(config, "sandbox_workspace", false), do: " 🔒 sandbox", else: ""
+
+    active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
+    task_count = length(active_tasks)
+
+    task_badge =
+      if task_count > 0 do
+        " #{Formatter.yellow()}⚡#{task_count} running#{Formatter.reset()}"
+      else
+        ""
+      end
+
+    mode_badge =
+      case to_string(hands_mode) do
+        "local" -> ""
+        other -> " 🌐 #{other}"
+      end
+
+    short_id = String.slice(session_id, 0, 8)
+
+    line =
+      "#{Formatter.cyan()}📁 #{folder}#{Formatter.reset()}" <>
+        "#{Formatter.magenta()}#{branch_str}#{Formatter.reset()}" <>
+        " #{Formatter.green()}🤖 #{model}#{Formatter.reset()}" <>
+        "#{Formatter.dim()} [id:#{short_id}]#{Formatter.reset()}" <>
+        "#{Formatter.yellow()}#{sandbox}#{mode_badge}#{Formatter.reset()}" <>
+        task_badge
 
     "#{line} #{Formatter.cyan()}❯#{Formatter.reset()} "
   end
@@ -560,7 +613,39 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         _ -> 80
       end
 
-    Formatter.dim() <> String.duplicate("─", max(10, cols - 1)) <> Formatter.reset()
+    active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
+
+    if Enum.empty?(active_tasks) do
+      Formatter.dim() <> String.duplicate("─", max(10, cols - 1)) <> Formatter.reset()
+    else
+      count = length(active_tasks)
+      summaries = Enum.map_join(active_tasks, ", ", fn t -> t.summary end)
+      raw_badge = " ⚡ #{count} running: #{summaries} "
+
+      max_allowed = max(10, cols - 12)
+
+      truncated =
+        if String.length(raw_badge) > max_allowed do
+          String.slice(raw_badge, 0, max_allowed - 3) <> "... "
+        else
+          raw_badge
+        end
+
+      badge_fmt =
+        "#{Formatter.cyan()}[#{Formatter.yellow()}#{Formatter.bold()}#{truncated}#{Formatter.reset()}#{Formatter.cyan()}]#{Formatter.reset()}"
+
+      badge_len = String.length(truncated) + 2
+      left_len = max(2, div(cols - badge_len, 2))
+      right_len = max(2, cols - left_len - badge_len - 1)
+
+      Formatter.dim() <>
+        String.duplicate("─", left_len) <>
+        Formatter.reset() <>
+        badge_fmt <>
+        Formatter.dim() <>
+        String.duplicate("─", right_len) <>
+        Formatter.reset()
+    end
   end
 
   defp compute_display(%{search_mode: true} = state) do
