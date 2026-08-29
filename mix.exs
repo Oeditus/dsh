@@ -4,7 +4,7 @@ defmodule DeepSeekHarness.MixProject do
   def project do
     [
       app: :deep_seek_harness,
-      version: "0.1.0",
+      version: "0.2.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -36,7 +36,7 @@ defmodule DeepSeekHarness.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:req, "~> 0.5.0"},
+      {:req, "~> 0.7"},
       {:jason, "~> 1.4"},
       {:marcli, "~> 0.3"},
       {:makeup_elixir, ">= 0.0.0", optional: true},

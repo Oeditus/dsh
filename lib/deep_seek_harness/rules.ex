@@ -151,7 +151,7 @@ defmodule DeepSeekHarness.Rules do
           "- #{Map.get(r, "text")}"
         end)
 
-      "=== Prompt & Execution Rules ===\n#{rule_lines}\n===============================\n\n"
+      "=== Prompt & Execution Rules ===\n\n#{rule_lines}\n\n===============================\n\n"
     end
   end
 

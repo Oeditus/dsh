@@ -316,6 +316,8 @@ defmodule DeepSeekHarness.MCP.ServerManager do
             Map.get(t, "inputSchema") || Map.get(t, :inputSchema) ||
               %{"type" => "object", "properties" => %{}}
 
+          {t_desc, input_schema} = reinforce_old_content(t_name, t_desc, input_schema)
+
           tool_name = "mcp_ragex_#{t_name}"
 
           dynamic_mod_name = build_mcp_ragex_tool_module(tool_name, t_name, t_desc, input_schema)
@@ -332,6 +334,90 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     else
       start_ragex_external(target_dir, opts)
     end
+  end
+
+  # ---------------------------------------------------------------------
+  # `old_content` reinforcement for Ragex's `edit_file` / `edit_files`
+  #
+  # Ragex's editor relocates a change's line_start/line_end by fuzzy-matching
+  # against `old_content` *before* applying it, which is far more robust
+  # than the blind +/-3 line shift it falls back to after a validation
+  # failure -- but that relocation only happens when `old_content` is
+  # actually supplied, and both tools declare it as an optional schema
+  # field. Rather than relying on the system prompt alone, this promotes
+  # `old_content` to a `required` property on every change item so it's
+  # structurally part of the tool's contract the model is calling against,
+  # and reinforces the description every time the tool is offered.
+  # ---------------------------------------------------------------------
+
+  @old_content_reinforcement " IMPORTANT: always include `old_content` on every change -- " <>
+                               "the exact original text at line_start..line_end as you last " <>
+                               "observed it (e.g. from a prior read_file call). Ragex uses this " <>
+                               "to verify and auto-correct drifted line numbers before applying " <>
+                               "the edit, preventing syntax-breaking off-by-a-few-lines mistakes."
+
+  # Path (in `Access.key/2` form, defaulting missing levels to `%{}` so
+  # `get_in`/`put_in` never raise) from a schema root down to the per-change
+  # item schema for the single-file `edit_file` tool. `Access.key/2` returns
+  # a closure, so these must be built at runtime rather than stored as
+  # module attributes (which require literal, escapable terms).
+  defp edit_file_items_path do
+    [Access.key(:properties, %{}), Access.key(:changes, %{}), Access.key(:items, %{})]
+  end
+
+  # Same, but one level deeper through `files` for the multi-file `edit_files` tool.
+  defp edit_files_items_path do
+    [
+      Access.key(:properties, %{}),
+      Access.key(:files, %{}),
+      Access.key(:items, %{}),
+      Access.key(:properties, %{}),
+      Access.key(:changes, %{}),
+      Access.key(:items, %{})
+    ]
+  end
+
+  defp reinforce_old_content("edit_file", t_desc, input_schema) do
+    {t_desc <> @old_content_reinforcement,
+     augment_change_items_schema(input_schema, edit_file_items_path())}
+  end
+
+  defp reinforce_old_content("edit_files", t_desc, input_schema) do
+    {t_desc <> @old_content_reinforcement,
+     augment_change_items_schema(input_schema, edit_files_items_path())}
+  end
+
+  defp reinforce_old_content(_t_name, t_desc, input_schema), do: {t_desc, input_schema}
+
+  defp augment_change_items_schema(schema, path) do
+    case get_in(schema, path) do
+      items when is_map(items) -> put_in(schema, path, require_old_content(items))
+      _ -> schema
+    end
+  rescue
+    _ -> schema
+  end
+
+  defp require_old_content(items_schema) do
+    properties = Map.get(items_schema, :properties, %{})
+
+    old_content_prop =
+      Map.get(properties, :old_content, %{
+        type: "string",
+        description:
+          "Exact original text at line_start..line_end, as last observed. Required so " <>
+            "Ragex can verify/auto-correct drifted line numbers."
+      })
+
+    required =
+      items_schema
+      |> Map.get(:required, [])
+      |> Kernel.++(["old_content"])
+      |> Enum.uniq()
+
+    items_schema
+    |> Map.put(:properties, Map.put(properties, :old_content, old_content_prop))
+    |> Map.put(:required, required)
   end
 
   defp start_ragex_external(target_dir, opts) do

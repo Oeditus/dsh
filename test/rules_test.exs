@@ -50,4 +50,19 @@ defmodule DeepSeekHarness.RulesTest do
     all_preamble = Rules.build_preamble("all", tmp_dir)
     refute all_preamble =~ "typographic quotes"
   end
+
+  test "separates header, rule bullets, and closing marker with blank lines", %{
+    tmp_dir: tmp_dir
+  } do
+    Rules.load_rules(tmp_dir)
+    preamble = Rules.build_preamble("all", tmp_dir)
+
+    # A blank line must separate the header from the bullet list and the
+    # bullet list from the closing "===" marker, otherwise Markdown's lazy
+    # continuation rule folds the marker onto the last bullet's line when
+    # this preamble is later rendered.
+    assert preamble =~ "=== Prompt & Execution Rules ===\n\n-"
+    assert preamble =~ ~r/\n\n=+\n\n/
+    refute preamble =~ ~r/[^\n]===============================/
+  end
 end

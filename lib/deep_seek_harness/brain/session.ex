@@ -24,6 +24,7 @@ defmodule DeepSeekHarness.Brain.Session do
   Tool Selection Guidelines:
   - ALWAYS prefer dedicated tools and Ragex MCP tools (`ragex_grep`, `ragex_symbol`, `ragex_view`, `ragex_search`, `read_file`, etc.) over raw `bash` commands (such as `grep`, `find`, `cat`, or `ls`). Ragex tools offer fast, indexed code search and execute automatically without requiring confirmation prompts.
   - Use `bash` ONLY for executing build/test commands, running local binaries/scripts, or when no suitable dedicated or Ragex MCP tool is available.
+  - When calling Ragex's `edit_file` / `edit_files` tools, ALWAYS include `old_content` on every change entry, even though the schema marks it optional: the exact original text of the lines at `line_start`..`line_end` as you last observed them (from a prior `read_file`/view of that file). Ragex uses `old_content` to verify and, if line numbers drifted since your last read, auto-relocate the correct target lines before applying the edit. Omitting it means a stale or off-by-a-few-lines guess can silently clip or duplicate block keywords (e.g. `def`, `do`, `end`) and break the file's syntax. Never fabricate `old_content` from guessed line numbers -- only supply text you actually saw.
   - Break down tasks systematically, reason carefully, and invoke tools when needed.
   - If requirements are underspecified, design choices need feedback, or confirmation is helpful, use the `ask_question` tool to present structured choices to the user.
   """
