@@ -212,7 +212,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
       IO.write(
         :user,
-        "\r\n" <> Formatter.cyan() <> "✏️  Enter custom response: " <> Formatter.reset()
+        "\r\n" <> Formatter.cyan() <> "󰏫  Enter custom response: " <> Formatter.reset()
       )
 
       custom_input =
@@ -253,14 +253,14 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # TUI Box Renderer
   # ---------------------------------------------------------------------
 
-  @doc "Calculates terminal display width in columns, handling wide emojis and stripping ANSI escapes via Owl."
+  @doc "Calculates terminal display width in columns, handling wide symbols and stripping ANSI escapes via Owl."
   def display_width(str) when is_binary(str) do
     clean = strip_ansi(str)
 
     extra =
       clean
       |> String.graphemes()
-      |> Enum.count(fn g -> g in ["❓", "✏️", "⚡", "🔌", "🤖", "💡"] end)
+      |> Enum.count(fn g -> g in ["󰋗", "󰏫", "󱐋", "󰌘", "󰚩", "󰀦"] end)
 
     Owl.Data.length(clean) + extra
   rescue
@@ -281,7 +281,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       IO.write(:user, "\r\e[#{state.rendered_lines}A\e[0J")
     end
 
-    header_title = " ❓ Question from AI "
+    header_title = " 󰋗 Question from AI "
     header_len = display_width(header_title)
 
     header_padding =
@@ -329,7 +329,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
         prefix =
           cond do
-            state.is_multi and is_checked -> "[✓] "
+            state.is_multi and is_checked -> "[󰄬] "
             state.is_multi -> "[ ] "
             true -> ""
           end
@@ -340,7 +340,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
         label =
           if is_custom do
-            "#{prefix}#{num_prefix}✏ #{clean_opt}"
+            "#{prefix}#{num_prefix}󰏫 #{clean_opt}"
           else
             "#{prefix}#{num_prefix}#{clean_opt}"
           end
@@ -408,13 +408,13 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       :user,
       "\r\n" <>
         Formatter.cyan() <>
-        "❓ Question from AI: " <> Formatter.bold() <> question <> Formatter.reset() <> "\r\n"
+        "󰋗 Question from AI: " <> Formatter.bold() <> question <> Formatter.reset() <> "\r\n"
     )
 
     options
     |> Enum.with_index()
     |> Enum.each(fn {opt, idx} ->
-      tag = if idx == custom_idx, do: "✏️  #{opt}", else: opt
+      tag = if idx == custom_idx, do: "󰏫  #{opt}", else: opt
       IO.write(:user, "  #{idx + 1}. #{tag}\r\n")
     end)
 

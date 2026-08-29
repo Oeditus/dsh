@@ -56,7 +56,7 @@ defmodule Mix.Tasks.Dsh.Install do
     File.chmod!(target_wrapper, 0o755)
 
     Mix.shell().info("""
-    ✅ DeepSeek Harness installed globally to: #{target_wrapper}
+    󰄬 DeepSeek Harness installed globally to: #{target_wrapper}
 
     Ensure '#{bin_dir}' is in your $PATH:
       export PATH="$HOME/.local/bin:$PATH"

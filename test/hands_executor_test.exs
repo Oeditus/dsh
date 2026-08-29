@@ -26,13 +26,13 @@ defmodule DeepSeekHarness.HandsExecutorTest do
   end
 
   test "returns correct tool icon for known tools" do
-    assert Executor.tool_icon("read_file") == "👁️"
-    assert Executor.tool_icon("write_file") == "✎"
-    assert Executor.tool_icon("bash") == "⚙"
-    assert Executor.tool_icon("grep_search") == "🔍"
-    assert Executor.tool_icon("list_dir") == "♻"
-    assert Executor.tool_icon("git_status") == "🌿"
-    assert Executor.tool_icon("unknown_tool") == "🛠️"
+    assert Executor.tool_icon("read_file") == "󰈔"
+    assert Executor.tool_icon("write_file") == "󰏫"
+    assert Executor.tool_icon("bash") == "󰆍"
+    assert Executor.tool_icon("grep_search") == "󰍉"
+    assert Executor.tool_icon("list_dir") == "󰉋"
+    assert Executor.tool_icon("git_status") == "󰘬"
+    assert Executor.tool_icon("unknown_tool") == "󰒓"
   end
 
   test "formats tool calls user-friendly" do

@@ -19,7 +19,7 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   @doc "Executes a tool call under the configured sandbox target."
   def execute(%__MODULE__{mode: :local}, tool_name, args) do
-    Logger.info("⚡#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
+    Logger.info("󱐋#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
 
     case DeepSeekHarness.Plugin.Loader.execute_tool(tool_name, args, :infinity) do
       {:ok, result} -> {:ok, format_output(result)}
@@ -29,7 +29,7 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   def execute(%__MODULE__{mode: :remote, remote_node: node}, tool_name, args)
       when not is_nil(node) do
-    Logger.info("⚡[remote:#{node}]#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
+    Logger.info("󱐋[remote:#{node}]#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
 
     case :rpc.call(
            node,
@@ -52,7 +52,7 @@ defmodule DeepSeekHarness.Hands.Executor do
   def execute(%__MODULE__{mode: :docker, docker_container: container}, tool_name, args)
       when not is_nil(container) do
     Logger.info(
-      "⚡[docker:#{container}]#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}"
+      "󱐋[docker:#{container}]#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}"
     )
 
     case tool_name do
@@ -77,60 +77,60 @@ defmodule DeepSeekHarness.Hands.Executor do
   end
 
   @icon_map %{
-    "read_file" => "👁️",
-    "view_file" => "👁️",
-    "file_read" => "👁️",
-    "read_contents" => "👁️",
-    "get_file" => "👁️",
-    "write_file" => "✎",
-    "write_to_file" => "✎",
-    "replace_file_content" => "✎",
-    "replace_file" => "✎",
-    "edit_file" => "✎",
-    "create_file" => "✎",
-    "save_file" => "✎",
-    "bash" => "⚙",
-    "cmd" => "⚙",
-    "run_command" => "⚙",
-    "shell" => "⚙",
-    "exec" => "⚙",
-    "execute_command" => "⚙",
-    "grep_search" => "🔍",
-    "grep" => "🔍",
-    "search_files" => "🔍",
-    "file_search" => "🔍",
-    "ripgrep" => "🔍",
-    "search" => "🔍",
-    "list_dir" => "♻",
-    "ls" => "♻",
-    "dir_list" => "♻",
-    "list_directory" => "♻",
-    "find_by_name" => "♻",
-    "git" => "🌿",
-    "git_status" => "🌿",
-    "git_diff" => "🌿",
-    "git_commit" => "🌿",
-    "git_log" => "🌿",
-    "http" => "🌐",
-    "req" => "🌐",
-    "fetch_url" => "🌐",
-    "web_search" => "🌐",
-    "read_url" => "🌐",
-    "subagent" => "🤖",
-    "spawn_subagent" => "🤖",
-    "agent" => "🤖",
-    "ask_question" => "❓",
-    "ask" => "❓",
-    "question" => "❓",
-    "user_input" => "❓"
+    "read_file" => "󰈔",
+    "view_file" => "󰈔",
+    "file_read" => "󰈔",
+    "read_contents" => "󰈔",
+    "get_file" => "󰈔",
+    "write_file" => "󰏫",
+    "write_to_file" => "󰏫",
+    "replace_file_content" => "󰏫",
+    "replace_file" => "󰏫",
+    "edit_file" => "󰏫",
+    "create_file" => "󰏫",
+    "save_file" => "󰏫",
+    "bash" => "󰆍",
+    "cmd" => "󰆍",
+    "run_command" => "󰆍",
+    "shell" => "󰆍",
+    "exec" => "󰆍",
+    "execute_command" => "󰆍",
+    "grep_search" => "󰍉",
+    "grep" => "󰍉",
+    "search_files" => "󰍉",
+    "file_search" => "󰍉",
+    "ripgrep" => "󰍉",
+    "search" => "󰍉",
+    "list_dir" => "󰉋",
+    "ls" => "󰉋",
+    "dir_list" => "󰉋",
+    "list_directory" => "󰉋",
+    "find_by_name" => "󰉋",
+    "git" => "󰘬",
+    "git_status" => "󰘬",
+    "git_diff" => "󰘬",
+    "git_commit" => "󰘬",
+    "git_log" => "󰘬",
+    "http" => "󰖟",
+    "req" => "󰖟",
+    "fetch_url" => "󰖟",
+    "web_search" => "󰖟",
+    "read_url" => "󰖟",
+    "subagent" => "󰚩",
+    "spawn_subagent" => "󰚩",
+    "agent" => "󰚩",
+    "ask_question" => "󰋗",
+    "ask" => "󰋗",
+    "question" => "󰋗",
+    "user_input" => "󰋗"
   }
 
-  @doc "Returns an icon emoji for a known tool."
+  @doc "Returns a Nerd Font icon symbol for a known tool."
   def tool_icon(name) when is_binary(name) do
     cond do
       icon = Map.get(@icon_map, String.downcase(name)) -> icon
-      String.starts_with?(name, "mcp_") or name == "ragex" -> "🔌"
-      true -> "🛠️"
+      String.starts_with?(name, "mcp_") or name == "ragex" -> "󰌘"
+      true -> "󰒓"
     end
   end
 

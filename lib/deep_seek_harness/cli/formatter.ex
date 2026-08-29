@@ -157,8 +157,8 @@ defmodule DeepSeekHarness.CLI.Formatter do
 
     {color, emphasis, hint} =
       cond do
-        pct >= 90 -> {red(), bold() <> blink(), "  ⚠ /compact strongly recommended"}
-        pct >= 75 -> {red(), bold(), "  ⚠ /compact recommended"}
+        pct >= 90 -> {red(), bold() <> blink(), "  󰀦 /compact strongly recommended"}
+        pct >= 75 -> {red(), bold(), "  󰀦 /compact recommended"}
         pct >= 50 -> {yellow(), "", ""}
         true -> {green(), "", ""}
       end

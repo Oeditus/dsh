@@ -136,7 +136,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         template = Map.get(config, "prompt_format", "user@{session} [{model}]> ")
         active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
         task_count = length(active_tasks)
-        task_str = if task_count > 0, do: "⚡#{task_count} running", else: "idle"
+        task_str = if task_count > 0, do: "󱐋#{task_count} running", else: "idle"
 
         template
         |> String.replace("{session}", session_id)
@@ -150,33 +150,33 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     folder = Path.basename(Path.expand(cwd))
     branch = DeepSeekHarness.Git.current_branch(cwd)
     branch_str = if branch != "", do: "  #{branch}", else: ""
-    sandbox = if sandbox?, do: " 🔒 sandbox", else: ""
+    sandbox = if sandbox?, do: " 󰌾 sandbox", else: ""
 
     active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
     task_count = length(active_tasks)
 
     task_badge =
       if task_count > 0 do
-        " #{Formatter.yellow()}⚡#{task_count} running#{Formatter.reset()}"
+        " #{Formatter.yellow()}󱐋#{task_count} running#{Formatter.reset()}"
       else
         ""
       end
 
     model_icon =
       case model do
-        "deepseek-reasoner" -> "🧠"
-        "deepseek-coder" -> "💻"
-        _ -> "🤖"
+        "deepseek-reasoner" -> "󰧑"
+        "deepseek-coder" -> "󰘦"
+        _ -> "󰚩"
       end
 
     mode_badge =
       case to_string(hands_mode) do
         "local" -> ""
-        other -> " 🌐 #{other}"
+        other -> " 󰖟 #{other}"
       end
 
     line =
-      "#{Formatter.cyan()}📁 #{folder}#{Formatter.reset()}" <>
+      "#{Formatter.cyan()}󰉋 #{folder}#{Formatter.reset()}" <>
         "#{Formatter.magenta()}#{branch_str}#{Formatter.reset()}" <>
         " #{Formatter.green()}#{model_icon} #{model}#{Formatter.reset()}" <>
         "#{Formatter.yellow()}#{sandbox}#{mode_badge}#{Formatter.reset()}" <>
@@ -189,14 +189,14 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     folder = Path.basename(Path.expand(cwd))
     branch = DeepSeekHarness.Git.current_branch(cwd)
     branch_str = if branch != "", do: "  #{branch}", else: ""
-    sandbox = if sandbox?, do: " 🔒 sandbox", else: ""
+    sandbox = if sandbox?, do: " 󰌾 sandbox", else: ""
 
     active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
     task_count = length(active_tasks)
 
     task_badge =
       if task_count > 0 do
-        " #{Formatter.yellow()}⚡#{task_count} running#{Formatter.reset()}"
+        " #{Formatter.yellow()}󱐋#{task_count} running#{Formatter.reset()}"
       else
         ""
       end
@@ -204,15 +204,15 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     mode_badge =
       case to_string(hands_mode) do
         "local" -> ""
-        other -> " 🌐 #{other}"
+        other -> " 󰖟 #{other}"
       end
 
     short_id = String.slice(session_id, 0, 8)
 
     line =
-      "#{Formatter.cyan()}📁 #{folder}#{Formatter.reset()}" <>
+      "#{Formatter.cyan()}󰉋 #{folder}#{Formatter.reset()}" <>
         "#{Formatter.magenta()}#{branch_str}#{Formatter.reset()}" <>
-        " #{Formatter.green()}🤖 #{model}#{Formatter.reset()}" <>
+        " #{Formatter.green()}󰚩 #{model}#{Formatter.reset()}" <>
         "#{Formatter.dim()} [id:#{short_id}]#{Formatter.reset()}" <>
         "#{Formatter.yellow()}#{sandbox}#{mode_badge}#{Formatter.reset()}" <>
         task_badge
@@ -789,7 +789,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   defp task_badge_ruler(cols, active_tasks) do
     count = length(active_tasks)
     summaries = Enum.map_join(active_tasks, ", ", fn t -> t.summary end)
-    raw_badge = " ⚡ #{count} running: #{summaries} "
+    raw_badge = " 󱐋 #{count} running: #{summaries} "
 
     max_allowed = max(10, cols - 12)
 
@@ -833,10 +833,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     tools_count = Map.get(context, :tools_count, 0)
 
     base =
-      "#{Formatter.magenta()}🛡#{perm_label}#{Formatter.reset()} " <>
-        "#{Formatter.blue()}#{if sandbox?, do: "🔒", else: "🔓"}#{Formatter.reset()} " <>
-        "#{Formatter.cyan()}🔌#{mcp_count}#{Formatter.reset()} " <>
-        "#{Formatter.cyan()}🧰#{tools_count}#{Formatter.reset()}"
+      "#{Formatter.magenta()}󰈤#{perm_label}#{Formatter.reset()} " <>
+        "#{Formatter.blue()}#{if sandbox?, do: "󰌾", else: "󰌿"}#{Formatter.reset()} " <>
+        "#{Formatter.cyan()}󰌘#{mcp_count}#{Formatter.reset()} " <>
+        "#{Formatter.cyan()}󰒓#{tools_count}#{Formatter.reset()}"
 
     if Map.get(context, :git_dirty?, false) do
       base <> " #{Formatter.yellow()}●#{Formatter.reset()}"
@@ -991,7 +991,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
       opts =
         Enum.map(files, fn f ->
-          icon = if File.dir?(f), do: "📁", else: "📄"
+          icon = if File.dir?(f), do: "󰉋", else: "󰈔"
           "#{icon} #{f}"
         end)
 

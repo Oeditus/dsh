@@ -291,7 +291,7 @@ defmodule DeepSeekHarness.CLI.Spinner do
           ""
 
         tasks ->
-          " #{Formatter.yellow()}⚡#{length(tasks)} parallel#{Formatter.reset()}"
+          " #{Formatter.yellow()}󱐋#{length(tasks)} parallel#{Formatter.reset()}"
       end
 
     "#{Formatter.dim()}(#{elapsed})#{Formatter.reset()}#{task_str}"
