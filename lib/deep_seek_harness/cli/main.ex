@@ -44,11 +44,11 @@ defmodule DeepSeekHarness.CLI.Main do
     cond do
       opts[:help] ->
         print_usage()
-        System.halt(0)
+        halt(0)
 
       opts[:update] || "update" in extra_args || "self-update" in extra_args ->
         handle_self_update()
-        System.halt(0)
+        halt(0)
 
       opts[:node] ->
         NodeManager.start_node(opts[:node])
@@ -127,8 +127,20 @@ defmodule DeepSeekHarness.CLI.Main do
     Repl.print_resume_banner(session_id)
 
     case result do
-      :continue -> System.halt(0)
-      :exit -> System.halt(0)
+      :continue -> halt(0)
+      :exit -> halt(0)
+    end
+  end
+
+  # Wraps `System.halt/1` so tests can exercise the CLI's exit paths in-process
+  # without killing the whole BEAM (and thus the rest of the test suite).
+  # Real CLI invocations always halt; tests set
+  # `Application.put_env(:deep_seek_harness, :system_halt_enabled, false)`.
+  defp halt(code) do
+    if Application.get_env(:deep_seek_harness, :system_halt_enabled, true) do
+      System.halt(code)
+    else
+      :ok
     end
   end
 

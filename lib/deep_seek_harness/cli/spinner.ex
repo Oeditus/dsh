@@ -146,7 +146,8 @@ defmodule DeepSeekHarness.CLI.Spinner do
       auto_tip?: auto_tip?,
       enabled?: enabled?,
       timer: nil,
-      paused: false
+      paused: false,
+      start_time: System.monotonic_time(:millisecond)
     }
 
     state =
@@ -176,7 +177,7 @@ defmodule DeepSeekHarness.CLI.Spinner do
     line =
       if state.enabled? and not state.paused do
         frame = Enum.at(@frames, state.frame_idx)
-        format_line(frame, state.title, state.tip)
+        format_line(frame, state.title, state.tip, status_extra(state))
       else
         ""
       end
@@ -246,9 +247,16 @@ defmodule DeepSeekHarness.CLI.Spinner do
     end
   end
 
-  @doc "Formats a spinner line given frame, title, and optional tip."
-  def format_line(frame, title, tip \\ nil) do
+  @doc """
+  Formats a spinner line given frame, title, and optional tip.
+
+  `extra` (optional, 4th arg) is inserted right after the title -- used to
+  surface live OTP status (elapsed turn time and active parallel task count)
+  without disturbing the existing frame/title/tip formatting contract.
+  """
+  def format_line(frame, title, tip \\ nil, extra \\ nil) do
     base = "#{frame} #{title}"
+    base = if is_binary(extra) and extra != "", do: "#{base} #{extra}", else: base
 
     case tip do
       nil ->
@@ -267,9 +275,42 @@ defmodule DeepSeekHarness.CLI.Spinner do
 
   defp render_frame(state) do
     frame = Enum.at(@frames, state.frame_idx)
-    line = format_line(frame, state.title, state.tip)
+    line = format_line(frame, state.title, state.tip, status_extra(state))
     IO.write("\r\e[2K#{line}")
   end
+
+  # Builds the live "(elapsed) ⚡N parallel" fragment shown while the spinner
+  # runs, surfacing the OTP TaskEngine's real-time parallel task count and
+  # how long the current turn has been running.
+  defp status_extra(state) do
+    elapsed = format_elapsed(System.monotonic_time(:millisecond) - Map.get(state, :start_time, 0))
+
+    task_str =
+      case DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks() do
+        [] ->
+          ""
+
+        tasks ->
+          " #{Formatter.yellow()}⚡#{length(tasks)} parallel#{Formatter.reset()}"
+      end
+
+    "#{Formatter.dim()}(#{elapsed})#{Formatter.reset()}#{task_str}"
+  rescue
+    _ -> ""
+  end
+
+  defp format_elapsed(ms) when is_integer(ms) and ms < 60_000 do
+    :erlang.float_to_binary(max(ms, 0) / 1000, decimals: 1) <> "s"
+  end
+
+  defp format_elapsed(ms) when is_integer(ms) do
+    total_seconds = div(ms, 1000)
+    m = div(total_seconds, 60)
+    s = rem(total_seconds, 60)
+    "#{m}m #{String.pad_leading(Integer.to_string(s), 2, "0")}s"
+  end
+
+  defp format_elapsed(_), do: "0.0s"
 
   defp clear_line do
     IO.write("\r\e[2K")

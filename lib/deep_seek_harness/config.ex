@@ -18,7 +18,14 @@ defmodule DeepSeekHarness.Config do
     "enable_syntax_highlighting" => true,
     "enable_context_gauge" => true,
     "enable_file_picker" => true,
-    "enable_code_highlighting" => true
+    "enable_code_highlighting" => true,
+    # Switches the idle status bar's toggleable segment from the token/cost
+    # gauge to a compact "id + message count" line (toggle: Ctrl+B or
+    # `/config toggle compact_status_bar`).
+    "compact_status_bar" => false,
+    # Assumed model context window size (tokens) used by the status bar's
+    # usage gauge. Override per-workspace if DeepSeek's limits change.
+    "max_context_tokens" => 64_000
   }
 
   @doc "Loads combined configuration (global + workspace override)."

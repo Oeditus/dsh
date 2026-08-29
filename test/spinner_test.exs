@@ -61,7 +61,11 @@ defmodule DeepSeekHarness.CLI.SpinnerTest do
 
     result =
       Spinner.with_paused(fn ->
-        refute Spinner.active?()
+        # The spinner process stays alive while paused (so `resume/0` can
+        # find and restart it afterwards) -- pausing suppresses rendering,
+        # which is what `current_line/0` reflects, not `active?/0`.
+        assert Spinner.active?()
+        assert Spinner.current_line() == ""
         :paused_result
       end)
 

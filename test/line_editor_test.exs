@@ -10,8 +10,19 @@ defmodule DeepSeekHarness.LineEditorTest do
     end
 
     test "supports extended prompt style" do
-      Application.put_env(:deep_seek_harness, :prompt_style, "extended")
-      prompt = LineEditor.build_prompt("02ec14fa-0fae-62b0-9b52", "deepseek-chat", :local)
+      # `prompt_style` is read from `.dsh/config.json` (via DeepSeekHarness.Config),
+      # not from Application env, so exercise the real config-file mechanism
+      # against an isolated temp workspace instead of the user's real config.
+      tmp_dir =
+        Path.join(System.tmp_dir!(), "dsh_test_cfg_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(Path.join(tmp_dir, ".dsh"))
+      File.write!(Path.join(tmp_dir, ".dsh/config.json"), ~s({"prompt_style": "extended"}))
+      on_exit(fn -> File.rm_rf(tmp_dir) end)
+
+      prompt =
+        LineEditor.build_prompt("02ec14fa-0fae-62b0-9b52", "deepseek-chat", :local, tmp_dir)
+
       assert String.contains?(prompt, "deepseek-chat")
       assert String.contains?(prompt, "id:02ec14fa")
     end
@@ -192,7 +203,9 @@ defmodule DeepSeekHarness.LineEditorTest do
   describe "tab completion" do
     test "completes a unique slash command match" do
       assert {:ok, "/ragex"} = LineEditor.tab_complete("/ra")
-      assert {:ok, "/review"} = LineEditor.tab_complete("/re")
+      # "/re" alone is ambiguous between "/resume" and "/review"; "/rev" is the
+      # shortest unambiguous prefix that resolves to "/review".
+      assert {:ok, "/review"} = LineEditor.tab_complete("/rev")
       assert {:ok, "/checkpoint"} = LineEditor.tab_complete("/ch")
       assert {:ok, "/plugins"} = LineEditor.tab_complete("/pl")
     end

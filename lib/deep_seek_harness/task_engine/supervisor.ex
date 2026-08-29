@@ -24,13 +24,9 @@ defmodule DeepSeekHarness.TaskEngine.Supervisor do
 
   @doc "Lists all currently active parallel tasks registered in TaskRegistry."
   def list_active_tasks do
-    case Registry.lookup(DeepSeekHarness.TaskEngine.TaskRegistry, "active_task") do
-      entries when is_list(entries) ->
-        Enum.map(entries, fn {_pid, info} -> info end)
-
-      _ ->
-        []
-    end
+    DeepSeekHarness.TaskEngine.TaskRegistry
+    |> Registry.lookup("active_task")
+    |> Enum.map(fn {_pid, info} -> info end)
   rescue
     _ -> []
   end

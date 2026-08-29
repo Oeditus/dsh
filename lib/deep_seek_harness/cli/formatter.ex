@@ -14,6 +14,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
   def red, do: IO.ANSI.red()
   def blue, do: IO.ANSI.blue()
   def gray, do: IO.ANSI.light_black()
+  def blink, do: IO.ANSI.blink_slow()
 
   @tips [
     "Use !command to execute shell commands directly (e.g. !git status)",
@@ -38,7 +39,8 @@ defmodule DeepSeekHarness.CLI.Formatter do
     "Use /nodes to view distributed Erlang node cluster status",
     "Use /cb or /clipboard to copy latest assistant response to system clipboard",
     "Use /clear to clear terminal output",
-    "Use /exit or /quit to exit DeepSeek Harness"
+    "Use /exit or /quit to exit DeepSeek Harness",
+    "Press Ctrl+P to toggle permission mode, Ctrl+G to toggle sandbox, Ctrl+B to toggle the status bar"
   ]
 
   @doc "Returns the full list of tips derived from /help commands."
@@ -106,6 +108,11 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/cb#{reset()} or #{cyan()}/clipboard#{reset()}       Copy latest assistant response to system clipboard (Markdown)
       #{cyan()}/clear#{reset()}                  Clear terminal output
       #{cyan()}/exit#{reset()} or #{cyan()}/quit#{reset()}            Exit DeepSeek Harness
+
+    #{bold()}HOTKEYS:#{reset()}
+      #{cyan()}Ctrl+P#{reset()}                  Toggle permission mode (ask_confirm ⇄ auto_approve)
+      #{cyan()}Ctrl+G#{reset()}                  Toggle workspace sandbox bounds on/off
+      #{cyan()}Ctrl+B#{reset()}                  Toggle idle status bar mode (gauge ⇄ compact session line)
     """
   end
 
@@ -126,25 +133,48 @@ defmodule DeepSeekHarness.CLI.Formatter do
 
   def format_markdown(text), do: inspect(text)
 
-  @doc "Formats context window memory usage percentage and token cost gauge bar."
-  def format_context_gauge(total_tokens, max_tokens \\ 128_000, cost_usd \\ 0.0) do
-    pct = min(100, round(total_tokens / max_tokens * 100))
+  @doc """
+  Formats context window memory usage percentage and token cost gauge bar.
+
+  `delta_tokens` (optional) is the token count consumed by the most recent
+  turn and is rendered as a `(+N)` suffix next to the running total. As
+  usage climbs toward the context limit, the gauge escalates from green to
+  yellow to bold red, and finally to a bold+blinking `/compact` warning hint
+  near the recommended compaction threshold (terminal blink support varies).
+  """
+  def format_context_gauge(
+        total_tokens,
+        max_tokens \\ 128_000,
+        cost_usd \\ 0.0,
+        delta_tokens \\ 0
+      ) do
+    pct = min(100, round(total_tokens / max(max_tokens, 1) * 100))
     bar_width = 16
     filled = round(pct / 100 * bar_width)
     empty = bar_width - filled
 
     bar = String.duplicate("█", filled) <> String.duplicate("░", empty)
 
-    color =
+    {color, emphasis, hint} =
       cond do
-        pct >= 80 -> red()
-        pct >= 50 -> yellow()
-        true -> green()
+        pct >= 90 -> {red(), bold() <> blink(), "  ⚠ /compact strongly recommended"}
+        pct >= 75 -> {red(), bold(), "  ⚠ /compact recommended"}
+        pct >= 50 -> {yellow(), "", ""}
+        true -> {green(), "", ""}
       end
 
     cost_str = :erlang.float_to_binary(cost_usd, [{:decimals, 4}])
 
-    "#{color}[#{bar}] #{pct}%#{reset()} #{dim()}(#{total_tokens}/#{max_tokens} tokens | $#{cost_str} USD)#{reset()}"
+    delta_str =
+      if is_integer(delta_tokens) and delta_tokens > 0 do
+        " #{green()}(+#{delta_tokens})#{reset()}"
+      else
+        ""
+      end
+
+    "#{color}#{emphasis}[#{bar}] #{pct}%#{reset()} " <>
+      "#{dim()}(#{total_tokens}/#{max_tokens} tokens#{reset()}#{delta_str}#{dim()} | $#{cost_str} USD)#{reset()}" <>
+      "#{color}#{bold()}#{hint}#{reset()}"
   end
 
   def format_agent_response(content) do

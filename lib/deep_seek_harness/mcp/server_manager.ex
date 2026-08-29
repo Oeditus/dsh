@@ -700,7 +700,8 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     dynamic_mod_name
   end
 
-  defp format_mcp_content(%{"type" => "validation_error", "errors" => errors} = err) do
+  @doc "Formats raw MCP tool result content (validation errors, text blocks, etc.) into a display string."
+  def format_mcp_content(%{"type" => "validation_error", "errors" => errors} = err) do
     format_mcp_content(%{
       type: :validation_error,
       errors: errors,
@@ -709,7 +710,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     })
   end
 
-  defp format_mcp_content(%{type: :validation_error, errors: errors} = err) do
+  def format_mcp_content(%{type: :validation_error, errors: errors} = err) do
     hint =
       Map.get(
         err,
@@ -731,14 +732,14 @@ defmodule DeepSeekHarness.MCP.ServerManager do
     "Validation Error: Code changes produced invalid#{lang_str} syntax:\n#{error_lines}\n\nHINT: #{hint}"
   end
 
-  defp format_mcp_content(content) when is_list(content) do
+  def format_mcp_content(content) when is_list(content) do
     Enum.map_join(content, "\n", fn
       %{"type" => "text", "text" => text} -> text
       item -> inspect(item)
     end)
   end
 
-  defp format_mcp_content(content), do: inspect(content, pretty: true)
+  def format_mcp_content(content), do: inspect(content, pretty: true)
 
   defp ensure_dllb_server_binary do
     case Application.get_env(:ragex, :dllb_server_bin) || System.get_env("DLLB_SERVER_BIN") do

@@ -14,6 +14,15 @@ defmodule DeepSeekHarness.Git do
     e -> {:error, "Git not available: #{Exception.message(e)}"}
   end
 
+  @doc "Returns true when the workspace has uncommitted changes (staged, unstaged, or untracked)."
+  def dirty?(cwd \\ ".") do
+    case status(cwd) do
+      {:ok, ""} -> false
+      {:ok, _} -> true
+      {:error, _} -> false
+    end
+  end
+
   @doc "Returns current git branch name or empty string."
   def current_branch(cwd \\ ".") do
     case System.cmd("git", ["branch", "--show-current"], cd: cwd, stderr_to_stdout: true) do

@@ -217,6 +217,9 @@ defmodule DeepSeekHarness.Brain.SessionStore do
 
   defp get_message_text(_), do: ""
 
+  # `get_message_text/1` (the only caller) always returns a binary, so this
+  # single clause covers every real input; dialyzer confirms a catch-all
+  # fallback clause here would be unreachable dead code.
   defp sanitize_title(text) when is_binary(text) do
     cleaned =
       text
@@ -230,8 +233,6 @@ defmodule DeepSeekHarness.Brain.SessionStore do
       truncate_text(cleaned, 60)
     end
   end
-
-  defp sanitize_title(_), do: nil
 
   defp truncate_text(text, max_len) do
     if String.length(text) > max_len do

@@ -31,8 +31,12 @@ defmodule DeepSeekHarness.CLI.Repl do
     IO.puts(Formatter.format_info("Brain actor spawned for session '#{session_id}'"))
 
     IO.puts(
+      Formatter.format_info("Type /help for command menu or !command for direct shell execution.")
+    )
+
+    IO.puts(
       Formatter.format_info(
-        "Type /help for command menu or !command for direct shell execution.\n"
+        "Hotkeys: Ctrl+P permission mode · Ctrl+G sandbox · Ctrl+B status bar mode\n"
       )
     )
 
@@ -44,10 +48,32 @@ defmodule DeepSeekHarness.CLI.Repl do
     # Ensure session actor process is alive before turn
     session_pid = ensure_session_alive(session_pid, session_id)
 
-    info = Session.get_info(session_pid)
-    prompt_str = LineEditor.build_prompt(session_id, info.model, info.hands_mode)
+    # A single get_stats/1 call covers everything the prompt and the idle
+    # status bar need (model, hands mode, permission mode, sandbox state,
+    # tool/MCP counts, cumulative tokens & cost) -- avoids extra round trips
+    # to the session actor per input line.
+    stats = Session.get_stats(session_pid)
 
-    case LineEditor.get_line(prompt_str, history) do
+    prompt_str =
+      LineEditor.build_prompt(
+        session_id,
+        stats.model,
+        stats.hands_mode,
+        ".",
+        stats.sandbox_workspace
+      )
+
+    compact_status_bar? =
+      Map.get(DeepSeekHarness.Config.load_config(), "compact_status_bar", false)
+
+    render_context =
+      stats
+      |> Map.put(:session_pid, session_pid)
+      |> Map.put(:last_turn_tokens, latest_turn_delta(session_pid))
+      |> Map.put(:git_dirty?, Git.dirty?())
+      |> Map.put(:compact_status_bar?, compact_status_bar?)
+
+    case LineEditor.get_line(prompt_str, history, render_context) do
       :eof ->
         graceful_shutdown()
         print_resume_banner(session_id)
@@ -584,11 +610,7 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   def handle_input("/config style", _session_pid, _session_id) do
-    IO.puts(
-      Formatter.format_error(
-        "Usage: /config style <starship|extended|compact|minimal>"
-      )
-    )
+    IO.puts(Formatter.format_error("Usage: /config style <starship|extended|compact|minimal>"))
 
     :continue
   end
@@ -649,7 +671,25 @@ defmodule DeepSeekHarness.CLI.Repl do
     **Usage:**
     - `/config style <starship|extended|compact|minimal>` — Switch prompt visual layout style
     - `/config prompt <template>` — Set custom prompt template (placeholders: `{session}`, `{model}`, `{mode}`, `{tasks}`)
-    - `/config toggle <setting_key>` — Toggle feature on/off (e.g. `enable_autosuggestions`, `enable_syntax_highlighting`)
+    - `/config toggle <setting_key>` — Toggle feature on/off (e.g. `enable_autosuggestions`, `enable_syntax_highlighting`, `enable_context_gauge`, `compact_status_bar`)
+
+    **Status Bar:** The ruler line above the prompt shows, in priority order:
+    1. An active parallel task badge whenever the OTP TaskEngine is running
+       background tool calls.
+    2. Otherwise, an ambient segment (permission mode, sandbox bounds,
+       connected MCP server count, registered tool count, and a `●` dot when
+       the workspace has uncommitted git changes) plus a toggleable segment:
+       either the token/cost gauge with per-turn `(+N)` delta and `/compact`
+       warnings as usage climbs, or a compact `id + message count` line.
+    3. A plain divider when disabled entirely via `/config toggle enable_context_gauge`.
+
+    Override the assumed context window size by adding `"max_context_tokens": <n>`
+    to `.dsh/config.json`. While the agent is "thinking", the spinner also shows
+    elapsed turn time and the live OTP parallel task count.
+
+    **Hotkeys:** `Ctrl+P` toggles permission mode, `Ctrl+G` toggles sandbox
+    bounds, `Ctrl+B` toggles the idle status bar between gauge and compact mode
+    (same as `/config toggle compact_status_bar`).
     """
 
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
@@ -1050,6 +1090,16 @@ defmodule DeepSeekHarness.CLI.Repl do
   catch
     :exit, reason ->
       {:error, "Session process crashed or stopped: #{inspect(reason)}"}
+  end
+
+  # Returns the token count consumed by the most recently completed turn, or
+  # 0 before any turn has run. Used to show a "(+N)" delta on the status
+  # bar's context gauge instead of only the cumulative running total.
+  defp latest_turn_delta(session_pid) do
+    case Session.get_turn_tokens(session_pid) do
+      [] -> 0
+      turns -> turns |> List.last() |> Map.get(:total_tokens, 0)
+    end
   end
 
   defp ensure_session_alive(pid, session_id) do
