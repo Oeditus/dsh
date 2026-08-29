@@ -8,6 +8,12 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
   # Matches @file://..., @http(s)://..., or @path/file
   @ref_regex ~r/@(file:\/\/\S+|https?:\/\/\S+|\/?[\w\.\-\/]+)/
 
+  @image_ext_names ~w(.png .jpg .jpeg .gif .webp .bmp)
+
+  # Images larger than this are refused (base64 inflates the payload ~33% and
+  # the vision model has a fixed image budget).
+  @max_image_bytes 10_000_000
+
   @ambiguous_error_patterns ~r/\b(error above|the error|build failure|stack trace|the failure|previous error|tool failure)\b/i
 
   @doc "Parses and expands all @ references and ambiguous context references (e.g. 'error above') in user prompts."
@@ -47,7 +53,22 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
       {expanded_text, attachments} =
         Enum.reduce(matches, {text, []}, fn [full_match, target], {acc_text, acc_attachments} ->
           case resolve_reference(target, cwd, opts) do
-            {:ok, content, label} ->
+            {:ok, {:image, mime, data_uri}, label} ->
+              # Image references are NOT inlined as text: the base64 payload is
+              # carried as a structured attachment so the session can build the
+              # vision API's `content` array (image_url + text parts).
+              clean_text = String.replace(acc_text, full_match, "[Image: #{label}]")
+
+              img_attachment = %{
+                type: "image",
+                label: label,
+                mime: mime,
+                data_uri: data_uri
+              }
+
+              {clean_text, [img_attachment | acc_attachments]}
+
+            {:ok, content, label} when is_binary(content) ->
               block =
                 "\n\n=== Attached File/URI (#{label}) ===\n#{content}\n=======================\n"
 
@@ -87,9 +108,12 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
         messages
         |> Enum.reverse()
         |> Enum.find(fn m ->
-          (m["role"] == "tool" and
-             (String.contains?(m["content"], "failed") or String.contains?(m["content"], "error"))) or
-            (m["role"] == "user" and String.contains?(m["content"], "SYSTEM NOTICE"))
+          content = m["content"]
+
+          is_binary(content) and
+            ((m["role"] == "tool" and
+                (String.contains?(content, "failed") or String.contains?(content, "error"))) or
+               (m["role"] == "user" and String.contains?(content, "SYSTEM NOTICE")))
         end)
       else
         nil
@@ -154,22 +178,51 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
   defp read_local_file(path, label) do
     if File.exists?(path) and not File.dir?(path) do
       case File.read(path) do
-        {:ok, content} ->
-          # Truncate extremely large files if > 500KB to prevent OOM
-          truncated =
-            if byte_size(content) > 500_000 do
-              binary_part(content, 0, 500_000) <> "\n... [Content truncated at 500KB]"
+        {:ok, content} when is_binary(content) ->
+          if image?(path) do
+            # Images are handled by the vision model, not inlined as text.
+            if byte_size(content) > @max_image_bytes do
+              {:error,
+               "Image '#{label}' is #{byte_size(content)} bytes, exceeding the " <>
+                 "#{@max_image_bytes} byte limit for vision attachment."}
             else
-              content
+              mime = image_mime(path)
+              {:ok, {:image, mime, "data:#{mime};base64," <> Base.encode64(content)}, label}
             end
+          else
+            # Truncate extremely large text files if > 500KB to prevent OOM
+            truncated =
+              if byte_size(content) > 500_000 do
+                binary_part(content, 0, 500_000) <> "\n... [Content truncated at 500KB]"
+              else
+                content
+              end
 
-          {:ok, truncated, label}
+            {:ok, truncated, label}
+          end
 
         {:error, reason} ->
           {:error, "File read error: #{inspect(reason)}"}
       end
     else
       {:error, "File does not exist or is a directory: #{path}"}
+    end
+  end
+
+  defp image?(path) do
+    ext = path |> Path.extname() |> String.downcase()
+    ext in @image_ext_names
+  end
+
+  defp image_mime(path) do
+    case path |> Path.extname() |> String.downcase() do
+      ".png" -> "image/png"
+      ".jpg" -> "image/jpeg"
+      ".jpeg" -> "image/jpeg"
+      ".gif" -> "image/gif"
+      ".webp" -> "image/webp"
+      ".bmp" -> "image/bmp"
+      _ -> "image/png"
     end
   end
 

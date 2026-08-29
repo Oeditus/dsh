@@ -192,7 +192,7 @@ defmodule DeepSeekHarness.Brain.Session do
       issue_tracker: Map.get(state, :issue_tracker, [])
     ]
 
-    {:ok, expanded_text, _attachments} = ContextExpander.expand(raw_text, state.cwd, opts)
+    {:ok, expanded_text, attachments} = ContextExpander.expand(raw_text, state.cwd, opts)
 
     rules_preamble = DeepSeekHarness.Rules.build_preamble("all", state.cwd)
 
@@ -201,7 +201,28 @@ defmodule DeepSeekHarness.Brain.Session do
 
     SessionStore.append_transcript(state.session_id, "USER_INPUT", final_user_text, state.cwd)
 
-    user_msg = %{"role" => "user", "content" => final_user_text}
+    # When the user attached one or more images (@screenshot.png), build the
+    # structured `content` array the vision API expects (image_url + text parts)
+    # instead of a plain string.
+    image_parts =
+      Enum.flat_map(attachments, fn
+        %{type: "image"} = img ->
+          [%{"type" => "image_url", "image_url" => %{"url" => img.data_uri}}]
+
+        _ ->
+          []
+      end)
+
+    user_msg =
+      if image_parts != [] do
+        %{
+          "role" => "user",
+          "content" => image_parts ++ [%{"type" => "text", "text" => final_user_text}]
+        }
+      else
+        %{"role" => "user", "content" => final_user_text}
+      end
+
     state = %{state | messages: state.messages ++ [user_msg], status: :thinking}
 
     state = auto_checkpoint(state, "Pre-turn ##{state.step_count + 1}")
@@ -508,7 +529,7 @@ defmodule DeepSeekHarness.Brain.Session do
         formatted_messages =
           Enum.map_join(state.messages, "\n\n", fn m ->
             role = String.upcase(m["role"] || "unknown")
-            text = m["content"] || ""
+            text = message_content_text(m["content"])
             "### #{role}\n#{text}"
           end)
 
@@ -771,6 +792,25 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   defp maybe_put_reasoning(msg, _), do: msg
+
+  @doc """
+  Extracts a plain-text representation of a message's `content` field.
+
+  Handles both the legacy plain-string form and the multimodal array form
+  (list of `image_url` / `text` content parts used by vision models), so
+  exports and summaries never crash on image-bearing messages.
+  """
+  def message_content_text(content) when is_binary(content), do: content
+
+  def message_content_text(content) when is_list(content) do
+    Enum.map_join(content, "\n", fn
+      %{"text" => text} when is_binary(text) -> text
+      %{"image_url" => %{"url" => url}} when is_binary(url) -> "[Image: #{url}]"
+      _ -> ""
+    end)
+  end
+
+  def message_content_text(_), do: ""
 
   defp execute_tool_calls(tool_calls, state) do
     alias DeepSeekHarness.TaskEngine.Orchestrator

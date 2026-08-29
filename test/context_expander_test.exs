@@ -110,4 +110,42 @@ defmodule DeepSeekHarness.ContextExpanderTest do
     assert String.contains?(expanded, "syntax_error")
     assert "error_context" in attachments
   end
+
+  test "image reference produces a structured image attachment (not inlined text)" do
+    # Minimal valid 1x1 transparent PNG (base64-encoded)
+    png =
+      Base.decode64!(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+      )
+
+    tmp_path =
+      Path.join(System.tmp_dir!(), "img_#{System.unique_integer([:positive])}.png")
+
+    File.write!(tmp_path, png)
+
+    assert {:ok, expanded, attachments} = ContextExpander.expand("Describe @#{tmp_path}")
+
+    # The base64 payload must NOT be inlined into the prompt text
+    refute String.contains?(expanded, "iVBORw0KG")
+    assert String.contains?(expanded, "[Image: #{tmp_path}]")
+
+    [img] = Enum.filter(attachments, &(is_map(&1) and &1.type == "image"))
+    assert img.label == tmp_path
+    assert img.mime == "image/png"
+    assert String.starts_with?(img.data_uri, "data:image/png;base64,")
+
+    File.rm(tmp_path)
+  end
+
+  test "oversized image reference is rejected with an error" do
+    path = Path.join(System.tmp_dir!(), "big_#{System.unique_integer([:positive])}.png")
+    # 11MB of junk, exceeding the 10MB vision limit
+    File.write!(path, :binary.copy(<<0>>, 11_000_000))
+
+    assert {:ok, expanded, attachments} = ContextExpander.expand("Look at @#{path}")
+    assert attachments == []
+    refute String.contains?(expanded, "[Image:")
+
+    File.rm(path)
+  end
 end

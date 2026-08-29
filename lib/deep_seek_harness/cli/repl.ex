@@ -586,6 +586,8 @@ defmodule DeepSeekHarness.CLI.Repl do
         "v3" -> "deepseek-chat"
         "coder" -> "deepseek-coder"
         "v2.5" -> "deepseek-coder"
+        "vision" -> "deepseek-v4-flash-vision-exp"
+        "v4" -> "deepseek-v4-flash-vision-exp"
         "openrouter-r1" -> "deepseek/deepseek-r1"
         "openrouter-v3" -> "deepseek/deepseek-chat"
         "siliconflow-r1" -> "deepseek-ai/DeepSeek-R1"

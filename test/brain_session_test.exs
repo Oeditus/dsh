@@ -78,6 +78,35 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert is_binary(response)
   end
 
+  test "image attachment builds structured content array for vision model" do
+    # Minimal valid 1x1 transparent PNG (base64-encoded)
+    png =
+      Base.decode64!(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+      )
+
+    img_path = Path.join(System.tmp_dir!(), "sess_img_#{System.unique_integer([:positive])}.png")
+    File.write!(img_path, png)
+
+    # Run the vision model in offline/mock mode (no API key) so the test is
+    # deterministic and never hits the network. The multimodal `content` array
+    # flows through ContextExpander -> Session -> DeepSeekAPI, which extracts
+    # the text part for the mock reply.
+    sess_id = "vision_test_#{System.unique_integer([:positive])}"
+
+    {:ok, pid} =
+      SessionSupervisor.start_session(
+        session_id: sess_id,
+        model: "deepseek-v4-flash-vision-exp",
+        api_key: ""
+      )
+
+    assert {:ok, %{content: resp}} = Session.send_user_message(pid, "Describe @#{img_path}")
+    assert is_binary(resp)
+
+    File.rm(img_path)
+  end
+
   test "toggles sandbox bounds, retrieves stats dashboard, turn tokens, and exports session", %{
     pid: pid
   } do

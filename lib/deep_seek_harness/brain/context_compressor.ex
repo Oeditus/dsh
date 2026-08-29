@@ -47,8 +47,19 @@ defmodule DeepSeekHarness.Brain.ContextCompressor do
   defp format_history(messages) do
     Enum.map_join(messages, "\n\n", fn m ->
       role = String.upcase(m["role"] || "UNKNOWN")
-      content = m["content"] || ""
+      content = message_content_text(m["content"])
       "[#{role}]: #{content}"
     end)
   end
+
+  defp message_content_text(content) when is_binary(content), do: content
+
+  defp message_content_text(content) when is_list(content) do
+    Enum.map_join(content, "\n", fn
+      %{"text" => text} when is_binary(text) -> text
+      _ -> ""
+    end)
+  end
+
+  defp message_content_text(_), do: ""
 end

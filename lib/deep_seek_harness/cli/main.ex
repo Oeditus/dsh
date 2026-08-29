@@ -167,7 +167,7 @@ defmodule DeepSeekHarness.CLI.Main do
     OPTIONS:
       -c, --conversation STRING  Resume specific conversation ID
       -p, --prompt STRING        Input prompt to send to agent
-      -m, --model STRING         Model selection (deepseek-chat, deepseek-reasoner)
+      -m, --model STRING         Model selection (deepseek-chat, deepseek-reasoner, deepseek-v4-flash-vision-exp)
           --node STRING          Start local Erlang distributed node name
           --connect STRING       Connect to remote Hands node
           --plugin FILE          Load external Elixir plugin file (.ex or .exs)

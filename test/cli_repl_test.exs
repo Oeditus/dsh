@@ -28,6 +28,8 @@ defmodule DeepSeekHarness.CLIReplTest do
     assert :continue = Repl.handle_input("/permissions ask", pid, id)
     assert :continue = Repl.handle_input("/model reasoner", pid, id)
     assert :continue = Repl.handle_input("/model chat", pid, id)
+    assert :continue = Repl.handle_input("/model vision", pid, id)
+    assert :continue = Repl.handle_input("/model v4", pid, id)
   end
 
   test "handles hands execution mode settings", %{session_pid: pid, session_id: id} do

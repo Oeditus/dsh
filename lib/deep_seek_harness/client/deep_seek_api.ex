@@ -184,7 +184,7 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
       tool_results =
         messages
         |> Enum.filter(fn m -> m["role"] == "tool" end)
-        |> Enum.map_join("\n", fn m -> m["content"] || "" end)
+        |> Enum.map_join("\n", fn m -> message_content_text(m["content"]) end)
 
       prefix = if model == "deepseek-reasoner", do: "[DeepSeek-R1 Reasoning Mode] ", else: ""
 
@@ -198,7 +198,7 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
          usage: %{prompt_tokens: 60, completion_tokens: 30, total_tokens: 90}
        }}
     else
-      content_str = last_user_msg["content"] || ""
+      content_str = message_content_text(last_user_msg["content"])
 
       case match_mock_handler(content_str) do
         {:ok, tool_name, args, text, reasoning} ->
@@ -219,12 +219,13 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
 
         :no_match ->
           prefix = if model == "deepseek-reasoner", do: "[DeepSeek-R1 Reasoning Mode] ", else: ""
+          vision_note = if vision_model?(model), do: "[Vision] ", else: ""
 
           {:ok,
            %{
              role: "assistant",
              content:
-               "#{prefix}Received prompt: \"#{content_str}\". (Running in offline/mock mode. Set DEEPSEEK_API_KEY to connect live to DeepSeek API).",
+               "#{prefix}#{vision_note}Received prompt: \"#{content_str}\". (Running in offline/mock mode. Set DEEPSEEK_API_KEY to connect live to DeepSeek API).",
              reasoning_content: "Analyzed request using spatiotemporal actor context.",
              tool_calls: [],
              usage: %{prompt_tokens: 30, completion_tokens: 20, total_tokens: 50}
@@ -232,6 +233,25 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
       end
     end
   end
+
+  defp message_content_text(content) when is_binary(content), do: content
+
+  defp message_content_text(content) when is_list(content) do
+    Enum.map_join(content, "\n", fn
+      %{"text" => text} when is_binary(text) -> text
+      %{"image_url" => %{"url" => url}} when is_binary(url) -> "[Image attached: #{url}]"
+      _ -> ""
+    end)
+  end
+
+  defp message_content_text(_), do: ""
+
+  defp vision_model?(model) when is_binary(model) do
+    String.contains?(String.downcase(model), "vision") or
+      String.contains?(String.downcase(model), "vl")
+  end
+
+  defp vision_model?(_), do: false
 
   defp match_mock_handler(input) do
     Enum.find_value(@mock_handlers, :no_match, fn {regex, name, args, text, reasoning} ->
