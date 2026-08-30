@@ -318,6 +318,21 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/import " <> args, _session_pid, _session_id) do
+    case String.split(String.trim(args), ~r/\s+/, trim: true) do
+      [path] -> handle_import_session(path, nil)
+      [path, session_id | _] -> handle_import_session(path, session_id)
+      [] -> IO.puts(Formatter.format_error("Usage: /import <path/to/session.json> [session_id]"))
+    end
+
+    :continue
+  end
+
+  def handle_input("/import", _session_pid, _session_id) do
+    IO.puts(Formatter.format_error("Usage: /import <path/to/session.json> [session_id]"))
+    :continue
+  end
+
   def handle_input("/cb", session_pid, session_id),
     do: handle_copy_clipboard(session_pid, session_id)
 
@@ -1181,6 +1196,22 @@ defmodule DeepSeekHarness.CLI.Repl do
     tools_list = Enum.map_join(s.tools, "\n", fn t -> "  - `#{t}`" end)
 
     "#### #{s.name} (`#{s.command} #{Enum.join(s.args, " ")}`)\n**Registered Tools (#{s.tools_count}):**\n#{tools_list}"
+  end
+
+  defp handle_import_session(path, session_id) do
+    opts = [session_id: session_id, overwrite: false]
+
+    case DeepSeekHarness.Brain.SessionStore.import_session(path, opts) do
+      {:ok, imported_id, file_path} ->
+        IO.puts(
+          Formatter.format_success(
+            "Imported session '#{imported_id}' -> #{file_path}. Resume with /session resume #{imported_id} or /resume #{imported_id}."
+          )
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
   end
 
   defp handle_copy_clipboard(session_pid, _session_id) do

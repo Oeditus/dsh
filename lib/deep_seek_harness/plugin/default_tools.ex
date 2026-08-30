@@ -8,7 +8,7 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
   @impl true
   def description,
     do:
-      "Provides default workspace tools: read_file, write_file, replace_file, list_dir, bash, elixir_eval, and ask_question."
+      "Provides default workspace tools: read_file, write_file, replace_file, list_dir, bash, elixir_eval, ask_question, and import_session."
 
   @impl true
   def tools do
@@ -127,6 +127,32 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
           required: ["questions"]
         },
         execute: &ask_question/1
+      },
+      %{
+        name: "import_session",
+        description:
+          "Imports an externally-produced session JSON file into DSH's own on-disk session store (.dsh/sessions/<id>.json), so it can be resumed via /resume or /session switch. Accepts a top-level {\"messages\": [...]} object, a bare JSON array of messages, or the native session/export schema. Replaces converting/importing sessions via an external script.",
+        parameters: %{
+          type: "object",
+          properties: %{
+            path: %{
+              type: "string",
+              description: "Path to the source session JSON file to import."
+            },
+            session_id: %{
+              type: "string",
+              description:
+                "Target session ID to import as (defaults to the source file's own 'session_id', or a freshly generated ID)."
+            },
+            overwrite: %{
+              type: "boolean",
+              description:
+                "Whether to overwrite an existing session with the same ID (default: false)."
+            }
+          },
+          required: ["path"]
+        },
+        execute: &import_session/1
       },
       %{
         name: "glob_search",
@@ -287,6 +313,25 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
 
       {:ok, result}
     end
+  end
+
+  def import_session(%{"path" => path} = args) do
+    opts = [
+      session_id: Map.get(args, "session_id"),
+      overwrite: Map.get(args, "overwrite", false)
+    ]
+
+    case DeepSeekHarness.Brain.SessionStore.import_session(path, opts) do
+      {:ok, session_id, file_path} ->
+        {:ok, "Imported session '#{session_id}' -> #{file_path}"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def import_session(_args) do
+    {:error, "Invalid arguments for import_session. Expected 'path' to a session JSON file."}
   end
 
   def glob_search(%{"pattern" => pattern}) do

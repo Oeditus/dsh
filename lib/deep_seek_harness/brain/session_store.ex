@@ -90,6 +90,92 @@ defmodule DeepSeekHarness.Brain.SessionStore do
     end
   end
 
+  @doc """
+  Imports an externally-produced session JSON file into DSH's own on-disk
+  session store, so it can be resumed like any native session via `/resume`
+  or `/session switch`. Replaces ad-hoc external scripts previously used to
+  massage foreign session exports into a loadable shape.
+
+  Tolerantly accepts several JSON shapes at `source_path`:
+    - the native `save_session/2` schema (`session_id`, `model`,
+      `permission_mode`, `step_count`, `total_prompt_tokens`,
+      `total_completion_tokens`, `messages`, `snapshots`)
+    - the `/export json` schema (`session_id`, `model`, `exported_at`,
+      `total_tokens`, `messages`)
+    - a bare `%{"messages" => [...]}` object
+    - a raw top-level JSON array of message objects
+
+  `opts` supports:
+    - `:session_id` -- target session ID (defaults to the source file's own
+      `"session_id"` field, or a freshly generated UUID)
+    - `:overwrite` -- when `true`, allows replacing an existing session file
+      with the same ID (default: `false`)
+
+  Returns `{:ok, session_id, file_path}` or `{:error, reason}`.
+  """
+  def import_session(source_path, opts \\ [], cwd \\ ".") do
+    with {:ok, content} <- read_import_file(source_path),
+         {:ok, data} <- decode_import_json(content, source_path),
+         {:ok, messages} <- extract_import_messages(data) do
+      meta = if is_map(data), do: data, else: %{}
+      session_id = opts[:session_id] || meta["session_id"] || generate_session_id()
+      file_path = Path.join(session_dir(cwd), "#{session_id}.json")
+
+      if File.exists?(file_path) and !Keyword.get(opts, :overwrite, false) do
+        {:error,
+         "Session '#{session_id}' already exists at #{file_path}. Pass a different session_id, or overwrite: true."}
+      else
+        session_state = %{
+          session_id: session_id,
+          model: meta["model"] || "deepseek-chat",
+          permission_mode: normalize_permission_mode(meta["permission_mode"]),
+          step_count: meta["step_count"] || 0,
+          total_prompt_tokens: meta["total_prompt_tokens"] || 0,
+          total_completion_tokens: meta["total_completion_tokens"] || 0,
+          messages: messages,
+          snapshots: meta["snapshots"] || []
+        }
+
+        case save_session(session_state, cwd) do
+          {:ok, path} -> {:ok, session_id, path}
+          {:error, reason} -> {:error, "Failed to write imported session: #{inspect(reason)}"}
+        end
+      end
+    end
+  end
+
+  defp read_import_file(source_path) do
+    case File.read(source_path) do
+      {:ok, content} -> {:ok, content}
+      {:error, reason} -> {:error, "Failed to read '#{source_path}': #{inspect(reason)}"}
+    end
+  end
+
+  defp decode_import_json(content, source_path) do
+    case Jason.decode(content) do
+      {:ok, data} -> {:ok, data}
+      {:error, err} -> {:error, "Invalid JSON in '#{source_path}': #{Exception.message(err)}"}
+    end
+  end
+
+  defp extract_import_messages(data) when is_list(data), do: {:ok, data}
+  defp extract_import_messages(%{"messages" => msgs}) when is_list(msgs), do: {:ok, msgs}
+
+  defp extract_import_messages(_) do
+    {:error,
+     "Source JSON must be either a top-level array of messages, or an object with a 'messages' array."}
+  end
+
+  defp normalize_permission_mode(mode) when mode in ["auto_approve", "ask_confirm"], do: mode
+  defp normalize_permission_mode(_), do: "ask_confirm"
+
+  defp generate_session_id do
+    <<a::32, b::16, c::16, d::16, e::48>> = :crypto.strong_rand_bytes(16)
+
+    :io_lib.format("~8.16.0b-~4.16.0b-~4.16.0b-~4.16.0b-~12.16.0b", [a, b, c, d, e])
+    |> IO.iodata_to_binary()
+  end
+
   @doc "Lists all saved session IDs."
   def list_sessions(cwd \\ ".") do
     dir = session_dir(cwd)

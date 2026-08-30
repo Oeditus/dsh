@@ -100,6 +100,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/diff#{reset()}                   Show colorized git diff of workspace changes
       #{cyan()}/review <base> [head]#{reset()}   Compare two git branches and generate a detailed Code Review
       #{cyan()}/commit <message>#{reset()}       Auto-commit staged workspace changes to git
+      #{cyan()}/import <path> [id]#{reset()}     Import an external session JSON file into DSH's own session store
       #{cyan()}/cost#{reset()}                   Display token usage and session cost statistics
       #{cyan()}/permissions [auto|ask]#{reset()} Set tool execution safety mode
       #{cyan()}/subagent <prompt>#{reset()}      Spawn a background subagent worker for sub-tasks

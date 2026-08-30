@@ -28,17 +28,27 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
         {task, idx, tc}
       end)
 
-    # Wait for all subprocesses concurrently
-    task_structs = Enum.map(tasks, fn {task, _idx, _tc} -> task end)
+    # Interactive tools (currently just `ask_question`) block on a live
+    # human answering a TTY modal, which can legitimately take far longer
+    # than the batch's tool-execution timeout -- there is no "too slow"
+    # for a person reading and deciding. Cutting them off with the same
+    # timeout as `bash`/`read_file`/etc. would silently discard the
+    # question and fabricate a timeout error the model never asked for.
+    # Splitting them out and awaiting them with `:infinity` guarantees the
+    # *only* way such a call ever resolves is the user's own answer (or an
+    # explicit in-modal cancel via Ctrl+C) -- never a wall-clock expiry.
+    {interactive, timed} =
+      Enum.split_with(tasks, fn {_task, _idx, tc} -> interactive_tool?(tc.name) end)
+
+    timed_structs = Enum.map(timed, fn {task, _idx, _tc} -> task end)
 
     yielded_map =
-      task_structs
+      timed_structs
       |> Task.yield_many(timeout)
       |> Enum.into(%{})
 
-    # Collect and sort results by original index
-    results =
-      Enum.map(tasks, fn {task, idx, tc} ->
+    timed_results =
+      Enum.map(timed, fn {task, idx, tc} ->
         res =
           case Map.get(yielded_map, task) do
             {:ok, {_idx, _tc, exec_result}} ->
@@ -55,10 +65,26 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
         {idx, tc, res}
       end)
 
-    results
+    interactive_results =
+      Enum.map(interactive, fn {task, idx, tc} ->
+        res =
+          case Task.yield(task, :infinity) || Task.shutdown(task, :brutal_kill) do
+            {:ok, {_idx, _tc, exec_result}} -> exec_result
+            {:exit, reason} -> {:error, "Tool process crashed: #{inspect(reason)}"}
+            nil -> {:error, "Tool execution failed unexpectedly"}
+          end
+
+        {idx, tc, res}
+      end)
+
+    (timed_results ++ interactive_results)
     |> Enum.sort_by(fn {idx, _tc, _res} -> idx end)
     |> Enum.map(fn {_idx, tc, res} -> {tc, res} end)
   end
+
+  @doc false
+  def interactive_tool?("ask_question"), do: true
+  def interactive_tool?(_), do: false
 
   defp run_single_tool(tc, session_state) do
     summary = format_short_summary(tc.name, tc.arguments)

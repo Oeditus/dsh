@@ -51,6 +51,119 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
     assert msg =~ "does not exist"
   end
 
+  describe "import_session/3" do
+    test "imports the native save_session schema and makes it resumable", %{tmp_dir: tmp_dir} do
+      source_path = Path.join(tmp_dir, "external_export.json")
+
+      File.write!(
+        source_path,
+        Jason.encode!(%{
+          "session_id" => "from_source",
+          "model" => "deepseek-reasoner",
+          "permission_mode" => "auto_approve",
+          "step_count" => 3,
+          "total_prompt_tokens" => 100,
+          "total_completion_tokens" => 50,
+          "messages" => [%{"role" => "user", "content" => "Hello"}],
+          "snapshots" => []
+        })
+      )
+
+      assert {:ok, "from_source", file_path} =
+               SessionStore.import_session(source_path, [], tmp_dir)
+
+      assert File.exists?(file_path)
+
+      assert {:ok, loaded} = SessionStore.load_session("from_source", tmp_dir)
+      assert loaded["model"] == "deepseek-reasoner"
+      assert length(loaded["messages"]) == 1
+    end
+
+    test "imports a bare {\"messages\": [...]} object, defaulting missing fields", %{
+      tmp_dir: tmp_dir
+    } do
+      source_path = Path.join(tmp_dir, "bare_messages.json")
+
+      File.write!(
+        source_path,
+        Jason.encode!(%{"messages" => [%{"role" => "user", "content" => "Hi"}]})
+      )
+
+      assert {:ok, session_id, _file_path} =
+               SessionStore.import_session(source_path, [session_id: "bare_import"], tmp_dir)
+
+      assert session_id == "bare_import"
+      assert {:ok, loaded} = SessionStore.load_session("bare_import", tmp_dir)
+      assert loaded["model"] == "deepseek-chat"
+      assert length(loaded["messages"]) == 1
+    end
+
+    test "imports a raw top-level JSON array of messages", %{tmp_dir: tmp_dir} do
+      source_path = Path.join(tmp_dir, "raw_array.json")
+
+      File.write!(
+        source_path,
+        Jason.encode!([
+          %{"role" => "user", "content" => "Hi"},
+          %{"role" => "assistant", "content" => "Hello!"}
+        ])
+      )
+
+      assert {:ok, session_id, _file_path} =
+               SessionStore.import_session(source_path, [session_id: "raw_array_import"], tmp_dir)
+
+      assert {:ok, loaded} = SessionStore.load_session(session_id, tmp_dir)
+      assert length(loaded["messages"]) == 2
+    end
+
+    test "refuses to overwrite an existing session unless overwrite: true", %{tmp_dir: tmp_dir} do
+      source_path = Path.join(tmp_dir, "dup.json")
+
+      File.write!(
+        source_path,
+        Jason.encode!(%{"messages" => [%{"role" => "user", "content" => "Hi"}]})
+      )
+
+      assert {:ok, "dup_id", _} =
+               SessionStore.import_session(source_path, [session_id: "dup_id"], tmp_dir)
+
+      assert {:error, msg} =
+               SessionStore.import_session(source_path, [session_id: "dup_id"], tmp_dir)
+
+      assert msg =~ "already exists"
+
+      assert {:ok, "dup_id", _} =
+               SessionStore.import_session(
+                 source_path,
+                 [session_id: "dup_id", overwrite: true],
+                 tmp_dir
+               )
+    end
+
+    test "returns an error for invalid JSON", %{tmp_dir: tmp_dir} do
+      source_path = Path.join(tmp_dir, "invalid.json")
+      File.write!(source_path, "{not valid json")
+
+      assert {:error, msg} = SessionStore.import_session(source_path, [], tmp_dir)
+      assert msg =~ "Invalid JSON"
+    end
+
+    test "returns an error when no messages array is present", %{tmp_dir: tmp_dir} do
+      source_path = Path.join(tmp_dir, "no_messages.json")
+      File.write!(source_path, Jason.encode!(%{"session_id" => "whatever"}))
+
+      assert {:error, msg} = SessionStore.import_session(source_path, [], tmp_dir)
+      assert msg =~ "messages"
+    end
+
+    test "returns an error when the source file does not exist", %{tmp_dir: tmp_dir} do
+      assert {:error, msg} =
+               SessionStore.import_session(Path.join(tmp_dir, "missing.json"), [], tmp_dir)
+
+      assert msg =~ "Failed to read"
+    end
+  end
+
   test "extracts and truncates first user message title", %{tmp_dir: tmp_dir} do
     long_msg = String.duplicate("A long user prompt ", 10)
 
