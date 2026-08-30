@@ -6,6 +6,7 @@ defmodule DeepSeekHarness.CLI.LogFormatterTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
+  alias DeepSeekHarness.CLI.LineEditor
   alias DeepSeekHarness.CLI.LogFormatter
   alias DeepSeekHarness.CLI.Spinner
   alias DeepSeekHarness.CLI.TerminalOwner
@@ -123,5 +124,51 @@ defmodule DeepSeekHarness.CLI.LogFormatterTest do
 
     assert formatted =~ "Idle-time notice"
     refute formatted == ""
+  end
+
+  describe "terminal-width truncation" do
+    test "leaves a short message unchanged, without an ellipsis" do
+      msg = ~s|bash(command: "ls -la")|
+      event = %{level: :info, msg: msg}
+      formatted = LogFormatter.format(event, %{})
+
+      refute formatted =~ "…"
+      assert formatted =~ msg
+    end
+
+    test "truncates an overly long single-line message to the terminal width, appending an ellipsis" do
+      long_command = String.duplicate("x", 300)
+      event = %{level: :info, msg: ~s|bash(command: "#{long_command}")|}
+      formatted = LogFormatter.format(event, %{})
+
+      content = String.trim_trailing(formatted, "\r\n")
+      assert content =~ "…"
+      assert LineEditor.display_width(content) <= expected_budget()
+    end
+
+    test "truncates each line of a multi-line message independently" do
+      long_line = String.duplicate("y", 300)
+      event = %{level: :info, msg: "first line\n#{long_line}"}
+      formatted = LogFormatter.format(event, %{})
+
+      [line1, line2] =
+        formatted
+        |> String.trim_trailing("\r\n")
+        |> String.split("\n")
+
+      refute line1 =~ "…"
+      assert line2 =~ "…"
+      assert LineEditor.display_width(line2) <= expected_budget()
+    end
+  end
+
+  defp expected_budget do
+    cols =
+      case :io.columns() do
+        {:ok, c} when is_integer(c) and c > 10 -> c
+        _ -> 120
+      end
+
+    max(cols - 2, 1)
   end
 end

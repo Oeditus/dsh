@@ -330,6 +330,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     - **Estimated Cost (USD)**: `$#{:erlang.float_to_binary(stats.estimated_cost_usd, [{:decimals, 6}])}`
     - **Registered Tools**: `#{stats.tools_count}`
     - **Connected MCP Servers**: `#{stats.mcp_servers_count}`
+    - **Max Tool Iteration Depth**: `#{stats.max_tool_depth}`
     """
 
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
@@ -689,6 +690,10 @@ defmodule DeepSeekHarness.CLI.Repl do
     Override the assumed context window size by adding `"max_context_tokens": <n>`
     to `.dsh/config.json`. While the agent is "thinking", the spinner also shows
     elapsed turn time and the live OTP parallel task count.
+
+    Override how many consecutive tool-calling turns a single agent loop
+    runs before pausing to ask whether to continue by adding
+    `"max_tool_depth": <n>` to `.dsh/config.json` (default: `100`).
 
     **Hotkeys:** `Ctrl+P` toggles permission mode, `Ctrl+G` toggles sandbox
     bounds, `Ctrl+B` toggles the idle status bar between gauge and compact mode

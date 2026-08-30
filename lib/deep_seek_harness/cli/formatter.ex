@@ -202,6 +202,73 @@ defmodule DeepSeekHarness.CLI.Formatter do
     "#{blue()}#{bold()}●#{reset()} #{msg}"
   end
 
+  @doc """
+  Computes a string's terminal display width, in columns.
+
+  Strips ANSI escape/cursor-control sequences (zero width) and sums each
+  remaining grapheme's rendered width: 1 column for ordinary characters,
+  2 columns for East-Asian-Wide/Fullwidth code points and the common emoji
+  blocks, matching how virtually every terminal emulator actually renders
+  them.
+
+  This matters because callers such as `LineEditor`'s status bar ruler pad
+  dashes to fill the *entire* terminal width (see `center_in_ruler/3`), so
+  the rendered line always sits exactly at the width boundary. Previously
+  this delegated to `Owl.Data.length/1`, which only counts Unicode
+  graphemes -- it treats every character, including wide CJK ideographs
+  and emoji (e.g. the `🔌` MCP icon), as width 1. That silent 1-column
+  undercount was enough to push the real rendered line past the terminal
+  width on every redraw, which then desynced the cursor math used to
+  erase and redraw the status bar in place, leaving stale fragments
+  behind on every keystroke.
+  """
+  def display_width(str) when is_binary(str) do
+    str
+    |> String.replace(~r/\e\[[0-9;]*[mGKH]/, "")
+    |> String.graphemes()
+    |> Enum.reduce(0, fn grapheme, acc -> acc + grapheme_width(grapheme) end)
+  end
+
+  # A grapheme cluster's rendered width is the width of its base (first)
+  # code point -- combining marks, variation selectors, and any other code
+  # points that follow within the same cluster render as zero-width
+  # modifiers of that base character.
+  defp grapheme_width(grapheme) do
+    [first | _rest] = String.to_charlist(grapheme)
+    codepoint_width(first)
+  end
+
+  # Approximates POSIX `wcwidth(3)` for the ranges that matter to a
+  # terminal UI: East Asian Wide/Fullwidth blocks (CJK ideographs, Hangul
+  # syllables, fullwidth forms) and the common emoji blocks render as 2
+  # terminal columns in essentially every modern terminal emulator;
+  # everything else -- including Latin text and Nerd Font Private-Use-Area
+  # icons, which render in a single cell -- is 1 column.
+  defp codepoint_width(cp) do
+    cond do
+      cp in 0x1100..0x115F -> 2
+      cp in 0x2E80..0x303E -> 2
+      cp in 0x3041..0x33FF -> 2
+      cp in 0x3400..0x4DBF -> 2
+      cp in 0x4E00..0x9FFF -> 2
+      cp in 0xA000..0xA4CF -> 2
+      cp in 0xAC00..0xD7A3 -> 2
+      cp in 0xF900..0xFAFF -> 2
+      cp in 0xFE30..0xFE4F -> 2
+      cp in 0xFF00..0xFF60 -> 2
+      cp in 0xFFE0..0xFFE6 -> 2
+      cp in 0x16FE0..0x16FE4 -> 2
+      cp in 0x17000..0x18CFF -> 2
+      cp in 0x1B000..0x1B2FF -> 2
+      cp in 0x1F300..0x1F64F -> 2
+      cp in 0x1F680..0x1F6FF -> 2
+      cp in 0x1F900..0x1F9FF -> 2
+      cp in 0x1FA70..0x1FAFF -> 2
+      cp in 0x20000..0x3FFFD -> 2
+      true -> 1
+    end
+  end
+
   @doc "Copies a markdown text payload to the OS clipboard."
   def copy_to_clipboard(text) when is_binary(text) do
     cmd_info =

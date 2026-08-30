@@ -5,6 +5,7 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
   Suppresses noisy low-level socket transport chatter and handles raw mode CRLF formatting.
   """
 
+  alias DeepSeekHarness.CLI.LineEditor
   alias DeepSeekHarness.CLI.Spinner
   alias DeepSeekHarness.CLI.TerminalOwner
 
@@ -34,6 +35,7 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
         else
           "#{circle} #{formatted_msg}\r\n"
         end
+        |> truncate_to_terminal()
 
       cond do
         # Spinner is running its own periodic single-line redraw right now --
@@ -69,6 +71,31 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
     :logger.set_handler_config(:default, :formatter, {__MODULE__, %{}})
   rescue
     _ -> :error
+  end
+
+  # A tool-call preview line (e.g. a `bash` command echoing a long shell
+  # pipeline) or any other verbose log message can easily exceed the
+  # terminal width, wrapping onto extra rows and desyncing the row-count
+  # bookkeeping every `TerminalOwner`-registered surface relies on to
+  # erase/redraw itself correctly. Truncate each visual line of the
+  # message to `terminal width - 2` columns, appending an ellipsis only
+  # when a line actually got cut, so a long line always fits on-screen
+  # without corrupting whatever redraws around it.
+  defp truncate_to_terminal(line) do
+    content = String.trim_trailing(line, "\r\n")
+    budget = max(terminal_cols() - 2, 1)
+
+    content
+    |> String.split("\n")
+    |> Enum.map_join("\n", &LineEditor.truncate_to_width(&1, budget))
+    |> Kernel.<>("\r\n")
+  end
+
+  defp terminal_cols do
+    case :io.columns() do
+      {:ok, c} when is_integer(c) and c > 10 -> c
+      _ -> 120
+    end
   end
 
   defp noisy_log?(msg) when is_binary(msg) do

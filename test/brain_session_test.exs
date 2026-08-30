@@ -152,6 +152,22 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert user2["role"] == "user"
   end
 
+  test "defaults max_tool_depth to 100 and honors an explicit override", %{pid: pid} do
+    stats = Session.get_stats(pid)
+    assert stats.max_tool_depth == 100
+
+    sess_id = "depth_override_test_#{System.unique_integer([:positive])}"
+
+    {:ok, override_pid} =
+      SessionSupervisor.start_session(
+        session_id: sess_id,
+        model: "deepseek-chat",
+        max_tool_depth: 7
+      )
+
+    assert Session.get_stats(override_pid).max_tool_depth == 7
+  end
+
   test "whitelists all ragex tools automatically without asking for user confirmation" do
     # Verify that ragex tool names starting with mcp_ragex_, ragex_, or ragex are permitted
     state = %{

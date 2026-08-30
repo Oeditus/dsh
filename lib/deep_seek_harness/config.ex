@@ -25,7 +25,12 @@ defmodule DeepSeekHarness.Config do
     "compact_status_bar" => false,
     # Assumed model context window size (tokens) used by the status bar's
     # usage gauge. Override per-workspace if DeepSeek's limits change.
-    "max_context_tokens" => 64_000
+    "max_context_tokens" => 64_000,
+    # Maximum number of consecutive tool-calling turns a single agent loop
+    # will run before pausing to ask the user whether to continue. Override
+    # per-workspace (or globally) by adding "max_tool_depth": <n> to
+    # .dsh/config.json (or ~/.dsh/config.json).
+    "max_tool_depth" => 100
   }
 
   @doc "Loads combined configuration (global + workspace override)."

@@ -150,6 +150,7 @@ defmodule DeepSeekHarness.Brain.Session do
 
     tools = PluginLoader.list_tools()
     initial_messages = [%{"role" => "system", "content" => system_prompt}]
+    cwd = opts[:cwd] || "."
 
     state = %{
       session_id: session_id,
@@ -164,11 +165,12 @@ defmodule DeepSeekHarness.Brain.Session do
       tool_failure_counts: %{},
       snapshots: [],
       step_count: 0,
-      max_tool_depth: opts[:max_tool_depth] || 50,
+      max_tool_depth:
+        opts[:max_tool_depth] || Map.get(Config.load_config(cwd), "max_tool_depth", 100),
       total_prompt_tokens: 0,
       total_completion_tokens: 0,
       turn_history: [],
-      cwd: opts[:cwd] || ".",
+      cwd: cwd,
       status: :idle
     }
 
@@ -518,7 +520,8 @@ defmodule DeepSeekHarness.Brain.Session do
       estimated_cost_usd: Float.round(total_cost, 6),
       tools_count: length(state.tools),
       mcp_servers_count: Enum.count(mcp_servers),
-      turns_count: length(state.turn_history)
+      turns_count: length(state.turn_history),
+      max_tool_depth: state.max_tool_depth
     }
 
     {:reply, stats, state}
@@ -624,7 +627,7 @@ defmodule DeepSeekHarness.Brain.Session do
       "Max tool iteration depth reached (#{state.max_tool_depth} turns). Would you like to continue running?"
 
     choices = [
-      "Continue execution (50 more iterations)",
+      "Continue execution (#{state.max_tool_depth} more iterations)",
       "Stop turn here"
     ]
 
@@ -636,7 +639,10 @@ defmodule DeepSeekHarness.Brain.Session do
     case ans do
       %{selected: [sel]} ->
         if String.contains?(sel, "Continue") do
-          Logger.info("[Brain.Session] User authorized 50 additional tool iterations.")
+          Logger.info(
+            "[Brain.Session] User authorized #{state.max_tool_depth} additional tool iterations."
+          )
+
           run_agent_loop(state, state.max_tool_depth)
         else
           {{:error, "Turn stopped by user at max tool iteration depth."}, state}

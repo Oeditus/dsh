@@ -9,6 +9,19 @@ defmodule DeepSeekHarness.ConfigTest do
     assert Map.has_key?(config, "model")
   end
 
+  test "defaults max_tool_depth to 100 and allows workspace override" do
+    assert Config.load_config()["max_tool_depth"] == 100
+
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "config_depth_test_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(tmp_dir)
+    assert :ok = Config.save_config(%{"max_tool_depth" => 250}, tmp_dir)
+    assert Config.load_config(tmp_dir)["max_tool_depth"] == 250
+
+    File.rm_rf!(tmp_dir)
+  end
+
   test "discovers project rules if present or returns empty string" do
     rules = Config.discover_project_rules()
     assert is_binary(rules)
