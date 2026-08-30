@@ -177,7 +177,8 @@ defmodule DeepSeekHarness.CLI.Spinner do
     line =
       if state.enabled? and not state.paused do
         frame = Enum.at(@frames, state.frame_idx)
-        format_line(frame, state.title, state.tip, status_extra(state))
+        raw_line = format_line(frame, state.title, state.tip, status_extra(state))
+        truncate_line(raw_line, terminal_cols() - 1)
       else
         ""
       end
@@ -185,10 +186,6 @@ defmodule DeepSeekHarness.CLI.Spinner do
     {:reply, line, state}
   end
 
-  # Pausing stops the redraw timer and clears the spinner's own line so that
-  # another process (e.g. QuestionPrompt) can safely take over the terminal
-  # without its output being interleaved with our periodic `\r\e[2K<frame>`
-  # writes. Idempotent: calling :pause while already paused is a no-op.
   @impl true
   def handle_call(:pause, _from, %{paused: true} = state) do
     {:reply, :ok, state}
@@ -200,7 +197,6 @@ defmodule DeepSeekHarness.CLI.Spinner do
     {:reply, :ok, %{state | timer: nil, paused: true}}
   end
 
-  # Idempotent: calling :resume while not paused is a no-op.
   @impl true
   def handle_call(:resume, _from, %{paused: false} = state) do
     {:reply, :ok, state}
@@ -220,8 +216,6 @@ defmodule DeepSeekHarness.CLI.Spinner do
 
   @impl true
   def handle_info(:tick, %{paused: true} = state) do
-    # Drop stray ticks scheduled before a :pause call was processed; do not
-    # reschedule while paused.
     {:noreply, state}
   end
 
@@ -247,13 +241,6 @@ defmodule DeepSeekHarness.CLI.Spinner do
     end
   end
 
-  @doc """
-  Formats a spinner line given frame, title, and optional tip.
-
-  `extra` (optional, 4th arg) is inserted right after the title -- used to
-  surface live OTP status (elapsed turn time and active parallel task count)
-  without disturbing the existing frame/title/tip formatting contract.
-  """
   def format_line(frame, title, tip \\ nil, extra \\ nil) do
     base = "#{frame} #{title}"
     base = if is_binary(extra) and extra != "", do: "#{base} #{extra}", else: base
@@ -275,8 +262,30 @@ defmodule DeepSeekHarness.CLI.Spinner do
 
   defp render_frame(state) do
     frame = Enum.at(@frames, state.frame_idx)
-    line = format_line(frame, state.title, state.tip, status_extra(state))
-    IO.write("\r\e[2K#{line}")
+    raw_line = format_line(frame, state.title, state.tip, status_extra(state))
+    cols = terminal_cols()
+    line = truncate_line(raw_line, cols - 1)
+    IO.write("\r\e[2K")
+    IO.write(line)
+  end
+
+  defp terminal_cols do
+    case :io.columns() do
+      {:ok, c} when is_integer(c) and c > 10 -> c
+      _ -> 120
+    end
+  end
+
+  defp truncate_line(line, max_cols) do
+    if DeepSeekHarness.CLI.QuestionPrompt.display_width(line) > max_cols do
+      try do
+        Owl.Data.truncate(line, max_cols) |> to_string()
+      rescue
+        _ -> line
+      end
+    else
+      line
+    end
   end
 
   # Builds the live "(elapsed) ⚡N parallel" fragment shown while the spinner
@@ -291,7 +300,7 @@ defmodule DeepSeekHarness.CLI.Spinner do
           ""
 
         tasks ->
-          " #{Formatter.yellow()}󱐋#{length(tasks)} parallel#{Formatter.reset()}"
+          " #{Formatter.yellow()}⚡#{length(tasks)} parallel#{Formatter.reset()}"
       end
 
     "#{Formatter.dim()}(#{elapsed})#{Formatter.reset()}#{task_str}"

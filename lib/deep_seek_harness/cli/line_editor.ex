@@ -149,7 +149,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   defp build_starship_prompt(_session_id, model, hands_mode, cwd, sandbox?) do
     folder = Path.basename(Path.expand(cwd))
     branch = DeepSeekHarness.Git.current_branch(cwd)
-    branch_str = if branch != "", do: "  #{branch}", else: ""
+    branch_str = if branch != "", do: " 󰘬 #{branch}", else: ""
     sandbox = if sandbox?, do: " 󰌾 sandbox", else: ""
 
     active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
@@ -157,7 +157,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
     task_badge =
       if task_count > 0 do
-        " #{Formatter.yellow()}󱐋#{task_count} running#{Formatter.reset()}"
+        " #{Formatter.yellow()}⚡#{task_count} running#{Formatter.reset()}"
       else
         ""
       end
@@ -188,7 +188,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   defp build_extended_prompt(session_id, model, hands_mode, cwd, sandbox?) do
     folder = Path.basename(Path.expand(cwd))
     branch = DeepSeekHarness.Git.current_branch(cwd)
-    branch_str = if branch != "", do: "  #{branch}", else: ""
+    branch_str = if branch != "", do: " 󰘬 #{branch}", else: ""
     sandbox = if sandbox?, do: " 󰌾 sandbox", else: ""
 
     active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
@@ -196,7 +196,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
     task_badge =
       if task_count > 0 do
-        " #{Formatter.yellow()}󱐋#{task_count} running#{Formatter.reset()}"
+        " #{Formatter.yellow()}⚡#{task_count} running#{Formatter.reset()}"
       else
         ""
       end
@@ -831,18 +831,23 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     sandbox? = Map.get(context, :sandbox_workspace, false)
     mcp_count = Map.get(context, :mcp_servers_count, 0)
     tools_count = Map.get(context, :tools_count, 0)
+    dot = " #{Formatter.dim()}•#{Formatter.reset()} "
 
-    base =
-      "#{Formatter.magenta()}󰈤#{perm_label}#{Formatter.reset()} " <>
-        "#{Formatter.blue()}#{if sandbox?, do: "󰌾", else: "󰌿"}#{Formatter.reset()} " <>
-        "#{Formatter.cyan()}🔌#{mcp_count}#{Formatter.reset()} " <>
-        "#{Formatter.cyan()}󰒓#{tools_count}#{Formatter.reset()}"
+    perm_str = "#{Formatter.magenta()}󰈤 #{perm_label}#{Formatter.reset()}"
+    sandbox_str = "#{Formatter.blue()}#{if sandbox?, do: "󰌾", else: "󰌿"}#{Formatter.reset()}"
+    mcp_str = "#{Formatter.cyan()}🔌 #{mcp_count}#{Formatter.reset()}"
+    tools_str = "#{Formatter.cyan()}󰒓 #{tools_count}#{Formatter.reset()}"
 
-    if Map.get(context, :git_dirty?, false) do
-      base <> " #{Formatter.yellow()}●#{Formatter.reset()}"
-    else
-      base
-    end
+    parts = [perm_str, sandbox_str, mcp_str, tools_str]
+
+    parts =
+      if Map.get(context, :git_dirty?, false) do
+        parts ++ ["#{Formatter.yellow()}●#{Formatter.reset()}"]
+      else
+        parts
+      end
+
+    Enum.join(parts, dot)
   end
 
   defp toggle_segment(context) do
@@ -1087,38 +1092,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   def display_width(str) when is_binary(str) do
     clean = String.replace(str, ~r/\e\[[0-9;]*[mGKH]/, "")
 
-    extra =
-      clean
-      |> String.graphemes()
-      |> Enum.count(fn g ->
-        g in [
-          "📁",
-          "🤖",
-          "🧠",
-          "💻",
-          "🔒",
-          "🌐",
-          "🐳",
-          "❓",
-          "✏️",
-          "✏",
-          "⚡",
-          "🔌",
-          "👁️",
-          "⚙",
-          "♻",
-          "📄",
-          "🛠️",
-          "🛡",
-          "🔓",
-          "🧰"
-        ]
-      end)
-
     try do
-      Owl.Data.length(clean) + extra
+      Owl.Data.length(clean)
     rescue
-      _ -> String.length(clean) + extra
+      _ -> String.length(clean)
     end
   end
 

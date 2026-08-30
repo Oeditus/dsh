@@ -19,7 +19,8 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   @doc "Executes a tool call under the configured sandbox target."
   def execute(%__MODULE__{mode: :local}, tool_name, args) do
-    Logger.info("󱐋#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
+    circle = DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
+    Logger.info("#{circle} #{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
 
     case DeepSeekHarness.Plugin.Loader.execute_tool(tool_name, args, :infinity) do
       {:ok, result} -> {:ok, format_output(result)}
@@ -29,7 +30,8 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   def execute(%__MODULE__{mode: :remote, remote_node: node}, tool_name, args)
       when not is_nil(node) do
-    Logger.info("󱐋[remote:#{node}]#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
+    circle = DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
+    Logger.info("#{circle} [remote:#{node}] #{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
 
     case :rpc.call(
            node,
@@ -51,8 +53,9 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   def execute(%__MODULE__{mode: :docker, docker_container: container}, tool_name, args)
       when not is_nil(container) do
+    circle = DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
     Logger.info(
-      "󱐋[docker:#{container}]#{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}"
+      "#{circle} [docker:#{container}] #{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}"
     )
 
     case tool_name do
@@ -152,6 +155,10 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   def format_tool_call(tool_name, args) do
     "#{tool_name}(#{inspect(args)})"
+  end
+
+  defp format_arg_val("command", val) do
+    inspect(val)
   end
 
   defp format_arg_val(key, val) do

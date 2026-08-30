@@ -89,7 +89,7 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   @impl true
   def handle_info(:auto_start_ragex, state) do
-    cwd = File.cwd!()
+    cwd = project_dir()
 
     Task.start(fn ->
       case do_start_ragex(cwd, []) do
@@ -565,18 +565,30 @@ defmodule DeepSeekHarness.MCP.ServerManager do
 
   # Helper Functions
 
-  def discover_ragex_dir(start_dir \\ ".") do
+  @doc "Returns the active user project directory (preserving DSH_PROJECT_DIR from launcher)."
+  def project_dir(override \\ nil) do
+    cond do
+      is_binary(override) and override != "" and override != "." -> override
+      env = System.get_env("DSH_PROJECT_DIR") -> env
+      pwd = System.get_env("PWD") -> pwd
+      true -> File.cwd!()
+    end
+  end
+
+  def discover_ragex_dir(start_dir \\ nil) do
+    target_start = project_dir(start_dir)
+
     env_path =
       System.get_env("RAGEX_PATH") || Application.get_env(:deep_seek_harness, :ragex_path)
 
     candidates =
       [
         env_path,
-        Path.expand("../ragex", start_dir),
-        Path.expand("./ragex", start_dir),
+        Path.expand("../ragex", target_start),
+        Path.expand("./ragex", target_start),
         "/opt/Proyectos/Oeditus/ragex",
-        Path.expand("~/Proyectos/Oeditus/ragex", start_dir),
-        start_dir
+        Path.expand("~/Proyectos/Oeditus/ragex", target_start),
+        target_start
       ]
       |> Enum.reject(&is_nil/1)
 

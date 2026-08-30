@@ -256,13 +256,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   @doc "Calculates terminal display width in columns, handling wide symbols and stripping ANSI escapes via Owl."
   def display_width(str) when is_binary(str) do
     clean = strip_ansi(str)
-
-    extra =
-      clean
-      |> String.graphemes()
-      |> Enum.count(fn g -> g in ["󰋗", "󰏫", "󱐋", "󰌘", "󰚩", "󰀦"] end)
-
-    Owl.Data.length(clean) + extra
+    Owl.Data.length(clean)
   rescue
     _ -> String.length(str)
   end
