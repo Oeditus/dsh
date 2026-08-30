@@ -19,7 +19,9 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   @doc "Executes a tool call under the configured sandbox target."
   def execute(%__MODULE__{mode: :local}, tool_name, args) do
-    circle = DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
+    circle =
+      DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
+
     Logger.info("#{circle} #{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
 
     case DeepSeekHarness.Plugin.Loader.execute_tool(tool_name, args, :infinity) do
@@ -30,8 +32,12 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   def execute(%__MODULE__{mode: :remote, remote_node: node}, tool_name, args)
       when not is_nil(node) do
-    circle = DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
-    Logger.info("#{circle} [remote:#{node}] #{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}")
+    circle =
+      DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
+
+    Logger.info(
+      "#{circle} [remote:#{node}] #{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}"
+    )
 
     case :rpc.call(
            node,
@@ -53,7 +59,9 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   def execute(%__MODULE__{mode: :docker, docker_container: container}, tool_name, args)
       when not is_nil(container) do
-    circle = DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
+    circle =
+      DeepSeekHarness.CLI.Formatter.magenta() <> "●" <> DeepSeekHarness.CLI.Formatter.reset()
+
     Logger.info(
       "#{circle} [docker:#{container}] #{tool_icon(tool_name)} #{format_tool_call(tool_name, args)}"
     )

@@ -121,15 +121,21 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # ---------------------------------------------------------------------
 
   defp tty? do
-    case :io.columns(:user) do
-      {:ok, _} ->
-        true
+    if (function_exported?(Mix, :env, 0) and Mix.env() == :test) or
+         System.get_env("CI") != nil or
+         Application.get_env(:deep_seek_harness, :non_interactive, false) do
+      false
+    else
+      case :io.columns(:user) do
+        {:ok, _} ->
+          true
 
-      _ ->
-        case :io.columns() do
-          {:ok, _} -> true
-          _ -> false
-        end
+        _ ->
+          case :io.columns() do
+            {:ok, _} -> true
+            _ -> false
+          end
+      end
     end
   end
 

@@ -35,6 +35,19 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
 
   @doc "Builds a structured ClientConfig struct from keyword options."
   def build_config(opts) when is_list(opts) do
+    mock_default =
+      cond do
+        Keyword.has_key?(opts, :mock) ->
+          opts[:mock]
+
+        function_exported?(Mix, :env, 0) and Mix.env() == :test and
+            System.get_env("ENABLE_REAL_API_TESTS") != "true" ->
+          true
+
+        true ->
+          false
+      end
+
     %ClientConfig{
       model: opts[:model] || System.get_env("DEEPSEEK_MODEL") || @default_model,
       api_key: opts[:api_key] || System.get_env("DEEPSEEK_API_KEY"),
@@ -42,7 +55,7 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
       temperature: opts[:temperature] || 0.7,
       stream: opts[:stream] || false,
       stream_fun: opts[:stream_fun],
-      mock: opts[:mock] || false
+      mock: mock_default
     }
   end
 
