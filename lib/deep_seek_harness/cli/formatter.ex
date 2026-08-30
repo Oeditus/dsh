@@ -146,7 +146,8 @@ defmodule DeepSeekHarness.CLI.Formatter do
         total_tokens,
         max_tokens \\ 128_000,
         cost_usd \\ 0.0,
-        delta_tokens \\ 0
+        delta_tokens \\ 0,
+        serving_processes \\ nil
       ) do
     pct = min(100, round(total_tokens / max(max_tokens, 1) * 100))
     bar_width = 16
@@ -172,8 +173,15 @@ defmodule DeepSeekHarness.CLI.Formatter do
         ""
       end
 
+    proc_count =
+      cond do
+        is_integer(serving_processes) -> serving_processes
+        is_binary(serving_processes) -> serving_processes
+        true -> length(Process.list())
+      end
+
     "#{color}#{emphasis}[#{bar}] #{pct}%#{reset()} " <>
-      "#{dim()}(#{total_tokens}/#{max_tokens} tokens#{reset()}#{delta_str}#{dim()} | $#{cost_str} USD)#{reset()}" <>
+      "#{dim()}(#{total_tokens}/#{max_tokens} tokens#{reset()}#{delta_str}#{dim()} | $#{cost_str} USD | ⚡ #{proc_count} procs serving)#{reset()}" <>
       "#{color}#{bold()}#{hint}#{reset()}"
   end
 

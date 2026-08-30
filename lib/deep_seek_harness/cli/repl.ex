@@ -29,6 +29,7 @@ defmodule DeepSeekHarness.CLI.Repl do
       )
 
     IO.puts(Formatter.format_info("Brain actor spawned for session '#{session_id}'"))
+    IO.puts(Formatter.format_success(DeepSeekHarness.report_serving_processes()))
 
     IO.puts(
       Formatter.format_info("Type /help for command menu or !command for direct shell execution.")
@@ -906,11 +907,15 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/status", session_pid, session_id) do
+    handle_input("/session", session_pid, session_id)
+  end
+
   def handle_input("/session", session_pid, _session_id) do
     info = Session.get_info(session_pid)
 
     md = """
-    ### Active Session Status
+    ### Active Session & System Status
     - **Session ID**: `#{info.session_id}`
     - **Actor PID**: `#{inspect(info.pid)}`
     - **Model**: `#{info.model}`
@@ -919,6 +924,8 @@ defmodule DeepSeekHarness.CLI.Repl do
     - **Checkpoints**: `#{info.snapshot_count}` snapshots
     - **Hands Execution Target**: `#{info.hands_mode}` (`#{info.hands_target}`)
     - **Active Tools Count**: `#{info.tools_count}` registered
+    - **Serving BEAM Processes**: `#{info.serving_processes}` active (`#{info.active_task_workers}` parallel task workers)
+    - **System Process Status**: `#{info.serving_report}`
     """
 
     IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")

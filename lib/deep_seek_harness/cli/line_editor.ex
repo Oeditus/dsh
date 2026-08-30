@@ -869,15 +869,17 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     cost_usd = Map.get(context, :estimated_cost_usd, 0.0)
     delta = Map.get(context, :last_turn_tokens, 0)
     max_tokens = context_window_tokens(Map.get(context, :model))
+    serving_procs = Map.get(context, :serving_processes, length(Process.list()))
 
-    Formatter.format_context_gauge(total_tokens, max_tokens, cost_usd, delta)
+    Formatter.format_context_gauge(total_tokens, max_tokens, cost_usd, delta, serving_procs)
   end
 
   defp compact_session_content(context) do
     short_id = context |> Map.get(:session_id, "") |> to_string() |> String.slice(0, 8)
     msg_count = Map.get(context, :message_count, 0)
+    serving_procs = Map.get(context, :serving_processes, length(Process.list()))
 
-    "#{Formatter.cyan()}id:#{short_id}#{Formatter.reset()} #{Formatter.dim()}•#{Formatter.reset()} #{msg_count} msgs"
+    "#{Formatter.cyan()}id:#{short_id}#{Formatter.reset()} #{Formatter.dim()}•#{Formatter.reset()} #{msg_count} msgs #{Formatter.dim()}•#{Formatter.reset()} ⚡ #{serving_procs} procs"
   end
 
   defp context_gauge_enabled? do

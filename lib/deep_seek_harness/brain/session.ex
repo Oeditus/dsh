@@ -21,11 +21,18 @@ defmodule DeepSeekHarness.Brain.Session do
   You are an expert agentic AI coding assistant powered by DeepSeek.
   You have access to tools for file operations, bash execution, skills, MCP servers (including Ragex code intelligence), Elixir evaluation, and interactive user questions (ask_question tool).
 
+  PARALLEL EXECUTION IS OUR VIRTUE & CORE STRENGTH:
+  - You can and MUST spawn processes and execute tasks and tools in parallel whenever possible!
+  - When inspecting, searching, reading, or editing multiple files, ALWAYS emit multiple tool calls in parallel in a single response turn rather than sequentially across multiple turns.
+  - When breaking down complex or multi-step work, use `spawn_subagent` (with `async: true`) to spawn independent sub-agent worker processes that execute concurrently in parallel.
+  - Parallel process execution is fully backed by the Erlang/Elixir BEAM actor model for maximum speed and concurrent throughput. Always leverage maximum parallelism!
+  - Always report how many BEAM processes are currently serving when summarizing system status or turn execution.
+
   Tool Selection Guidelines:
   - ALWAYS prefer dedicated tools and Ragex MCP tools (`ragex_grep`, `ragex_symbol`, `ragex_view`, `ragex_search`, `read_file`, etc.) over raw `bash` commands (such as `grep`, `find`, `cat`, or `ls`). Ragex tools offer fast, indexed code search and execute automatically without requiring confirmation prompts.
   - Use `bash` ONLY for executing build/test commands, running local binaries/scripts, or when no suitable dedicated or Ragex MCP tool is available.
   - When calling Ragex's `edit_file` / `edit_files` tools, ALWAYS include `old_content` on every change entry, even though the schema marks it optional: the exact original text of the lines at `line_start`..`line_end` as you last observed them (from a prior `read_file`/view of that file). Ragex uses `old_content` to verify and, if line numbers drifted since your last read, auto-relocate the correct target lines before applying the edit. Omitting it means a stale or off-by-a-few-lines guess can silently clip or duplicate block keywords (e.g. `def`, `do`, `end`) and break the file's syntax. Never fabricate `old_content` from guessed line numbers -- only supply text you actually saw.
-  - Break down tasks systematically, reason carefully, and invoke tools when needed.
+  - Break down tasks systematically, reason carefully, and invoke tools in parallel when needed.
   - If requirements are underspecified, design choices need feedback, or confirmation is helpful, use the `ask_question` tool to present structured choices to the user.
   """
 
@@ -312,7 +319,7 @@ defmodule DeepSeekHarness.Brain.Session do
   @impl true
   def handle_call({:spawn_subagent, prompt, opts}, _from, state) do
     sub_id = "sub_#{System.unique_integer([:positive])}"
-    async? = Keyword.get(opts, :async, false)
+    async? = Keyword.get(opts, :async, true)
 
     Logger.info("[Brain.Session] Spawning subagent session '#{sub_id}' (async: #{async?})")
 
@@ -415,11 +422,20 @@ defmodule DeepSeekHarness.Brain.Session do
     cost_completion = completion_tokens * 0.00000028
     total_cost = cost_prompt + cost_completion
 
+    proc_status = DeepSeekHarness.process_status()
+
     stats = %{
+      model: state.model,
+      hands_mode: state.hands.mode,
+      permission_mode: state.permission_mode,
+      sandbox_workspace: state.sandbox_workspace,
       tracked_prompt_tokens: prompt_tokens,
       tracked_completion_tokens: completion_tokens,
       total_tokens: total,
-      estimated_cost_usd: Float.round(total_cost, 6)
+      estimated_cost_usd: Float.round(total_cost, 6),
+      serving_processes: proc_status.total_serving_processes,
+      active_task_workers: proc_status.active_task_workers,
+      serving_report: DeepSeekHarness.report_serving_processes()
     }
 
     {:reply, stats, state}
@@ -427,6 +443,8 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @impl true
   def handle_call(:get_info, _from, state) do
+    proc_status = DeepSeekHarness.process_status()
+
     info = %{
       session_id: state.session_id,
       model: state.model,
@@ -437,6 +455,9 @@ defmodule DeepSeekHarness.Brain.Session do
       hands_target: state.hands.remote_node || state.hands.docker_container || "local",
       tools_count: length(state.tools),
       status: state.status,
+      serving_processes: proc_status.total_serving_processes,
+      active_task_workers: proc_status.active_task_workers,
+      serving_report: DeepSeekHarness.report_serving_processes(),
       pid: self()
     }
 
@@ -575,8 +596,10 @@ defmodule DeepSeekHarness.Brain.Session do
 
     notice_content =
       case result do
-        {:ok, text} -> "=== Async Subagent Result (#{sub_id}) ===\n#{text}\n"
-        {:error, err} -> "=== Async Subagent Failure (#{sub_id}) ===\n#{err}\n"
+        {:ok, %{content: content}} -> "=== Async Subagent Result (#{sub_id}) ===\n#{content}\n"
+        {:ok, text} when is_binary(text) -> "=== Async Subagent Result (#{sub_id}) ===\n#{text}\n"
+        {:ok, other} -> "=== Async Subagent Result (#{sub_id}) ===\n#{inspect(other)}\n"
+        {:error, err} -> "=== Async Subagent Failure (#{sub_id}) ===\n#{inspect(err)}\n"
       end
 
     notice = %{"role" => "user", "content" => notice_content}
