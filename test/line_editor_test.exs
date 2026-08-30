@@ -200,6 +200,110 @@ defmodule DeepSeekHarness.LineEditorTest do
     end
   end
 
+  describe "Ctrl+J newline insertion" do
+    test "insert_newline/1 inserts a literal newline at the cursor without submitting" do
+      state = %{LineEditor.new_state("prompt> ") | buffer: String.graphemes("hello"), cursor: 5}
+      result = LineEditor.insert_newline(state)
+
+      assert Enum.join(result.buffer) == "hello\n"
+      assert result.cursor == 6
+    end
+
+    test "insert_newline/1 splits the buffer when the cursor is mid-line" do
+      state = %{LineEditor.new_state("prompt> ") | buffer: String.graphemes("abcd"), cursor: 2}
+      result = LineEditor.insert_newline(state)
+
+      assert Enum.join(result.buffer) == "ab\ncd"
+      assert result.cursor == 3
+    end
+
+    test "a multi-line buffer joins into one logical string with embedded newlines" do
+      state =
+        LineEditor.new_state("prompt> ")
+        |> LineEditor.insert_char("a")
+        |> LineEditor.insert_newline()
+        |> LineEditor.insert_char("b")
+
+      assert Enum.join(state.buffer) == "a\nb"
+    end
+  end
+
+  describe "multi-line layout math" do
+    test "layout_rows/3 counts a single row for short single-line text" do
+      assert LineEditor.layout_rows(8, "hello", 80) == 1
+    end
+
+    test "layout_rows/3 counts one additional row per embedded hard newline" do
+      assert LineEditor.layout_rows(8, "line one\nline two\nline three", 80) == 3
+    end
+
+    test "layout_rows/3 also accounts for soft, width-based wrapping" do
+      # Starting at column 0 in an 8-column terminal, a 20-character line
+      # wraps across 3 rows (8 + 8 + 4).
+      assert LineEditor.layout_rows(0, String.duplicate("x", 20), 8) == 3
+    end
+
+    test "layout_rows/3 combines hard breaks with soft wraps across segments" do
+      # First segment starts at column 5 in a 10-column terminal ("first"
+      # fits within the remaining 5 columns on row 0); second segment
+      # starts fresh at column 0 and wraps once (12 chars / 10 cols).
+      text = "first\n" <> String.duplicate("y", 12)
+      assert LineEditor.layout_rows(5, text, 10) == 3
+    end
+
+    test "layout_rows/3 is ANSI-safe (escape codes don't inflate the row count)" do
+      plain = LineEditor.layout_rows(0, "hello world", 80)
+      ansi = LineEditor.layout_rows(0, "\e[36mhello\e[0m world", 80)
+      assert plain == ansi
+    end
+
+    test "layout_cursor/4 finds the cursor on a single line" do
+      assert LineEditor.layout_cursor(8, "hello", 3, 80) == {0, 11}
+    end
+
+    test "layout_cursor/4 finds the cursor on a later line after a hard newline" do
+      # "ab\ncd", cursor offset 4 -> after "c" on the second line (row 1).
+      assert LineEditor.layout_cursor(0, "ab\ncd", 4, 80) == {1, 1}
+    end
+
+    test "layout_cursor/4 places the cursor at the end of a line when it sits right before a hard newline" do
+      # "ab\ncd", cursor offset 2 -> right after "ab", still row 0.
+      assert LineEditor.layout_cursor(0, "ab\ncd", 2, 80) == {0, 2}
+    end
+
+    test "layout_cursor/4 accounts for soft wrapping when locating the cursor" do
+      # 12 'x' chars in an 8-column terminal wrap after column 8; cursor at
+      # offset 10 sits on the second wrapped row, column 2.
+      text = String.duplicate("x", 12)
+      assert LineEditor.layout_cursor(0, text, 10, 8) == {1, 2}
+    end
+  end
+
+  describe "history persistence with embedded newlines" do
+    test "round-trips a multi-line entry without corrupting the history file" do
+      unique = System.unique_integer([:positive])
+      multiline = "first line #{unique}\nsecond line #{unique}"
+
+      LineEditor.add_history(multiline)
+      history = LineEditor.load_history()
+
+      assert multiline in history
+      # The embedded newline must not have been split into two separate entries.
+      refute "first line #{unique}" in history
+      refute "second line #{unique}" in history
+    end
+
+    test "round-trips an entry containing a literal backslash" do
+      unique = System.unique_integer([:positive])
+      line = "regex \\d+ test #{unique}"
+
+      LineEditor.add_history(line)
+      history = LineEditor.load_history()
+
+      assert line in history
+    end
+  end
+
   describe "tab completion" do
     test "completes a unique slash command match" do
       assert {:ok, "/ragex"} = LineEditor.tab_complete("/ra")
@@ -248,6 +352,43 @@ defmodule DeepSeekHarness.LineEditorTest do
       width = LineEditor.display_width(prompt_str)
 
       assert width >= raw_len
+    end
+  end
+
+  describe "status bar width safety net" do
+    test "leaves content untouched when it already fits within max_width" do
+      short = "\e[36mhello\e[0m"
+      assert LineEditor.truncate_to_width(short, 80) == short
+    end
+
+    test "never returns a string wider than max_width, even for long ANSI content" do
+      # Simulates a status bar segment (e.g. the token/cost gauge) that grew
+      # past the terminal width, such as when a process count crosses into
+      # double digits and pushes previously-borderline content over the edge.
+      long =
+        "\e[32m[████████░░░░░░░░] 75%\e[0m " <>
+          "\e[2m(12000/64000 tokens\e[0m \e[32m(+500)\e[0m " <>
+          "\e[2m| $0.1234 USD | ⚡ 12 procs serving)\e[0m"
+
+      for max_width <- [10, 20, 40, 79, 80] do
+        truncated = LineEditor.truncate_to_width(long, max_width)
+        assert LineEditor.display_width(truncated) <= max_width
+      end
+    end
+
+    test "never exceeds max_width even when the budget is smaller than 1" do
+      assert LineEditor.truncate_to_width("anything", 0) == ""
+    end
+
+    test "preserves embedded ANSI escapes without splitting them mid-sequence" do
+      long = String.duplicate("a", 50) <> "\e[31m" <> String.duplicate("b", 50) <> "\e[0m"
+      truncated = LineEditor.truncate_to_width(long, 30)
+
+      assert LineEditor.display_width(truncated) <= 30
+      # Every remaining escape sequence must be well-formed (fully matched by
+      # the escape regex); stripping them should leave no stray `\e` bytes.
+      stripped = String.replace(truncated, ~r/\e\[[0-9;]*[mGKH]/, "")
+      refute stripped =~ "\e"
     end
   end
 end

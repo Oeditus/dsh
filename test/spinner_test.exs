@@ -75,4 +75,23 @@ defmodule DeepSeekHarness.CLI.SpinnerTest do
     assert Spinner.active?()
     Spinner.stop()
   end
+
+  test "paused?/0 reflects pause state while the spinner stays active" do
+    refute Spinner.paused?()
+
+    {:ok, _pid} = Spinner.start(title: "Active task")
+    assert Spinner.active?()
+    refute Spinner.paused?()
+
+    Spinner.pause()
+    assert Spinner.active?()
+    assert Spinner.paused?()
+
+    Spinner.resume()
+    assert Spinner.active?()
+    refute Spinner.paused?()
+
+    Spinner.stop()
+    refute Spinner.paused?()
+  end
 end

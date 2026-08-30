@@ -95,6 +95,26 @@ defmodule DeepSeekHarness.CLI.Spinner do
     match?({:ok, _pid}, GenServer.whereis(__MODULE__) |> case_pid())
   end
 
+  @doc """
+  Returns whether the spinner is currently active but paused (e.g. via
+  `with_paused/1`, used while a question modal or other one-off terminal
+  render is shown). `active?/0` alone stays `true` while paused since the
+  process is still alive, so callers that need to know whether the
+  spinner is actually *redrawing* right now (as opposed to merely started)
+  should check `active?() and not paused?()`.
+  """
+  def paused? do
+    if active?() do
+      try do
+        GenServer.call(__MODULE__, :paused?, 500)
+      catch
+        :exit, _ -> false
+      end
+    else
+      false
+    end
+  end
+
   def current_line do
     if active?() do
       try do
@@ -170,6 +190,11 @@ defmodule DeepSeekHarness.CLI.Spinner do
 
     if state.timer, do: Process.cancel_timer(state.timer)
     {:stop, :normal, :ok, state}
+  end
+
+  @impl true
+  def handle_call(:paused?, _from, state) do
+    {:reply, state.paused, state}
   end
 
   @impl true

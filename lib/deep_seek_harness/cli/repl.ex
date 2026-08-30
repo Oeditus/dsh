@@ -37,7 +37,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     IO.puts(
       Formatter.format_info(
-        "Hotkeys: Ctrl+P permission mode · Ctrl+G sandbox · Ctrl+B status bar mode\n"
+        "Hotkeys: Ctrl+P permission mode · Ctrl+G sandbox · Ctrl+B status bar mode · Ctrl+J insert newline\n"
       )
     )
 

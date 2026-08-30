@@ -1,5 +1,6 @@
 defmodule DeepSeekHarness.CLI.QuestionPromptTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureIO
 
   alias DeepSeekHarness.CLI.QuestionPrompt
   alias DeepSeekHarness.Plugin.DefaultTools
@@ -74,6 +75,42 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
 
       updated_state = QuestionPrompt.render_modal(state)
       assert updated_state.rendered_lines > 0
+    end
+
+    test "shows a plain header when no progress is given" do
+      state = QuestionPrompt.new_state("Confirm?", ["Yes", "No"], false, 2)
+      output = capture_io(:user, fn -> QuestionPrompt.render_modal(state) end)
+
+      assert output =~ "Question from AI"
+      refute output =~ "Question 1/1 from AI"
+    end
+
+    test "shows a Question i/N header when progress is given for a multi-question batch" do
+      state = QuestionPrompt.new_state("Confirm?", ["Yes", "No"], false, 2, true, {2, 3})
+      output = capture_io(:user, fn -> QuestionPrompt.render_modal(state) end)
+
+      assert output =~ "Question 2/3 from AI"
+    end
+
+    test "omits the progress count when there is only a single question" do
+      state = QuestionPrompt.new_state("Confirm?", ["Yes", "No"], false, 2, true, {1, 1})
+      output = capture_io(:user, fn -> QuestionPrompt.render_modal(state) end)
+
+      refute output =~ "1/1"
+      assert output =~ "Question from AI"
+    end
+
+    test "erase?: false skips the modal's own erase of its prior render" do
+      state = QuestionPrompt.new_state("Confirm?", ["Yes", "No"], false, 2)
+      rendered = QuestionPrompt.render_modal(state)
+
+      with_erase = capture_io(:user, fn -> QuestionPrompt.render_modal(rendered) end)
+
+      without_erase =
+        capture_io(:user, fn -> QuestionPrompt.render_modal(rendered, erase?: false) end)
+
+      assert with_erase =~ "\e[#{rendered.rendered_lines}A\e[0J"
+      refute without_erase =~ "\e[#{rendered.rendered_lines}A\e[0J"
     end
   end
 

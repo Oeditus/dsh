@@ -14,6 +14,9 @@ defmodule DeepSeekHarness.Application do
       {Registry, keys: :unique, name: DeepSeekHarness.Registry},
       # Duplicate registry for session broadcasting (pubsub)
       {Registry, keys: :duplicate, name: DeepSeekHarness.PubSubRegistry},
+      # Coordinates Logger output with whichever CLI surface (idle prompt,
+      # question modal) currently owns the terminal
+      DeepSeekHarness.CLI.TerminalOwner,
       # Dynamic plugin hot-reloader & tool registry
       DeepSeekHarness.Plugin.Loader,
       # MCP Server Manager

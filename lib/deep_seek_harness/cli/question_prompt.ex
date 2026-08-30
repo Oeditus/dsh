@@ -6,18 +6,29 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   multi-choice questions to the user during agent execution.
   """
   alias DeepSeekHarness.CLI.Formatter
+  alias DeepSeekHarness.CLI.TerminalOwner
 
   @doc """
   Main entry point to ask a list of questions to the user and return formatted answers.
+
+  When more than one question is provided, each question's modal header
+  shows its position (e.g. "Question 2/3 from AI") so the user always
+  knows how many are left to answer -- otherwise it's easy to lose track
+  of how many separate questions the AI is waiting on.
   """
   def ask(questions) when is_list(questions) do
+    total = length(questions)
+
     answers =
-      Enum.map(questions, fn q ->
+      questions
+      |> Enum.with_index(1)
+      |> Enum.map(fn {q, idx} ->
         question_text = Map.get(q, "question") || Map.get(q, :question, "")
         options = Map.get(q, "options") || Map.get(q, :options, [])
         is_multi = Map.get(q, "is_multi_select") || Map.get(q, :is_multi_select, false)
+        progress = if total > 1, do: {idx, total}, else: nil
 
-        ans = ask_single_question(question_text, options, is_multi)
+        ans = ask_single_question(question_text, options, is_multi, true, progress: progress)
         format_answer(question_text, ans)
       end)
 
@@ -26,16 +37,22 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
   def ask(_), do: "No questions provided."
 
-  @doc "Asks a single question and returns choice result map."
-  def ask_single_question(question, options, is_multi \\ false, show_numbers \\ true) do
+  @doc """
+  Asks a single question and returns choice result map.
+
+  `opts` currently supports `:progress`, an optional `{index, total}` tuple
+  (1-indexed) shown in the modal header when `total > 1`.
+  """
+  def ask_single_question(question, options, is_multi \\ false, show_numbers \\ true, opts \\ []) do
     options = if is_list(options) and options != [], do: options, else: ["Yes", "No"]
     all_options = options ++ ["Write custom response…"]
     custom_idx = length(all_options) - 1
+    progress = Keyword.get(opts, :progress)
 
     if tty?() do
-      prompt_tty(question, all_options, is_multi, custom_idx, show_numbers)
+      prompt_tty(question, all_options, is_multi, custom_idx, show_numbers, progress)
     else
-      prompt_non_tty(question, all_options, is_multi, custom_idx)
+      prompt_non_tty(question, all_options, is_multi, custom_idx, progress)
     end
   end
 
@@ -43,13 +60,14 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # Pure state management (unit-testable)
   # ---------------------------------------------------------------------
 
-  def new_state(question, options, is_multi, custom_idx, show_numbers \\ true) do
+  def new_state(question, options, is_multi, custom_idx, show_numbers \\ true, progress \\ nil) do
     %{
       question: question,
       options: options,
       is_multi: is_multi,
       custom_idx: custom_idx,
       show_numbers: show_numbers,
+      progress: progress,
       cursor: 0,
       selected: MapSet.new(),
       rendered_lines: 0
@@ -139,9 +157,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     end
   end
 
-  defp prompt_tty(question, options, is_multi, custom_idx, show_numbers) do
+  defp prompt_tty(question, options, is_multi, custom_idx, show_numbers, progress) do
     set_raw_mode()
-    state = new_state(question, options, is_multi, custom_idx, show_numbers)
+    state = new_state(question, options, is_multi, custom_idx, show_numbers, progress)
 
     res =
       try do
@@ -149,11 +167,18 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       catch
         :exit, _ ->
           restore_tty_mode()
-          prompt_non_tty(question, options, is_multi, custom_idx)
+          prompt_non_tty(question, options, is_multi, custom_idx, progress)
 
         :error, _ ->
           restore_tty_mode()
-          prompt_non_tty(question, options, is_multi, custom_idx)
+          prompt_non_tty(question, options, is_multi, custom_idx, progress)
+      after
+        # Guarantees the modal is unregistered as the terminal's foreground
+        # surface however `tui_loop/1` exits (normal confirm/cancel, the
+        # `:eof` branch inside it, or either `catch` clause above), so a
+        # stray `Logger` call afterwards never tries to redraw a modal that
+        # is no longer showing.
+        TerminalOwner.clear()
       end
 
     restore_tty_mode()
@@ -181,6 +206,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
   defp tui_loop(state) do
     state = render_modal(state)
+    TerminalOwner.set(&erase_for_log/1, &redraw_for_log/1, state)
 
     case read_key() do
       :up ->
@@ -204,12 +230,31 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
       :eof ->
         restore_tty_mode()
-        prompt_non_tty(state.question, state.options, state.is_multi, state.custom_idx)
+
+        prompt_non_tty(
+          state.question,
+          state.options,
+          state.is_multi,
+          state.custom_idx,
+          Map.get(state, :progress)
+        )
 
       _ ->
         tui_loop(state)
     end
   end
+
+  # `TerminalOwner` erase/redraw callbacks -- see `DeepSeekHarness.CLI.TerminalOwner`.
+  # `render_modal/2`'s own internal erase (used for its own key-driven
+  # redraws) is skipped when redrawing this way, since `erase_for_log/1`
+  # has already cleared the modal by the time this runs.
+  defp erase_for_log(%{rendered_lines: n}) when is_integer(n) and n > 0 do
+    IO.write(:user, "\r\e[#{n}A\e[0J")
+  end
+
+  defp erase_for_log(_state), do: :ok
+
+  defp redraw_for_log(state), do: render_modal(state, erase?: false)
 
   defp handle_confirm(state) do
     if state.cursor == state.custom_idx do
@@ -259,29 +304,34 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # TUI Box Renderer
   # ---------------------------------------------------------------------
 
-  @doc "Calculates terminal display width in columns, handling wide symbols and stripping ANSI escapes via Owl."
-  def display_width(str) when is_binary(str) do
-    clean = strip_ansi(str)
-    Owl.Data.length(clean)
-  rescue
-    _ -> String.length(str)
+  @doc "Calculates terminal display width in columns, handling wide symbols and stripping ANSI escapes."
+  def display_width(str) when is_binary(str), do: Formatter.display_width(str)
+
+  defp header_title({idx, total}) when is_integer(idx) and is_integer(total) and total > 1 do
+    " 󰋗 Question #{idx}/#{total} from AI "
   end
 
-  defp strip_ansi(str) do
-    String.replace(str, ~r/\e\[[0-9;]*[mGKH]/, "")
-  end
+  defp header_title(_), do: " 󰋗 Question from AI "
 
-  def render_modal(state) do
+  @doc """
+  Renders the question modal box.
+
+  `opts` supports `:erase?` (default `true`): when `false`, skips this
+  function's own erase of its last render, since the caller (e.g.
+  `DeepSeekHarness.CLI.LogFormatter`, interjecting a log line above the
+  modal) has already erased it.
+  """
+  def render_modal(state, opts \\ []) do
     # Total box width including left/right border chars is 72.
     # Interior content width inside borders is 70 display columns.
     inner_width = 70
 
-    if state.rendered_lines > 0 do
+    if Keyword.get(opts, :erase?, true) and state.rendered_lines > 0 do
       # Move cursor to column 0, move UP rendered_lines, clear to bottom
       IO.write(:user, "\r\e[#{state.rendered_lines}A\e[0J")
     end
 
-    header_title = " 󰋗 Question from AI "
+    header_title = header_title(Map.get(state, :progress))
     header_len = display_width(header_title)
 
     header_padding =
@@ -403,12 +453,21 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # Non-TTY Fallback Prompt
   # ---------------------------------------------------------------------
 
-  defp prompt_non_tty(question, options, _is_multi, custom_idx) do
+  defp prompt_non_tty(question, options, _is_multi, custom_idx, progress) do
+    label =
+      case progress do
+        {idx, total} when is_integer(idx) and is_integer(total) and total > 1 ->
+          "Question #{idx}/#{total} from AI"
+
+        _ ->
+          "Question from AI"
+      end
+
     IO.write(
       :user,
       "\r\n" <>
         Formatter.cyan() <>
-        "󰋗 Question from AI: " <> Formatter.bold() <> question <> Formatter.reset() <> "\r\n"
+        "󰋗 #{label}: " <> Formatter.bold() <> question <> Formatter.reset() <> "\r\n"
     )
 
     options

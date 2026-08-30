@@ -6,6 +6,7 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
   """
 
   alias DeepSeekHarness.CLI.Spinner
+  alias DeepSeekHarness.CLI.TerminalOwner
 
   @noisy_patterns ~r/(\[HANDLER\]|\[ACCEPT LOOP\]|Client connected|Client disconnected|Client connection|connection timeout|Waiting for data|Processing message|Sending response|Response sent|AI Cache)/i
 
@@ -34,11 +35,29 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
           "#{circle} #{formatted_msg}\r\n"
         end
 
-      if Spinner.active?() do
-        current_spinner = Spinner.current_line()
-        "\r\e[2K" <> base_line <> "\r" <> current_spinner
-      else
-        base_line
+      cond do
+        # Spinner is running its own periodic single-line redraw right now --
+        # clear that line, print the log, then restore the spinner frame.
+        # `paused?` matters because the spinner process stays "active" (i.e.
+        # alive) while paused (see `Spinner.with_paused/1`, used by every
+        # `QuestionPrompt` call site), but during that window it isn't the
+        # thing occupying the terminal -- treating it as if it were would
+        # clear/redraw only one line of a multi-line question modal instead.
+        Spinner.active?() and not Spinner.paused?() ->
+          current_spinner = Spinner.current_line()
+          "\r\e[2K" <> base_line <> "\r" <> current_spinner
+
+        # A registered CLI surface (idle prompt, question modal) owns the
+        # terminal right now -- erase it, print the log line above it, then
+        # have it redraw itself intact. This does the actual terminal I/O
+        # itself (since redrawing a surface is more than returning a
+        # string), so the formatter contract is satisfied by returning "".
+        TerminalOwner.active?() ->
+          TerminalOwner.interject(base_line)
+          ""
+
+        true ->
+          base_line
       end
     end
   rescue

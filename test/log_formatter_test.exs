@@ -1,7 +1,26 @@
 defmodule DeepSeekHarness.CLI.LogFormatterTest do
-  use ExUnit.Case, async: true
+  # Not async: several tests below drive the globally-named `Spinner` and
+  # `TerminalOwner` singletons, which would race against each other (or
+  # against `spinner_test.exs`, itself `async: false` for the same reason)
+  # if run concurrently.
+  use ExUnit.Case, async: false
+  import ExUnit.CaptureIO
 
   alias DeepSeekHarness.CLI.LogFormatter
+  alias DeepSeekHarness.CLI.Spinner
+  alias DeepSeekHarness.CLI.TerminalOwner
+
+  setup do
+    Spinner.stop()
+    TerminalOwner.clear()
+
+    on_exit(fn ->
+      Spinner.stop()
+      TerminalOwner.clear()
+    end)
+
+    :ok
+  end
 
   test "formats info log event with blue circle and no timestamp" do
     event = %{
@@ -44,5 +63,65 @@ defmodule DeepSeekHarness.CLI.LogFormatterTest do
 
   test "installs log formatter handler without raising" do
     assert LogFormatter.install() == :ok or LogFormatter.install() == :error
+  end
+
+  test "does not use the spinner's single-line redraw while the spinner is paused" do
+    {:ok, _pid} = Spinner.start(title: "Working")
+    Spinner.pause()
+    assert Spinner.active?()
+    assert Spinner.paused?()
+
+    event = %{level: :info, msg: "Some background notice"}
+    formatted = LogFormatter.format(event, %{})
+
+    # Falls through to the plain-line branch (no TerminalOwner registered
+    # either), rather than the spinner's `\r\e[2K...` single-line redraw --
+    # otherwise this would corrupt a multi-line surface (e.g. a question
+    # modal) shown while the spinner is merely paused underneath it.
+    refute formatted =~ "\e[2K"
+    assert formatted =~ "Some background notice"
+  end
+
+  test "uses the spinner's single-line redraw while the spinner is active and not paused" do
+    {:ok, _pid} = Spinner.start(title: "Working")
+    assert Spinner.active?()
+    refute Spinner.paused?()
+
+    event = %{level: :info, msg: "Some background notice"}
+    formatted = LogFormatter.format(event, %{})
+
+    assert formatted =~ "\e[2K"
+    assert formatted =~ "Some background notice"
+  end
+
+  test "interjects through a registered TerminalOwner surface and returns an empty string" do
+    parent = self()
+
+    erase = fn _state -> send(parent, :erased) end
+    redraw = fn _state -> send(parent, :redrawn) end
+    TerminalOwner.set(erase, redraw, %{})
+
+    event = %{level: :info, msg: "Some background notice"}
+
+    output =
+      capture_io(fn ->
+        formatted = LogFormatter.format(event, %{})
+        assert formatted == ""
+      end)
+
+    assert output =~ "Some background notice"
+    assert_received :erased
+    assert_received :redrawn
+  end
+
+  test "falls back to a plain line when neither the spinner nor a TerminalOwner surface is active" do
+    refute Spinner.active?()
+    refute TerminalOwner.active?()
+
+    event = %{level: :info, msg: "Idle-time notice"}
+    formatted = LogFormatter.format(event, %{})
+
+    assert formatted =~ "Idle-time notice"
+    refute formatted == ""
   end
 end

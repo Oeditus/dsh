@@ -120,7 +120,19 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
 
   def format_short_summary(tool_name, _), do: tool_name
 
-  defp get_lock_resource(tool_name, args) when is_map(args) do
+  # The model can emit more than one `ask_question` tool call in a single
+  # turn (e.g. one per question, instead of batching them into a single
+  # call's `questions` list). Since `DeepSeekHarness.CLI.QuestionPrompt`
+  # reads raw keystrokes directly from `:user`, running two of its modals
+  # concurrently would let a keystroke intended for one resolve the other
+  # instead. A fixed lock key -- shared across every `ask_question` call
+  # regardless of arguments -- guarantees only one such modal ever holds
+  # the terminal at a time; additional calls simply wait (before ever
+  # touching the TTY) until the current one fully returns.
+  @doc false
+  def get_lock_resource("ask_question", _args), do: "tty_interactive"
+
+  def get_lock_resource(tool_name, args) when is_map(args) do
     if tool_name in ["write_file", "replace_file", "write_to_file", "replace_file_content"] do
       path = Map.get(args, "target_file") || Map.get(args, "path") || Map.get(args, "TargetFile")
       if is_binary(path), do: "file_lock:" <> Path.expand(path)
@@ -129,7 +141,7 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
     end
   end
 
-  defp get_lock_resource(_, _), do: nil
+  def get_lock_resource(_, _), do: nil
 
   defp acquire_lock(resource_key) when is_binary(resource_key) do
     case Registry.register(DeepSeekHarness.TaskEngine.LockRegistry, resource_key, :locked) do

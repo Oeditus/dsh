@@ -22,6 +22,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   """
   alias DeepSeekHarness.Brain.Session
   alias DeepSeekHarness.CLI.Formatter
+  alias DeepSeekHarness.CLI.TerminalOwner
   alias DeepSeekHarness.Config
 
   @slash_commands [
@@ -70,6 +71,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       path
       |> File.read!()
       |> String.split("\n", trim: true)
+      |> Enum.map(&decode_history_line/1)
       |> Enum.reverse()
     else
       []
@@ -85,11 +87,39 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     if trimmed != "" do
       path = history_file()
       File.mkdir_p!(Path.dirname(path))
-      File.write!(path, "#{trimmed}\n", [:append])
+      File.write!(path, "#{encode_history_line(trimmed)}\n", [:append])
     end
   rescue
     _ -> :ok
   end
+
+  # `~/.dsh/history` stores one entry per line, but a Ctrl+J-composed
+  # message may itself contain literal newlines -- escape them (and any
+  # literal backslash, so the escape itself round-trips) on write, and
+  # reverse on read, so a multi-line entry never gets split into several
+  # bogus history lines or corrupts entries after it.
+  defp encode_history_line(line) do
+    line
+    |> String.graphemes()
+    |> Enum.map_join(fn
+      "\\" -> "\\\\"
+      "\n" -> "\\n"
+      ch -> ch
+    end)
+  end
+
+  defp decode_history_line(line) do
+    line
+    |> String.graphemes()
+    |> decode_graphemes([])
+    |> Enum.reverse()
+    |> Enum.join()
+  end
+
+  defp decode_graphemes([], acc), do: acc
+  defp decode_graphemes(["\\", "n" | rest], acc), do: decode_graphemes(rest, ["\n" | acc])
+  defp decode_graphemes(["\\", "\\" | rest], acc), do: decode_graphemes(rest, ["\\" | acc])
+  defp decode_graphemes([g | rest], acc), do: decode_graphemes(rest, [g | acc])
 
   @doc """
   Resolves the persistent history file path. Defaults to `~/.dsh/history`,
@@ -320,6 +350,14 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   @doc """
+  Inserts a literal newline at the cursor position without submitting the
+  line (Ctrl+J -- Warp's own "Insert Newline" input-editor binding, and
+  the cross-terminal-reliable stand-in for "Shift+Enter", which most
+  terminals cannot distinguish from a plain Enter keypress in raw mode).
+  """
+  def insert_newline(state), do: insert_char(state, "\n")
+
+  @doc """
   Navigates history up (older) or down (newer), preserving uncommitted
   input when entering navigation and restoring it when returning to -1.
   """
@@ -455,6 +493,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   # escript, iex, a release) and can fight with BEAM's own terminal driver.
   defp read_tty_line(prompt_text, history, context) do
     set_raw_mode()
+    # Defensive: clear any stale registration left behind by a prior loop
+    # that exited abnormally (e.g. via the `catch` clause below) without
+    # going through one of the normal unregistration points.
+    TerminalOwner.clear()
 
     try do
       result = raw_loop(new_state(prompt_text, history, context))
@@ -463,6 +505,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     catch
       _kind, _err ->
         restore_tty_mode()
+        TerminalOwner.clear()
         IO.gets(prompt_text)
     end
   end
@@ -510,6 +553,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       :ctrl_g -> raw_loop(edit_unless_searching(state, &toggle_sandbox_mode/1))
       :ctrl_b -> raw_loop(edit_unless_searching(state, &toggle_status_bar_mode/1))
       :ctrl_r -> raw_loop(handle_ctrl_r(state))
+      :newline -> raw_loop(edit_unless_searching(state, &insert_newline/1))
       :backspace -> raw_loop(handle_backspace(state))
       :delete -> raw_loop(edit_unless_searching(state, &delete_forward/1))
       {:char, 64} -> raw_loop(file_picker_modal(state))
@@ -679,6 +723,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   defp handle_interrupt(state) do
     redraw_prefix = erase_prefix(state)
     IO.write(redraw_prefix <> "^C\r\n")
+    TerminalOwner.clear()
     ""
   end
 
@@ -694,32 +739,60 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   # ---------------------------------------------------------------------
 
   defp render_bar(state) do
+    erase_only(state)
+    draw_only(state)
+  end
+
+  # Writes the ruler+prompt+text block fresh (no erase of any prior render
+  # -- callers erase separately via `erase_only/1` when needed) and
+  # re-registers the result with `TerminalOwner` so an interjecting log
+  # line always has an up-to-date snapshot to redraw. Split out from
+  # `render_bar/1` so `DeepSeekHarness.CLI.LogFormatter` can redraw this
+  # surface on its own, after it has already erased it.
+  defp draw_only(state) do
     cols = terminal_cols()
     ruler = ruler_line(Map.get(state, :context, %{}))
-    {prompt_str, text_str, cursor_col} = compute_display(state)
+    {prompt_str, text_str, cursor_offset} = compute_display(state)
+    prompt_visible_len = strip_ansi_length(prompt_str)
 
     ruler_rows = rows_for(display_width(ruler), cols)
-    content_rows = rows_for(display_width(prompt_str) + display_width(text_str), cols)
+    content_rows = layout_rows(prompt_visible_len, text_str, cols)
 
-    IO.write(erase_prefix(state) <> ruler <> "\r\n" <> prompt_str <> text_str)
-    position_cursor(cursor_col, content_rows, cols)
+    IO.write(ruler <> "\r\n" <> to_crlf(prompt_str <> text_str))
 
-    %{state | first_render: false, last_rows: ruler_rows + content_rows}
+    raw_cursor_text =
+      if Map.get(state, :search_mode, false), do: text_str, else: Enum.join(state.buffer)
+
+    cursor_index = if Map.get(state, :search_mode, false), do: cursor_offset, else: state.cursor
+
+    {cursor_row, cursor_col} =
+      layout_cursor(prompt_visible_len, raw_cursor_text, cursor_index, cols)
+
+    position_cursor_2d(cursor_row, cursor_col, content_rows, cols)
+
+    new_state = %{state | first_render: false, last_rows: ruler_rows + content_rows}
+    TerminalOwner.set(&erase_only/1, &draw_only/1, new_state)
+    new_state
+  end
+
+  defp erase_only(state) do
+    IO.write(erase_prefix(state))
   end
 
   defp render_final(state) do
-    {prompt_str, text_str, _cursor_col} = compute_display(%{state | search_mode: false})
-    IO.write(erase_prefix(state) <> prompt_str <> text_str <> "\r\n")
+    {prompt_str, text_str, _cursor_offset} = compute_display(%{state | search_mode: false})
+    IO.write(erase_prefix(state) <> to_crlf(prompt_str <> text_str) <> "\r\n")
+    TerminalOwner.clear()
   end
 
   # Erases the previously drawn ruler+prompt block in place, however many
   # terminal rows it actually spanned (tracked in `state.last_rows`), or
   # emits nothing on the very first render (when nothing has been drawn
-  # yet). A long typed line or a long fish-style ghost suggestion can wrap
-  # the prompt row across multiple terminal rows, so this must move the
-  # cursor up by `last_rows - 1` (not a hardcoded 1) before clearing,
-  # otherwise stale wrapped lines are left behind and subsequent redraws
-  # drift down the screen.
+  # yet). A long typed line, embedded Ctrl+J newline, or a long fish-style
+  # ghost suggestion can wrap/expand the prompt across multiple terminal
+  # rows, so this must move the cursor up by `last_rows - 1` (not a
+  # hardcoded 1) before clearing, otherwise stale wrapped lines are left
+  # behind and subsequent redraws drift down the screen.
   defp erase_prefix(%{first_render: true}), do: ""
 
   defp erase_prefix(state) do
@@ -729,22 +802,76 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
   end
 
-  # Positions the cursor within a (possibly wrapped) prompt+text block that
-  # was just written. `cursor_col` is the absolute visible-character offset
-  # of the cursor from the start of that block; `content_rows` is how many
-  # terminal rows the block spans. The terminal's real cursor is currently
-  # at the end of everything written (the last wrapped row), so this moves
-  # up to the row containing `cursor_col` and over to the right column.
-  defp position_cursor(cursor_col, content_rows, cols) do
+  # Raw mode has `OPOST` disabled, so a bare `\n` (from a Ctrl+J-inserted
+  # literal newline) would move the cursor down a row without returning it
+  # to column 0, staircasing the output. Translate to `\r\n` before writing.
+  defp to_crlf(text), do: String.replace(text, "\n", "\r\n")
+
+  @doc """
+  Total terminal rows spanned by `text`, which starts at display column
+  `start_col` and may contain embedded hard newlines (from Ctrl+J) in
+  addition to soft, width-based wrapping. Safe to call with ANSI-escaped
+  (highlighted/ghost-suggested) text, since `display_width/1` already
+  strips escape sequences before counting.
+  """
+  def layout_rows(start_col, text, cols) do
+    text
+    |> String.split("\n")
+    |> Enum.reduce({0, true}, fn line, {acc, first?} ->
+      col_start = if first?, do: start_col, else: 0
+      {acc + rows_for(col_start + display_width(line), cols), false}
+    end)
+    |> elem(0)
+    |> max(1)
+  end
+
+  @doc """
+  Cursor's `{row, col}` (both 0-indexed, relative to the start of the
+  block at display column `start_col`) within `raw_text`. `raw_text`
+  must NOT contain ANSI escapes -- callers pass the plain, unhighlighted
+  buffer text so that `cursor_offset` (a grapheme index into that same
+  text) lines up exactly with `String.graphemes/1`.
+  """
+  def layout_cursor(start_col, raw_text, cursor_offset, cols) do
     cols = max(cols, 1)
+    lines = String.split(raw_text, "\n")
+
+    {result, _rows_acc, _consumed} =
+      Enum.reduce_while(lines, {nil, 0, 0}, fn line, {_, rows_acc, consumed} ->
+        col_start = if rows_acc == 0, do: start_col, else: 0
+        chars = String.graphemes(line)
+        line_len = length(chars)
+
+        if cursor_offset <= consumed + line_len do
+          offset_in_line = cursor_offset - consumed
+          prefix_width = chars |> Enum.take(offset_in_line) |> Enum.join() |> display_width()
+          abs_col = col_start + prefix_width
+          found = {rows_acc + div(abs_col, cols), rem(abs_col, cols)}
+          {:halt, {found, rows_acc, consumed}}
+        else
+          line_rows = rows_for(col_start + display_width(line), cols)
+          {:cont, {nil, rows_acc + line_rows, consumed + line_len + 1}}
+        end
+      end)
+
+    result || {0, start_col}
+  end
+
+  # Positions the cursor within a (possibly hard-broken and/or wrapped)
+  # prompt+text block that was just written. `cursor_row`/`cursor_col` are
+  # the block-relative row/column computed by `layout_cursor/4`;
+  # `content_rows` is how many terminal rows the block spans in total. The
+  # terminal's real cursor is currently at the end of everything written
+  # (the last row), so this moves up to the row containing the cursor and
+  # over to the right column.
+  defp position_cursor_2d(cursor_row, cursor_col, content_rows, _cols) do
     last_row_index = max(content_rows - 1, 0)
-    target_row = min(div(cursor_col, cols), last_row_index)
-    col_in_row = cursor_col - target_row * cols
+    target_row = min(cursor_row, last_row_index)
     rows_up = last_row_index - target_row
 
     if rows_up > 0, do: IO.write("\e[#{rows_up}A")
     IO.write("\r")
-    if col_in_row > 0, do: IO.write("\e[#{col_in_row}C")
+    if cursor_col > 0, do: IO.write("\e[#{cursor_col}C")
   end
 
   defp terminal_cols do
@@ -776,16 +903,26 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     cols = terminal_cols()
     active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
 
-    cond do
-      not Enum.empty?(active_tasks) ->
-        task_badge_ruler(cols, active_tasks)
+    ruler =
+      cond do
+        not Enum.empty?(active_tasks) ->
+          task_badge_ruler(cols, active_tasks)
 
-      context_gauge_enabled?() and is_map(context) and map_size(context) > 0 ->
-        idle_status_ruler(cols, context)
+        context_gauge_enabled?() and is_map(context) and map_size(context) > 0 ->
+          idle_status_ruler(cols, context)
 
-      true ->
-        plain_ruler(cols)
-    end
+        true ->
+          plain_ruler(cols)
+      end
+
+    # Hard safety net: whatever the branch above computed, never let the
+    # ruler exceed the terminal width. Individual branches try to size
+    # their own content (badge truncation, ambient/toggle fallback), but
+    # their arithmetic assumes plain-ASCII segment lengths; a segment that
+    # grows unexpectedly (e.g. the process-count gauge crossing into
+    # double digits) must not be allowed to wrap the ruler onto a second
+    # terminal row, since that desyncs the redraw math in `render_bar/1`.
+    truncate_to_width(ruler, max(cols - 1, 1))
   end
 
   defp plain_ruler(cols) do
@@ -801,7 +938,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
     truncated =
       if String.length(raw_badge) > max_allowed do
-        String.slice(raw_badge, 0, max_allowed - 3) <> "... "
+        String.slice(raw_badge, 0, max_allowed - 4) <> "... "
       else
         raw_badge
       end
@@ -906,11 +1043,15 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       Formatter.reset()
   end
 
+  # The 3rd tuple element is the cursor's grapheme offset into `text_str`
+  # (the 2nd element) alone -- NOT combined with the prompt's width. Both
+  # `draw_only/1` and `render_final/1` add the prompt's own display width
+  # separately via `layout_cursor/4`'s `start_col` argument.
   defp compute_display(%{search_mode: true} = state) do
     query = Enum.join(state.search_query)
     match = find_in_history(query, state.history, state.search_offset)
     prompt = "(reverse-i-search)'#{query}': "
-    {prompt, match, String.length(prompt) + String.length(match)}
+    {prompt, match, String.length(match)}
   end
 
   defp compute_display(state) do
@@ -926,12 +1067,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         do: "#{Formatter.gray()}#{suggestion}#{Formatter.reset()}",
         else: ""
 
-    prompt_visible_len = strip_ansi_length(prompt_str)
-
     buffer_prefix_len =
       state.buffer |> Enum.take(state.cursor) |> Enum.join() |> String.length()
 
-    {prompt_str, highlighted_text <> ghost_str, prompt_visible_len + buffer_prefix_len}
+    {prompt_str, highlighted_text <> ghost_str, buffer_prefix_len}
   end
 
   def accept_ghost_suggestion(%{cursor: cursor, buffer: buffer, history: history} = state) do
@@ -1097,17 +1236,68 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end)
   end
 
-  def display_width(str) when is_binary(str) do
-    clean = String.replace(str, ~r/\e\[[0-9;]*[mGKH]/, "")
+  def display_width(str) when is_binary(str), do: Formatter.display_width(str)
 
-    try do
-      Owl.Data.length(clean)
-    rescue
-      _ -> String.length(clean)
+  defp strip_ansi_length(str), do: display_width(str)
+
+  @ansi_escape_pattern ~r/(\e\[[0-9;]*[mGKH])/
+
+  @doc """
+  Truncates a possibly ANSI-colored string to at most `max_width` visible
+  terminal columns.
+
+  Embedded escape sequences (zero display width) are always preserved
+  intact -- never split mid-sequence -- and a trailing reset code is
+  appended whenever truncation actually occurs, so cutting a string mid-
+  color never bleeds that color onto whatever is printed afterwards. This
+  is the last-resort guarantee that a rendered status bar segment can
+  never exceed the terminal width, regardless of how its own length
+  accounting was computed.
+  """
+  def truncate_to_width(str, max_width) when is_binary(str) and max_width <= 0, do: ""
+
+  def truncate_to_width(str, max_width) when is_binary(str) do
+    if display_width(str) <= max_width do
+      str
+    else
+      budget = max(max_width - 1, 0)
+
+      {truncated, _width} =
+        str
+        |> tokenize_ansi()
+        |> Enum.reduce_while({"", 0}, fn
+          {:escape, code}, {acc, width} ->
+            {:cont, {acc <> code, width}}
+
+          {:char, char}, {acc, width} ->
+            char_width = display_width(char)
+
+            if width + char_width > budget do
+              {:halt, {acc, width}}
+            else
+              {:cont, {acc <> char, width + char_width}}
+            end
+        end)
+
+      truncated <> "…" <> Formatter.reset()
     end
   end
 
-  defp strip_ansi_length(str), do: display_width(str)
+  # Splits a string into an ordered list of `{:escape, code}` (a zero-width
+  # ANSI CSI sequence) and `{:char, grapheme}` tokens, so truncation can
+  # walk the string counting only visible characters towards the width
+  # budget while always copying escape codes through untouched.
+  defp tokenize_ansi(str) do
+    @ansi_escape_pattern
+    |> Regex.split(str, include_captures: true)
+    |> Enum.flat_map(fn chunk ->
+      if String.match?(chunk, ~r/^\e\[[0-9;]*[mGKH]$/) do
+        [{:escape, chunk}]
+      else
+        chunk |> String.graphemes() |> Enum.map(&{:char, &1})
+      end
+    end)
+  end
 
   defp show_completions(matches) do
     IO.write(
@@ -1139,8 +1329,12 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   defp match_key("\e[4~"), do: :end
   defp match_key("\e[3~"), do: :delete
   defp match_key("\r"), do: :enter
-  defp match_key("\n"), do: :enter
   defp match_key("\r\n"), do: :enter
+  # A bare `\n` (Ctrl+J / linefeed, without a preceding `\r`) is raw mode's
+  # unambiguous "Insert Newline" keystroke -- matching Warp's own Input
+  # Editor binding for the same action -- distinct from Enter/`\r`, which
+  # submits. Also produced by pasting multi-line clipboard text.
+  defp match_key("\n"), do: :newline
   defp match_key("\t"), do: :tab
   defp match_key("\x01"), do: :ctrl_a
   defp match_key("\x02"), do: :ctrl_b
