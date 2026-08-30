@@ -32,7 +32,9 @@ defmodule DeepSeekHarness.CLI.Repl do
     IO.puts(Formatter.format_success(DeepSeekHarness.report_serving_processes()))
 
     IO.puts(
-      Formatter.format_info("Type /help for command menu or !command for direct shell execution.")
+      Formatter.format_info(
+        "Type /help for command menu, !command for direct shell execution, or !! to flip into pure console mode."
+      )
     )
 
     IO.puts(
@@ -45,7 +47,19 @@ defmodule DeepSeekHarness.CLI.Repl do
     loop(session_pid, session_id, history)
   end
 
-  def loop(session_pid, session_id, history \\ []) do
+  def loop(session_pid, session_id, history \\ [], console_mode? \\ false)
+
+  # "Pure console" mode: entered/exited via the `!!` flip-flop command.
+  # While active, DSH steps completely out of the way -- no Brain/Hands
+  # actor calls, no LLM turns, no slash-command dispatch -- and behaves
+  # like a bare shell wrapper for quick terminal work, so the user never
+  # has to spawn a separate terminal tab just to run a couple of plain
+  # commands. Typing `!!` again flips back to the normal harness REPL.
+  def loop(session_pid, session_id, history, true) do
+    console_loop(session_pid, session_id, history)
+  end
+
+  def loop(session_pid, session_id, history, false) do
     # Ensure session actor process is alive before turn
     session_pid = ensure_session_alive(session_pid, session_id)
 
@@ -88,10 +102,19 @@ defmodule DeepSeekHarness.CLI.Repl do
 
         case handle_input(trimmed, session_pid, session_id) do
           :continue ->
-            loop(session_pid, session_id, updated_history)
+            loop(session_pid, session_id, updated_history, false)
+
+          :toggle_console ->
+            IO.puts(
+              Formatter.format_success(
+                "Flipped into pure console mode -- plain shell passthrough, no AI/tooling in between. Type !! again to return to DSH."
+              )
+            )
+
+            loop(session_pid, session_id, updated_history, true)
 
           {:switch_session, new_id, new_pid} ->
-            loop(new_pid, new_id, updated_history)
+            loop(new_pid, new_id, updated_history, false)
 
           :exit ->
             graceful_shutdown()
@@ -116,6 +139,11 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("", _session_pid, _session_id), do: :continue
   def handle_input("/exit", _pid, _id), do: :exit
   def handle_input("/quit", _pid, _id), do: :exit
+
+  # Flip-flop into/out of "pure console" mode. Must be matched before the
+  # generic `"!" <> cmd` shell shortcut below, since that clause would
+  # otherwise swallow "!!" as the shell command "!".
+  def handle_input("!!", _session_pid, _session_id), do: :toggle_console
 
   # Shell execution shortcut: !command
   def handle_input("!" <> cmd, _session_pid, _session_id) do
@@ -1230,5 +1258,94 @@ defmodule DeepSeekHarness.CLI.Repl do
     IO.puts("\nResume with -c (or command below):")
 
     IO.puts("#{Formatter.cyan()}dsh --conversation=#{session_id}#{Formatter.reset()}\n")
+  end
+
+  # ---------------------------------------------------------------------
+  # Pure console mode (`!!` flip-flop)
+  #
+  # A stripped-down read/execute loop that never touches the Brain
+  # session actor, the LLM client, or slash-command dispatch. It exists
+  # so `!!` can turn `dsh` into a bare passthrough shell for a burst of
+  # quick terminal commands, without the user needing to open a second
+  # terminal tab/window. `!!` (typed alone) flips back to the harness
+  # REPL loop, carrying the same in-memory input history forward.
+  # ---------------------------------------------------------------------
+
+  defp console_loop(session_pid, session_id, history) do
+    case LineEditor.get_line(build_console_prompt(), history, %{}) do
+      :eof ->
+        IO.puts(Formatter.format_info("\nLeaving pure console mode -- back to DSH."))
+        loop(session_pid, session_id, history, false)
+
+      {:error, reason} ->
+        IO.puts(Formatter.format_error("Input error: #{inspect(reason)}"))
+        console_loop(session_pid, session_id, history)
+
+      line when is_binary(line) ->
+        trimmed = String.trim(line)
+        updated_history = if trimmed != "", do: [trimmed | history], else: history
+
+        case trimmed do
+          "" ->
+            console_loop(session_pid, session_id, updated_history)
+
+          "!!" ->
+            IO.puts(Formatter.format_success("Back to DSH -- pure console mode OFF."))
+            loop(session_pid, session_id, updated_history, false)
+
+          cmd ->
+            run_console_command(cmd)
+            console_loop(session_pid, session_id, updated_history)
+        end
+    end
+  end
+
+  defp build_console_prompt do
+    cwd = File.cwd!() |> Path.basename()
+
+    "#{Formatter.yellow()}#{Formatter.bold()} console#{Formatter.reset()} " <>
+      "#{Formatter.cyan()}#{cwd}#{Formatter.reset()} #{Formatter.yellow()}$#{Formatter.reset()} "
+  end
+
+  # `cd` is special-cased and applied to the running `dsh` OS process
+  # itself (via `File.cd/1`), exactly like a real shell builtin -- a
+  # subprocess (`sh -c "cd ..."`) can never change its parent's working
+  # directory, so without this every other command would silently ignore
+  # a preceding `cd`. Everything else is hosted out to `sh -c` verbatim,
+  # with output streamed live to stdout as it's produced rather than
+  # buffered until the command exits.
+  defp run_console_command(cmd) do
+    case String.split(cmd, ~r/\s+/, parts: 2) do
+      ["cd"] -> console_cd(System.get_env("HOME") || "/")
+      ["cd", target] -> console_cd(target)
+      _ -> run_console_passthrough(cmd)
+    end
+  end
+
+  defp console_cd(target) do
+    expanded = Path.expand(target, File.cwd!())
+
+    case File.cd(expanded) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        IO.puts(Formatter.format_error("cd: #{expanded}: #{:file.format_error(reason)}"))
+    end
+  end
+
+  defp run_console_passthrough(cmd) do
+    case System.cmd("sh", ["-c", cmd],
+           stderr_to_stdout: true,
+           into: IO.stream(:stdio, :line)
+         ) do
+      {_stream, 0} ->
+        :ok
+
+      {_stream, code} ->
+        IO.puts(Formatter.format_error("[exit code #{code}]"))
+    end
+  rescue
+    e -> IO.puts(Formatter.format_error("Command failed: #{Exception.message(e)}"))
   end
 end

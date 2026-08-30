@@ -48,6 +48,11 @@ defmodule DeepSeekHarness.CLIReplTest do
     assert :continue = Repl.handle_input("/unknown_command", pid, id)
   end
 
+  test "handles the !! pure console mode flip-flop", %{session_pid: pid, session_id: id} do
+    assert :toggle_console = Repl.handle_input("!!", pid, id)
+    assert :toggle_console = Repl.handle_input("!!", pid, id)
+  end
+
   test "handles exit and quit commands", %{session_pid: pid, session_id: id} do
     assert :exit = Repl.handle_input("/exit", pid, id)
     assert :exit = Repl.handle_input("/quit", pid, id)

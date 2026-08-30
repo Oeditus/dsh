@@ -18,6 +18,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
 
   @tips [
     "Use !command to execute shell commands directly (e.g. !git status)",
+    "Use !! to flip into pure console mode -- a plain shell passthrough with no AI/tooling in between -- and !! again to flip back",
     "Use /help to view available slash commands and shortcuts",
     "Use /model [chat|reasoner] to switch between deepseek-chat and deepseek-reasoner models",
     "Use /mode [local|remote|docker] to set Hands execution target",
@@ -87,6 +88,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
     """
     #{bold()}AVAILABLE SLASH COMMANDS & SHORTCUTS:#{reset()}
       #{cyan()}!command#{reset()}                 Execute shell command directly (e.g. !ls -la or !git status)
+      #{cyan()}!!#{reset()}                      Flip into/out of pure console mode (plain shell passthrough, no AI/tooling)
       #{cyan()}/help#{reset()}                   Show this help menu
       #{cyan()}/model [chat|reasoner]#{reset()}   Switch model (deepseek-chat V3 or deepseek-reasoner R1)
       #{cyan()}/mode [local|remote|docker]#{reset()}  Set Hands execution target

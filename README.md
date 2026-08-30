@@ -1,4 +1,14 @@
-# DeepSeek Harness (DSH)
+<p align="center">
+  <img src="stuff/img/logos-500x500.png" width="220" alt="DeepSeek Harness logo" />
+</p>
+<h1 align="center">DeepSeek Harness (DSH)</h1>
+<p align="center"><b>An agentic CLI coding harness for DeepSeek models, built on Elixir &amp; Erlang/OTP</b></p>
+<p align="center">
+  <img alt="Elixir" src="https://img.shields.io/badge/elixir-1.19%2B-4B275F?logo=elixir&logoColor=white" />
+  <img alt="Erlang/OTP" src="https://img.shields.io/badge/erlang%2FOTP-27%2B-A90533?logo=erlang&logoColor=white" />
+  <img alt="Version" src="https://img.shields.io/badge/version-0.2.0-blue" />
+  <img alt="Architecture" src="https://img.shields.io/badge/architecture-Brain%20%2F%20Hands-teal" />
+</p>
 
 An agentic CLI coding harness for **DeepSeek** models (`deepseek-chat` V3, `deepseek-coder` V2.5, and `deepseek-reasoner` R1), built in **Elixir & Erlang/OTP**.
 
@@ -6,7 +16,17 @@ Derived from **José Valim's architectural framework** for process-isolated AI a
 
 ---
 
-## Architectural Foundation: José Valim's Vision & DeepSeek Model Integration
+## Table of Contents
+- [Architectural Foundation](#architectural-foundation-josé-valims-vision--deepseek-model-integration)
+- [Key Features & Capabilities](#key-features--capabilities)
+- [Installation & Setup](#installation--setup)
+- [REPL Slash Commands & Shortcuts](#repl-slash-commands--shortcuts)
+- [Configuration](#configuration)
+- [Documentation](#documentation)
+
+---
+
+## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Architectural Foundation: José Valim's Vision & DeepSeek Model Integration
 
 DeepSeek Harness (DSH) bridges modern LLM reasoning capabilities with Erlang/OTP's battle-tested fault tolerance and process concurrency model.
 
@@ -18,6 +38,8 @@ In traditional AI harnesses (typically single-threaded Node.js or Python runtime
 - **Spatiotemporal Checkpoints & Instant Rollback**: State snapshots record conversation history, model configurations, and context state before each tool execution turn, providing temporal undo capabilities (`/undo`) and state branching.
 - **Live Hot-Code Tool Reloading**: Tools and plugins can be compiled, hot-swapped, or reloaded live (`/plugins reload`) without losing conversation memory or resetting GenServer process state.
 - **Lightweight Parallel Subagents**: Sub-tasks can be delegated to child session processes (`SessionSupervisor.start_session`), running parallel agentic loops concurrently across BEAM worker threads.
+- **Concurrent OTP Task Engine**: Batches of tool calls (`DeepSeekHarness.TaskEngine.Orchestrator`) run concurrently under a `Task.Supervisor`, with per-file write locks and a real-time "N running" badge on the status bar ruler.
+- **Distributed Erlang Node Clustering**: Hands execution can target the local host, a remote Erlang node (`/mode remote <node>`), or a Docker container (`/mode docker <id>`), decoupling where the Brain thinks from where the Hands act.
 
 ### 2. DeepSeek Model Selection & Best Practices
 
@@ -31,7 +53,7 @@ DeepSeek Harness supports the full suite of official DeepSeek models, local open
 
 ---
 
-## Key Features & Capabilities
+## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Key Features & Capabilities
 
 ### 1. Persistent Session Resumption (`dsh -c <id>` & `/resume`)
 - Every session is assigned a unique UUID (e.g. `df97eb34-cb33-4f21-bada-2e9c3cf75d46`).
@@ -66,9 +88,29 @@ DeepSeek Harness supports the full suite of official DeepSeek models, local open
 - Run `dsh` smoothly from **any** workspace directory.
 - Perform background in-place self-updates anytime using `dsh --update` or `/update`.
 
+### 7. Pure Console Mode (`!!`)
+- Type `!!` on its own line to flip `dsh` completely out of the way: no Brain/Hands actors, no LLM turns, no slash-command dispatch -- just a bare `sh -c` passthrough with live-streamed output.
+- `cd` is applied to `dsh`'s own process, exactly like a real shell builtin, so navigation persists across commands.
+- Type `!!` again (or `Ctrl+D`) to flip straight back into the harness REPL -- no need to open a second terminal tab for a quick burst of plain shell commands.
+
+### 8. Concurrent OTP Task Engine
+- Tool call batches execute concurrently under `DeepSeekHarness.TaskEngine.Orchestrator`, each in its own supervised `Task`, with automatic per-file write locking to prevent concurrent edit races.
+- The idle status bar surfaces a live "N running" badge with per-task summaries whenever background tool work is in flight.
+
+### 9. Native Elixir Static Analysis (`/linter`, `/lint`)
+- Runs `oeditus_credo`, `propwise`, `credo`, or `dialyzer` against the full project, a git diff, or a branch code review via `/linter <tool> [project|diff|cr] [args...]`.
+
+### 10. Configurable Prompt Styles & Status Bar (`/config`)
+- Switch prompt layout with `/config style <starship|extended|compact|minimal>` or supply a fully custom template via `/config prompt <template>`.
+- Toggle UI features (`enable_autosuggestions`, `enable_syntax_highlighting`, `enable_context_gauge`, `compact_status_bar`, and more) with `/config toggle <key>`.
+
 ---
 
-## Installation & Setup
+<p align="center">
+  <img src="stuff/img/logos-128x128.png" width="64" alt="DeepSeek Harness" />
+</p>
+
+## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Installation & Setup
 
 This guide provides step-by-step instructions to get **DeepSeek Harness (`dsh`)** up and running on your system, along with its database backend **`dllb`** (which powers **Ragex** code analysis and knowledge graph indexing).
 
@@ -80,7 +122,7 @@ Before installing `dsh` or `dllb`, ensure your machine has the following tools i
 
 1. **Elixir & Erlang/OTP**: 
    - `dsh` is built using the Elixir programming language on top of the Erlang runtime engine.
-   - **Required versions**: Elixir `1.18+` and Erlang/OTP `27+`.
+   - **Required versions**: Elixir `1.19+` and Erlang/OTP `27+`.
    - *How to install*: Use your system package manager (e.g. `brew install elixir` on macOS or `sudo apt install elixir` on Ubuntu) or a version manager like [`asdf`](https://asdf-vm.com/) / [`mise`](https://mise.jdx.dev/).
 2. **Git**: Required to download the project source code.
 3. **C/C++ Build Tools & Libraries** *(Linux only)*:
@@ -117,7 +159,7 @@ mix deps.get
 mix dsh.install
 ```
 
-#### 📍 Adding `~/.local/bin` to Your System `$PATH`
+#### Adding `~/.local/bin` to Your System `$PATH`
 
 After installation, ensure `~/.local/bin` is included in your shell path so you can run `dsh` from any terminal directory:
 
@@ -198,29 +240,63 @@ When you run `/ragex` inside `dsh`, Ragex looks for the `dllb-server` executable
 
 ---
 
-## REPL Slash Commands & Shortcuts
+## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> REPL Slash Commands & Shortcuts
 
+The full reference lives in [`docs/cheat_sheet.md`](docs/cheat_sheet.md); the essentials are grouped below.
+
+#### Shell & Console
 | Command | Action |
 | :--- | :--- |
 | `!command` | Execute shell command directly (e.g. `!git status`, `!mix test`) |
+| `!!` | Flip into/out of pure console mode (plain shell passthrough, no AI/tooling) |
+| `/git <subcommand>` | Run a raw `git` subcommand and print colorized output |
+
+#### Session, History & Persistence
+| Command | Action |
+| :--- | :--- |
+| `/resume [id]` | Resume specific session ID or open interactive conversation picker modal |
+| `/session [list\|switch\|cleanup]` | Inspect, switch, or prune persisted workspace sessions |
+| `/status` | Alias for `/session` -- active session & system status |
+| `/checkpoint [label]` | Create a manual temporal state snapshot |
+| `/undo` | Roll back state to previous temporal checkpoint |
+| `/compact` | Compress conversation context to save tokens |
+| `/export [json\|markdown]` | Export full session transcript to disk |
+| `/history [search <query>]` | Show or search persistent REPL input history |
+| `/cost` \| `/tokens` | Display token usage breakdown and cumulative session cost |
+
+#### Git & Code Review
+| Command | Action |
+| :--- | :--- |
 | `/cr [base]` | Generate Code Review for current branch against `main` or custom base |
 | `/diff [branch]` | Display colorized git diff of workspace or against target branch |
-| `/resume [id]` | Resume specific session ID or open interactive conversation picker modal |
-| `/rules [add\|delete]` | Manage scoped prompt preambles and launch deletion checkbox modal |
+| `/commit <message>` | Auto-stage and commit workspace changes |
+| `/linter <tool> [project\|diff\|cr]` | Run `oeditus_credo`, `propwise`, `credo`, or `dialyzer` (alias: `/lint`) |
+
+#### Model, Execution & Rules
+| Command | Action |
+| :--- | :--- |
 | `/model [chat\|coder\|reasoner]` | Switch active model (`deepseek-chat`, `deepseek-coder`, `deepseek-reasoner`) |
 | `/mode [local\|remote\|docker]` | Set Hands execution target |
-| `/compact` | Compress conversation context to save tokens |
-| `/undo` | Roll back state to previous temporal checkpoint |
-| `/checkpoint [label]` | Create a manual temporal state snapshot |
-| `/plugins [reload]` | List tools or hot-reload plugins live without dropping state |
-| `/mcp [list\|add\|load]` | Manage Model Context Protocol (MCP) servers and tools |
-| `/ragex` | Mount first-class Ragex code analysis & refactoring MCP tools |
-| `/skills [name]` | List available skills or execute a skill instruction |
-| `/update` | Background self-update `dsh` release to latest code |
-| `/commit <message>` | Auto-stage and commit workspace changes |
-| `/cost` \| `/tokens` | Display token usage breakdown and cumulative session cost |
+| `/sandbox [on\|off]` | Restrict file references & tools to the workspace directory |
 | `/permissions [auto\|ask]` | Set tool execution safety mode |
+| `/rules [add\|delete\|toggle]` | Manage scoped prompt preambles and launch deletion checkbox modal |
+| `/nodes` | View distributed Erlang node cluster status |
+
+#### Tooling & Extensibility
+| Command | Action |
+| :--- | :--- |
+| `/plugins [reload\|info]` | List tools or hot-reload plugins live without dropping state |
+| `/mcp [list\|add\|load]` | Manage Model Context Protocol (MCP) servers and tools |
+| `/ragex [stats\|reindex\|export]` | Mount and drive the first-class Ragex code analysis & refactoring MCP server |
+| `/skills` \| `/skill <name>` | List available skills or execute a skill instruction |
 | `/subagent <prompt>` | Spawn a background subagent worker for sub-tasks |
+| `/config [style\|prompt\|toggle]` | Manage prompt styles and UI toggles |
+| `/env` | Show runtime environment (Elixir/OTP version, model, workspace) |
+| `/update` | Background self-update `dsh` release to latest code |
+
+#### Utility
+| Command | Action |
+| :--- | :--- |
 | `/cb` \| `/clipboard` | Copy latest assistant response to system clipboard |
 | `/clear` | Clear terminal output |
 | `/help` | Display help menu |
@@ -228,6 +304,32 @@ When you run `/ragex` inside `dsh`, Ragex looks for the `dllb-server` executable
 
 ---
 
+## Configuration
+
+`dsh` reads settings from `~/.dsh/config.json` (global) merged with `.dsh/config.json` (per-workspace override, taking precedence). Notable keys:
+
+| Key | Default | Purpose |
+| :--- | :--- | :--- |
+| `prompt_style` | `"starship"` | Prompt layout: `starship`, `extended`, `compact`, or `minimal` |
+| `permission_mode` | `"ask_confirm"` | Tool execution safety mode (`ask_confirm` or `auto_approve`) |
+| `sandbox_workspace` | `false` | Restrict file references & tools to the workspace directory |
+| `enable_autosuggestions` | `true` | Fish-style ghost autosuggestions from input history |
+| `enable_syntax_highlighting` | `true` | Highlight `/commands` and `!shell` lines as you type |
+| `enable_context_gauge` | `true` | Show the token/cost usage gauge on the idle status bar |
+| `compact_status_bar` | `false` | Swap the gauge for a compact `id + message count` line |
+| `max_context_tokens` | `64000` | Assumed model context window used by the usage gauge |
+| `max_tool_depth` | `100` | Consecutive tool-calling turns before pausing to confirm |
+
+Manage most of these live from the REPL with `/config style <name>`, `/config prompt <template>`, and `/config toggle <key>` -- or toggle permission mode, sandbox bounds, and the status bar mode instantly with `Ctrl+P`, `Ctrl+G`, and `Ctrl+B`.
+
+---
+
 ## Documentation
 
-For full command reference, keyboard shortcuts, rule scoping tactics, and advanced BEAM distribution workflows, see [`docs/cheat_sheet.md`](file:///home/am/Proyectos/Oeditus/ragec/docs/cheat_sheet.md).
+For full command reference, keyboard shortcuts, rule scoping tactics, and advanced BEAM distribution workflows, see [`docs/cheat_sheet.md`](docs/cheat_sheet.md).
+
+<p align="center">
+  <img src="stuff/img/logos-128x128.png" width="48" alt="DeepSeek Harness" />
+  <br />
+  <sub>DeepSeek Harness (DSH) -- Actors, Hot-Code Reloading, Distributed Brain/Hands, Spatiotemporal Checkpoints.</sub>
+</p>

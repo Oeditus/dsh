@@ -74,12 +74,25 @@ Prefix any line with `!` to execute a shell command directly without sending it 
 📁 my_app 🤖 deepseek-chat ❯ !cargo check
 ```
 
+### `!!` Pure Console Mode (Flip-Flop)
+Type `!!` on its own to flip `dsh` into **pure console mode**: a bare shell passthrough with no Brain/Hands actors, no LLM turns, and no slash-command dispatch in between. Every line you type executes directly via `sh -c`, with output streamed live and `cd` applied to `dsh`'s own working directory (like a real shell builtin). Type `!!` again (or `Ctrl+D`) to flip back into the normal harness REPL, picking up right where you left off -- no need to spawn a second terminal tab just to run a few plain commands:
+```
+my_app deepseek-chat > !!
+Flipped into pure console mode -- plain shell passthrough, no AI/tooling in between. Type !! again to return to DSH.
+console my_app $ cd ..
+console Proyectos $ ls
+console Proyectos $ !!
+Back to DSH -- pure console mode OFF.
+my_app deepseek-chat >
+```
+
 ---
 
 ## 3. Slash Commands Reference
 
 | Slash Command | Description | Example |
 | :--- | :--- | :--- |
+| `!!` | Flip into/out of pure console mode (plain shell passthrough, no AI/tooling) | `!!` |
 | `/cr [base]` | Code review current branch against `main` or custom base branch | `/cr main` |
 | `/diff [target]` | View colorized git diff of workspace or against target branch | `/diff main` |
 | `/resume [id]` | Resume specific session ID or open interactive conversation picker modal | `/resume` |
