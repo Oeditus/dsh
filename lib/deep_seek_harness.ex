@@ -59,6 +59,7 @@ defmodule DeepSeekHarness do
   @doc "Returns a human-readable status banner of serving processes."
   def report_serving_processes do
     status = process_status()
+
     "⚡ #{status.total_serving_processes} BEAM processes serving (#{status.active_task_workers} parallel task workers, #{status.active_sessions} session actors, #{status.schedulers_online} online schedulers)"
   end
 end

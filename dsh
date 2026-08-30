@@ -36,6 +36,7 @@ while [[ -L "${SOURCE}" ]]; do
   else
     SOURCE="$(dirname "${SOURCE}")/${TARGET}"
   fi
+done
 SCRIPT_DIR="$(cd "$(dirname "${SOURCE}")" && pwd)"
 TARGET_ENV="${DSH_ENV:-prod}"
 export DSH_PROJECT_DIR="${DSH_PROJECT_DIR:-$(pwd)}"
