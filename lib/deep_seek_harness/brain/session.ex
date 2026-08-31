@@ -24,6 +24,7 @@ defmodule DeepSeekHarness.Brain.Session do
   PARALLEL EXECUTION IS OUR VIRTUE & CORE STRENGTH:
   - You can and MUST spawn processes and execute tasks and tools in parallel whenever possible!
   - When inspecting, searching, reading, or editing multiple files, ALWAYS emit multiple tool calls in parallel in a single response turn rather than sequentially across multiple turns.
+  - To read several files at once, use the `read_files` tool (pass a `paths` list) instead of issuing multiple `read_file` calls -- it reads them all concurrently in a single tool call.
   - When breaking down complex or multi-step work, use `spawn_subagent` (with `async: true`) to spawn independent sub-agent worker processes that execute concurrently in parallel.
   - Parallel process execution is fully backed by the Erlang/Elixir BEAM actor model for maximum speed and concurrent throughput. Always leverage maximum parallelism!
   - Always report how many BEAM processes are currently serving when summarizing system status or turn execution.
@@ -984,11 +985,24 @@ defmodule DeepSeekHarness.Brain.Session do
 
     target_file = args["path"] || args["TargetFile"] || args["AbsolutePath"] || args["file"]
 
+    # `read_files` takes a list of paths, so the sandbox must validate every
+    # one of them (a single out-of-bounds path is enough to deny the call).
+    sandbox_violation =
+      state.sandbox_workspace and
+        cond do
+          is_binary(target_file) ->
+            not in_workspace?(target_file, state.cwd)
+
+          is_list(args["paths"]) ->
+            Enum.any?(args["paths"], &(is_binary(&1) and not in_workspace?(&1, state.cwd)))
+
+          true ->
+            false
+        end
+
     cond do
-      state.sandbox_workspace and is_binary(target_file) and
-          not in_workspace?(target_file, state.cwd) ->
-        {:deny, "Access denied: file path '#{target_file}' is outside active sandbox bounds.",
-         state}
+      sandbox_violation ->
+        {:deny, "Access denied: one or more file paths are outside active sandbox bounds.", state}
 
       policy == "deny" ->
         {:deny, "Tool '#{tool_name}' execution denied by configuration policy.", state}
@@ -1084,82 +1098,19 @@ defmodule DeepSeekHarness.Brain.Session do
   def format_tool_confirmation_summary(tool_name, args) when is_map(args) do
     case tool_name do
       name when name in ["replace_file_content", "replace_file", "edit_file"] ->
-        file =
-          args["TargetFile"] || args["path"] || args["AbsolutePath"] || args["file"] || "file"
-
-        target = args["TargetContent"] || args["target"] || ""
-        replacement = args["ReplacementContent"] || args["replacement"] || ""
-        start_line = args["StartLine"] || args["line_start"]
-        end_line = args["EndLine"] || args["line_end"]
-
-        lines_info = if start_line, do: " (lines #{start_line}-#{end_line})", else: ""
-
-        diff_summary =
-          cond do
-            target != "" and replacement != "" ->
-              t_preview = truncate_lines(target, 2)
-              r_preview = truncate_lines(replacement, 2)
-
-              """
-              Target:
-              - #{t_preview}
-              Replacement:
-              + #{r_preview}
-              """
-
-            replacement != "" ->
-              r_preview = truncate_lines(replacement, 3)
-
-              """
-              Replacement:
-              + #{r_preview}
-              """
-
-            true ->
-              ""
-          end
-
-        """
-        Tool: #{tool_name}
-        File: #{file}#{lines_info}
-        #{diff_summary}
-        """
-        |> String.trim()
+        format_replace_summary(tool_name, args)
 
       name when name in ["write_file", "write_to_file", "create_file"] ->
-        file = args["TargetFile"] || args["path"] || args["AbsolutePath"] || "file"
-        content = args["CodeContent"] || args["content"] || ""
-        line_count = length(String.split(content, "\n"))
-        preview = truncate_lines(content, 3)
-
-        """
-        Tool: #{tool_name}
-        File: #{file} (#{line_count} lines)
-        Preview:
-        #{preview}
-        """
-        |> String.trim()
+        format_write_summary(tool_name, args)
 
       name when name in ["bash", "cmd", "run_command", "shell", "exec"] ->
-        cmd = args["CommandLine"] || args["command"] || args["cmd"] || ""
-
-        """
-        Tool: #{tool_name}
-        Command: $ #{cmd}
-        """
-        |> String.trim()
+        format_bash_summary(tool_name, args)
 
       name when name in ["read_file", "view_file", "file_read"] ->
-        file = args["AbsolutePath"] || args["path"] || args["file"] || "file"
-        start_line = args["StartLine"]
-        end_line = args["EndLine"]
-        range = if start_line, do: " (lines #{start_line}-#{end_line})", else: ""
+        format_read_file_summary(tool_name, args)
 
-        """
-        Tool: #{tool_name}
-        File: #{file}#{range}
-        """
-        |> String.trim()
+      name when name in ["read_files", "read_multiple_files"] ->
+        format_read_files_summary(tool_name, args)
 
       _ ->
         summary =
@@ -1179,6 +1130,104 @@ defmodule DeepSeekHarness.Brain.Session do
 
   def format_tool_confirmation_summary(tool_name, args) do
     "Tool: #{tool_name}\nArgs: #{inspect(args)}"
+  end
+
+  defp format_replace_summary(tool_name, args) do
+    file = args["TargetFile"] || args["path"] || args["AbsolutePath"] || args["file"] || "file"
+    target = args["TargetContent"] || args["target"] || ""
+    replacement = args["ReplacementContent"] || args["replacement"] || ""
+    start_line = args["StartLine"] || args["line_start"]
+    end_line = args["EndLine"] || args["line_end"]
+
+    lines_info = if start_line, do: " (lines #{start_line}-#{end_line})", else: ""
+
+    diff_summary =
+      cond do
+        target != "" and replacement != "" ->
+          t_preview = truncate_lines(target, 2)
+          r_preview = truncate_lines(replacement, 2)
+
+          """
+          Target:
+          - #{t_preview}
+          Replacement:
+          + #{r_preview}
+          """
+
+        replacement != "" ->
+          r_preview = truncate_lines(replacement, 3)
+
+          """
+          Replacement:
+          + #{r_preview}
+          """
+
+        true ->
+          ""
+      end
+
+    """
+    Tool: #{tool_name}
+    File: #{file}#{lines_info}
+    #{diff_summary}
+    """
+    |> String.trim()
+  end
+
+  defp format_write_summary(tool_name, args) do
+    file = args["TargetFile"] || args["path"] || args["AbsolutePath"] || "file"
+    content = args["CodeContent"] || args["content"] || ""
+    line_count = length(String.split(content, "\n"))
+    preview = truncate_lines(content, 3)
+
+    """
+    Tool: #{tool_name}
+    File: #{file} (#{line_count} lines)
+    Preview:
+    #{preview}
+    """
+    |> String.trim()
+  end
+
+  defp format_bash_summary(tool_name, args) do
+    cmd = args["CommandLine"] || args["command"] || args["cmd"] || ""
+
+    """
+    Tool: #{tool_name}
+    Command: $ #{cmd}
+    """
+    |> String.trim()
+  end
+
+  defp format_read_file_summary(tool_name, args) do
+    file = args["AbsolutePath"] || args["path"] || args["file"] || "file"
+    start_line = args["StartLine"]
+    end_line = args["EndLine"]
+    range = if start_line, do: " (lines #{start_line}-#{end_line})", else: ""
+
+    """
+    Tool: #{tool_name}
+    File: #{file}#{range}
+    """
+    |> String.trim()
+  end
+
+  defp format_read_files_summary(tool_name, args) do
+    files = args["paths"] || []
+
+    file_list =
+      if is_list(files) and files != [] do
+        Enum.map_join(files, "\n", fn f -> "  - #{f}" end)
+      else
+        "  (none specified)"
+      end
+
+    """
+    Tool: #{tool_name}
+    Files (#{if is_list(files), do: length(files), else: 0}):
+    #{file_list}
+    """
+    |> String.trim()
   end
 
   defp truncate_lines(text, max_lines) when is_binary(text) do

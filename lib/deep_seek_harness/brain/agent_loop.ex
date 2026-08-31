@@ -5,7 +5,7 @@ defmodule DeepSeekHarness.Brain.AgentLoop do
   """
   require Logger
 
-  @standard_tools ~w(read_file write_file replace_file list_dir bash elixir_eval ask_question)
+  @standard_tools ~w(read_file read_files write_file replace_file list_dir bash elixir_eval ask_question)
 
   @doc "Detects whether the exact same tool calls with identical arguments were executed in the previous turn."
   def duplicate_tool_calls?(messages, new_tool_calls)

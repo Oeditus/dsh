@@ -8,12 +8,61 @@ defmodule DeepSeekHarness.PluginLoaderTest do
     tool_names = Enum.map(tools, & &1.name)
 
     assert "read_file" in tool_names
+    assert "read_files" in tool_names
     assert "write_file" in tool_names
     assert "replace_file" in tool_names
     assert "list_dir" in tool_names
     assert "bash" in tool_names
     assert "elixir_eval" in tool_names
     assert "ask_question" in tool_names
+  end
+
+  test "read_files reads several files in parallel and returns delimited content" do
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "dsh_read_files_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(tmp_dir)
+    on_exit(fn -> File.rm_rf(tmp_dir) end)
+
+    File.write!(Path.join(tmp_dir, "a.txt"), "content of A")
+    File.write!(Path.join(tmp_dir, "b.txt"), "content of B")
+
+    {:ok, result} =
+      PluginLoader.execute_tool("read_files", %{
+        "paths" => [Path.join(tmp_dir, "a.txt"), Path.join(tmp_dir, "b.txt")]
+      })
+
+    assert result =~ "=== File: #{Path.join(tmp_dir, "a.txt")} ==="
+    assert result =~ "content of A"
+    assert result =~ "=== File: #{Path.join(tmp_dir, "b.txt")} ==="
+    assert result =~ "content of B"
+  end
+
+  test "read_files reports a missing file inline without failing the others" do
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "dsh_read_files_missing_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(tmp_dir)
+    on_exit(fn -> File.rm_rf(tmp_dir) end)
+
+    good = Path.join(tmp_dir, "good.txt")
+    File.write!(good, "readable")
+    missing = Path.join(tmp_dir, "does_not_exist.txt")
+
+    {:ok, result} = PluginLoader.execute_tool("read_files", %{"paths" => [good, missing]})
+
+    assert result =~ "=== File: #{good} ==="
+    assert result =~ "readable"
+    assert result =~ "=== File: #{missing} ==="
+    assert result =~ "[ERROR]"
+  end
+
+  test "read_files validates its paths argument" do
+    assert {:error, msg} = PluginLoader.execute_tool("read_files", %{"paths" => "not_a_list"})
+    assert msg =~ "Invalid 'paths'"
+
+    assert {:error, msg} = PluginLoader.execute_tool("read_files", %{})
+    assert msg =~ "Invalid arguments"
   end
 
   test "executes built-in elixir_eval tool" do

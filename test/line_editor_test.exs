@@ -277,6 +277,16 @@ defmodule DeepSeekHarness.LineEditorTest do
       text = String.duplicate("x", 12)
       assert LineEditor.layout_cursor(0, text, 10, 8) == {1, 2}
     end
+
+    test "layout_cursor/4 reports the wrap boundary when the cursor lands exactly at the last column" do
+      # 8 'x' chars in an 8-column terminal exactly fill one row; cursor at
+      # offset 8 (right after the last char) is at the wrap point, i.e.
+      # row 1, column 0. `draw_only/1`'s `position_cursor_2d/4` then pins
+      # this to the last column of the last occupied row so it doesn't jump
+      # to the block's top-left.
+      text = String.duplicate("x", 8)
+      assert LineEditor.layout_cursor(0, text, 8, 8) == {1, 0}
+    end
   end
 
   describe "history persistence with embedded newlines" do
@@ -389,6 +399,24 @@ defmodule DeepSeekHarness.LineEditorTest do
       # the escape regex); stripping them should leave no stray `\e` bytes.
       stripped = String.replace(truncated, ~r/\e\[[0-9;]*[mGKH]/, "")
       refute stripped =~ "\e"
+    end
+  end
+
+  describe "fish-style hint truncation" do
+    test "truncate_to_width/2 appends an ellipsis and stays within the width budget" do
+      # A long history tail that would wrap past the prompt's remaining line
+      # width must be cut down to fit, with an ellipsis signalling more.
+      long_tail = String.duplicate("x", 100)
+      truncated = LineEditor.truncate_to_width(long_tail, 20)
+
+      assert LineEditor.display_width(truncated) <= 20
+      assert String.contains?(truncated, "…")
+    end
+
+    test "truncate_to_width/2 leaves a hint that already fits untouched (no ellipsis)" do
+      short = "git status"
+      assert LineEditor.truncate_to_width(short, 80) == short
+      refute String.contains?(LineEditor.truncate_to_width(short, 80), "…")
     end
   end
 end

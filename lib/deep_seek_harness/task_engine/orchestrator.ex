@@ -124,6 +124,19 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
         Map.get(args, "command") ||
         ""
 
+    # `read_files` takes a list of paths; summarize the first few so the
+    # status badge doesn't balloon to the full list.
+    target =
+      if target == "" and is_list(args["paths"]) do
+        case args["paths"] do
+          [] -> ""
+          [single] -> single
+          [first | rest] -> "#{first} (+#{length(rest)})"
+        end
+      else
+        target
+      end
+
     cleaned_target =
       target
       |> to_string()

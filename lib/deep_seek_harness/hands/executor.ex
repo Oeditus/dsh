@@ -89,6 +89,7 @@ defmodule DeepSeekHarness.Hands.Executor do
 
   @icon_map %{
     "read_file" => "󰈔",
+    "read_files" => "󰈔",
     "view_file" => "󰈔",
     "file_read" => "󰈔",
     "read_contents" => "󰈔",

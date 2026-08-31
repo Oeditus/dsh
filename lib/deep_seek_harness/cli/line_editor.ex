@@ -280,6 +280,11 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       # suggestion. Needed so `erase_prefix/1` erases exactly what was
       # drawn instead of assuming a fixed 2-row block.
       last_rows: 0,
+      # Signature of the last-rendered ruler+prompt+text block plus the
+      # cursor's {row, col}. Used by `render_bar/1` to skip the erase+redraw
+      # entirely when nothing visible changed (see `render_signature/1`), so
+      # the status bar stops blinking on every keystroke.
+      last_render: nil,
       context: context
     }
   end
@@ -739,8 +744,46 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   # ---------------------------------------------------------------------
 
   defp render_bar(state) do
-    erase_only(state)
-    draw_only(state)
+    # "Redraw if and only if changed": compute the full render signature
+    # (ruler + prompt + text + cursor position) and, if it matches the last
+    # render exactly, skip the erase+redraw cycle entirely. This stops the
+    # status bar from blinking on every keystroke -- the common fast-typing
+    # path produces an identical surface (same buffer, same ruler, same
+    # cursor) and would otherwise erase and redraw it pointlessly, which is
+    # what reads as flicker. Only re-register with TerminalOwner so an
+    # interjecting log line still redraws the current (unchanged) surface.
+    signature = render_signature(state)
+
+    if signature == Map.get(state, :last_render, :sentinel) do
+      TerminalOwner.set(&erase_only/1, &draw_only/1, state)
+      state
+    else
+      erase_only(state)
+      new_state = draw_only(state)
+      %{new_state | last_render: signature}
+    end
+  end
+
+  # A single tuple capturing everything that affects what is written to the
+  # terminal: the ruler string, the prompt+text string, and the cursor's
+  # {row, col}. `last_rows` is deliberately omitted -- it is a pure function
+  # of the ruler/text widths, so if those are unchanged it is unchanged too,
+  # and including it would only make the comparison noisier.
+  defp render_signature(state) do
+    cols = terminal_cols()
+    ruler = ruler_line(Map.get(state, :context, %{}))
+    {prompt_str, text_str, cursor_offset} = compute_display(state)
+    prompt_visible_len = strip_ansi_length(prompt_str)
+
+    raw_cursor_text =
+      if Map.get(state, :search_mode, false), do: text_str, else: Enum.join(state.buffer)
+
+    cursor_index = if Map.get(state, :search_mode, false), do: cursor_offset, else: state.cursor
+
+    {cursor_row, cursor_col} =
+      layout_cursor(prompt_visible_len, raw_cursor_text, cursor_index, cols)
+
+    {ruler, prompt_str <> text_str, cursor_row, cursor_col}
   end
 
   # Writes the ruler+prompt+text block fresh (no erase of any prior render
@@ -864,14 +907,31 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   # terminal's real cursor is currently at the end of everything written
   # (the last row), so this moves up to the row containing the cursor and
   # over to the right column.
-  defp position_cursor_2d(cursor_row, cursor_col, content_rows, _cols) do
+  #
+  # The cursor can legitimately be computed to sit one row past the last
+  # occupied one: `layout_cursor/4` derives its row via `div(abs_col, cols)`,
+  # so when the cursor lands exactly on a wrap boundary (the block's last
+  # column) it reports the *next* row's column 0, while `layout_rows/3`
+  # (ceiling division) counts that block as ending on the current row. In
+  # that case we pin the cursor to the last column of the last occupied row
+  # rather than letting the stale column place it at the block's top-left,
+  # which is the source of the occasional "cursor 1 position off" glitch.
+  defp position_cursor_2d(cursor_row, cursor_col, content_rows, cols) do
     last_row_index = max(content_rows - 1, 0)
-    target_row = min(cursor_row, last_row_index)
+
+    {target_row, target_col} =
+      if cursor_row > last_row_index do
+        # Cursor at a wrap boundary: pin to the end of the last row.
+        {last_row_index, max(cols - 1, 0)}
+      else
+        {cursor_row, cursor_col}
+      end
+
     rows_up = last_row_index - target_row
 
     if rows_up > 0, do: IO.write("\e[#{rows_up}A")
     IO.write("\r")
-    if cursor_col > 0, do: IO.write("\e[#{cursor_col}C")
+    if target_col > 0, do: IO.write("\e[#{target_col}C")
   end
 
   defp terminal_cols do
@@ -1063,9 +1123,25 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     suggestion = get_ghost_suggestion(raw_text, state.history, config)
 
     ghost_str =
-      if suggestion != "",
-        do: "#{Formatter.gray()}#{suggestion}#{Formatter.reset()}",
-        else: ""
+      if suggestion != "" do
+        # The fish-style hint must never wrap onto a second terminal row:
+        # a long history tail would otherwise expand the rendered block and
+        # scroll the content above it up. Truncate the hint to whatever
+        # width remains on the prompt's own line, reserving room for an
+        # ellipsis so the user still sees there is more.
+        cols = terminal_cols()
+        prompt_visible_len = strip_ansi_length(prompt_str)
+        used = prompt_visible_len + display_width(highlighted_text)
+        remaining = max(cols - used - 1, 0)
+
+        hint = truncate_to_width(suggestion, remaining)
+
+        if hint != "",
+          do: "#{Formatter.gray()}#{hint}#{Formatter.reset()}",
+          else: ""
+      else
+        ""
+      end
 
     buffer_prefix_len =
       state.buffer |> Enum.take(state.cursor) |> Enum.join() |> String.length()

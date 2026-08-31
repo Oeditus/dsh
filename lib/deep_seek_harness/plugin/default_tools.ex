@@ -8,7 +8,7 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
   @impl true
   def description,
     do:
-      "Provides default workspace tools: read_file, write_file, replace_file, list_dir, bash, elixir_eval, ask_question, and import_session."
+      "Provides default workspace tools: read_file, read_files, write_file, replace_file, list_dir, bash, elixir_eval, ask_question, and import_session."
 
   @impl true
   def tools do
@@ -24,6 +24,23 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
           required: ["path"]
         },
         execute: &read_file/1
+      },
+      %{
+        name: "read_files",
+        description:
+          "Read several files in parallel in a single tool call. Prefer this over issuing multiple read_file calls when you need to inspect several files at once (e.g. a module and its tests, or a set of related source files). Returns each file's contents delimited by a clear header, so you can see exactly which content belongs to which path. If any file cannot be read, its error is reported inline without failing the others.",
+        parameters: %{
+          type: "object",
+          properties: %{
+            paths: %{
+              type: "array",
+              description: "List of relative or absolute file paths to read.",
+              items: %{type: "string"}
+            }
+          },
+          required: ["paths"]
+        },
+        execute: &read_files/1
       },
       %{
         name: "write_file",
@@ -228,6 +245,52 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       {:ok, content} -> {:ok, content}
       {:error, reason} -> {:error, "Failed to read file '#{path}': #{inspect(reason)}"}
     end
+  end
+
+  @doc """
+  Reads several files concurrently in a single tool call.
+
+  Each file is read in its own `Task` (bounded concurrency) and the results
+  are collated back into the original order, so a slow file never blocks the
+  others. Every file's content is wrapped in a clear `=== File: <path> ===`
+  header (or an inline error if it could not be read), letting the model
+  attribute each block to the right path at a glance.
+  """
+  def read_files(%{"paths" => paths}) when is_list(paths) do
+    paths
+    |> Enum.with_index()
+    |> Task.async_stream(
+      fn {path, _idx} ->
+        case File.read(path) do
+          {:ok, content} -> {:ok, path, content}
+          {:error, reason} -> {:error, path, reason}
+        end
+      end,
+      max_concurrency: System.schedulers_online(),
+      ordered: true,
+      timeout: 30_000
+    )
+    |> Enum.map_join("\n", fn
+      {:ok, {:ok, path, content}} ->
+        "=== File: #{path} ===\n#{content}\n"
+
+      {:ok, {:error, path, reason}} ->
+        "=== File: #{path} ===\n[ERROR] Failed to read file: #{inspect(reason)}\n"
+
+      {:exit, reason} ->
+        "[ERROR] A file read crashed: #{inspect(reason)}\n"
+    end)
+    |> then(&{:ok, &1})
+  end
+
+  def read_files(%{"paths" => paths}) do
+    {:error,
+     "Invalid 'paths' argument for read_files. Expected a list of file paths, got: #{inspect(paths)}"}
+  end
+
+  def read_files(_args) do
+    {:error,
+     "Invalid arguments for read_files. Expected a 'paths' list of file paths to read, e.g. %{\"paths\" => [\"a.ex\", \"b.ex\"]}"}
   end
 
   def write_file(%{"path" => path, "content" => content}) do
