@@ -81,6 +81,23 @@ defmodule DeepSeekHarness.Rules do
           {"all", input}
       end
 
+    insert_rule(scope, text, cwd)
+  end
+
+  @doc """
+  Adds a rule directly under an arbitrary `scope`, bypassing `add_rule/2`'s
+  fixed `all|cr|review|commit|refactor|test` prefix whitelist. Intended for
+  programmatic callers (e.g. `DeepSeekHarness.Workflow.Definition` seeding a
+  workflow's own `rules_scope`) rather than the interactive `/rules add`
+  command, which should keep validating against the known scope list.
+  """
+  def add_scoped_rule(scope, text, cwd \\ ".") when is_binary(scope) and is_binary(text) do
+    insert_rule(scope, text, cwd)
+  end
+
+  defp insert_rule(scope, text, cwd) do
+    text = String.trim(text)
+
     if text == "" do
       {:error, "Rule text cannot be empty."}
     else

@@ -138,6 +138,122 @@ defmodule DeepSeekHarness.Git do
     e -> {:error, "Branch comparison exception: #{Exception.message(e)}"}
   end
 
+  @doc """
+  Creates and checks out a new local branch from the current HEAD.
+  Fails if a branch with that name already exists.
+  """
+  def create_branch(name, cwd \\ ".") when is_binary(name) do
+    case System.cmd("git", ["checkout", "-b", name], cd: cwd, stderr_to_stdout: true) do
+      {out, 0} ->
+        {:ok, String.trim(out)}
+
+      {out, code} ->
+        {:error, "git checkout -b #{name} exited with status #{code}: #{String.trim(out)}"}
+    end
+  rescue
+    e -> {:error, "Git branch creation failed: #{Exception.message(e)}"}
+  end
+
+  @doc "Checks out an existing local branch (does not create one)."
+  def checkout(name, cwd \\ ".") when is_binary(name) do
+    case System.cmd("git", ["checkout", name], cd: cwd, stderr_to_stdout: true) do
+      {out, 0} ->
+        {:ok, String.trim(out)}
+
+      {out, code} ->
+        {:error, "git checkout #{name} exited with status #{code}: #{String.trim(out)}"}
+    end
+  rescue
+    e -> {:error, "Git checkout failed: #{Exception.message(e)}"}
+  end
+
+  @doc "Returns whether a local branch with the given name exists."
+  def branch_exists?(name, cwd \\ ".") when is_binary(name) do
+    case System.cmd("git", ["show-ref", "--verify", "--quiet", "refs/heads/#{name}"],
+           cd: cwd,
+           stderr_to_stdout: true
+         ) do
+      {_, 0} -> true
+      _ -> false
+    end
+  rescue
+    _ -> false
+  end
+
+  @doc """
+  Adds a git worktree at `path`, creating a new branch `branch` from the
+  current HEAD (or checking out `branch` in the new worktree if it
+  already exists). Used to give each parallel workflow subtask its own
+  isolated working tree, so concurrent agent processes can never write to
+  the same files on disk even when their task split wasn't perfectly
+  non-overlapping.
+  """
+  def add_worktree(path, branch, cwd \\ ".") do
+    args =
+      if branch_exists?(branch, cwd) do
+        ["worktree", "add", path, branch]
+      else
+        ["worktree", "add", path, "-b", branch]
+      end
+
+    case System.cmd("git", args, cd: cwd, stderr_to_stdout: true) do
+      {out, 0} -> {:ok, String.trim(out)}
+      {out, code} -> {:error, "git worktree add failed (status #{code}): #{String.trim(out)}"}
+    end
+  rescue
+    e -> {:error, "Git worktree creation failed: #{Exception.message(e)}"}
+  end
+
+  @doc "Removes a previously created git worktree, discarding any local changes within it."
+  def remove_worktree(path, cwd \\ ".") do
+    case System.cmd("git", ["worktree", "remove", path, "--force"],
+           cd: cwd,
+           stderr_to_stdout: true
+         ) do
+      {out, 0} -> {:ok, String.trim(out)}
+      {out, code} -> {:error, "git worktree remove failed (status #{code}): #{String.trim(out)}"}
+    end
+  rescue
+    e -> {:error, "Git worktree removal failed: #{Exception.message(e)}"}
+  end
+
+  @doc """
+  Merges `branch` into the current branch. Distinguishes a merge conflict
+  (`{:conflict, output}`) from any other failure (`{:error, reason}`) so
+  callers can decide whether to pause for manual resolution instead of
+  treating every non-zero exit the same way.
+  """
+  def merge(branch, cwd \\ ".", opts \\ []) do
+    strategy_flags = if Keyword.get(opts, :no_ff, true), do: ["--no-ff"], else: []
+
+    case System.cmd("git", ["merge" | strategy_flags ++ [branch]],
+           cd: cwd,
+           stderr_to_stdout: true
+         ) do
+      {out, 0} ->
+        {:ok, String.trim(out)}
+
+      {out, _code} ->
+        if String.contains?(out, "CONFLICT") or String.contains?(out, "Automatic merge failed") do
+          {:conflict, String.trim(out)}
+        else
+          {:error, String.trim(out)}
+        end
+    end
+  rescue
+    e -> {:error, "Git merge failed: #{Exception.message(e)}"}
+  end
+
+  @doc "Aborts an in-progress merge, e.g. after a `{:conflict, _}` result the user chooses not to resolve."
+  def abort_merge(cwd \\ ".") do
+    case System.cmd("git", ["merge", "--abort"], cd: cwd, stderr_to_stdout: true) do
+      {out, 0} -> {:ok, String.trim(out)}
+      {out, code} -> {:error, "git merge --abort failed (status #{code}): #{String.trim(out)}"}
+    end
+  rescue
+    e -> {:error, "Git merge abort failed: #{Exception.message(e)}"}
+  end
+
   defp colorize_diff(raw_diff) do
     raw_diff
     |> String.split("\n")

@@ -56,7 +56,8 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/skills",
     "/subagent",
     "/undo",
-    "/update"
+    "/update",
+    "/workflow"
   ]
 
   # A pasted clipboard block (see `handle_paste/2`) collapses into a

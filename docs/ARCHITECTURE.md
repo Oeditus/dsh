@@ -33,6 +33,16 @@ flowchart TD
 
     Brain <--> APIClient[Client.DeepSeekAPI with Exponential Backoff Retry]
     APIClient <--> API[DeepSeek API Endpoint]
+
+    subgraph Workflow Engine
+        Workflow[Workflow.Engine] --> WDef[Workflow.Definition]
+        Workflow --> WStore[Workflow.Store]
+        Workflow --> WSteps[Workflow.Steps.*]
+        WSteps --> Sup
+        WSteps --> GitMod[Git worktrees/branches]
+    end
+
+    REPL <--> Workflow
 ```
 
 ---
@@ -56,3 +66,9 @@ flowchart TD
 ### 5. CLI & TUI Layer (`lib/deep_seek_harness/cli/`)
 - **`LineEditor`**: Fixed bottom command bar TUI with horizontal ruler, grapheme-aware Unicode cursor navigation, and persistent history.
 - **`QuestionPrompt`**: In-place interactive terminal modal for single-choice and multi-choice questions with multi-line text wrapping and pixel-perfect border alignment.
+
+### 6. Workflow Engine (`lib/deep_seek_harness/workflow/`)
+- **`Definition`**: Parses/validates customizable, JSON-defined multi-step workflows; two-tier discovery (workspace + global) plus bundled defaults (`elixir`), materialized on first use.
+- **`Store`**: Disk persistence for workflow runs under `.dsh/workflows/runs/<id>/` -- resumable `state.json` checkpoint plus an append-only `transcript.jsonl` of every prompt, response, confirmation, and command.
+- **`Engine`**: Drives step execution/resume; a plain module (not a `GenServer`) that blocks the caller synchronously like a regular agent turn, delegating genuine parallelism to real `Brain.Session` processes for accepted subtasks.
+- **`Steps.*`**: One module per step type (`Branch`, `TaskDescription`, `TaskSplit`, `TestsAndDocs`, `Lint`, `Commit`, `Prompt`) behind a common `Workflow.Step` behaviour. `TaskSplit` isolates parallel subtasks in their own `git worktree` so concurrent agents can never clash on disk. See [`docs/WORKFLOW_ENGINE.md`](WORKFLOW_ENGINE.md) for the full reference.

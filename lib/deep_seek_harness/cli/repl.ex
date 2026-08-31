@@ -1114,6 +1114,104 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/workflow list", _session_pid, _session_id) do
+    metas = DeepSeekHarness.Workflow.Definition.list()
+
+    rows =
+      if Enum.empty?(metas) do
+        "*No workflows discovered.*"
+      else
+        Enum.map_join(metas, "\n", fn m ->
+          "- **`#{m.name}`** (#{m.source}): #{m.description}"
+        end)
+      end
+
+    md = """
+    ### Available Workflows (#{length(metas)})
+
+    #{rows}
+
+    Run one with `/workflow run <name> <task description>`. Scaffold a custom
+    one with `/workflow init <name> [--from <template>]`.
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/workflow init " <> rest, _session_pid, _session_id) do
+    case String.split(String.trim(rest), " ", trim: true) do
+      [name, "--from", template] -> do_workflow_init(name, template)
+      [name] -> do_workflow_init(name, "elixir")
+      _ -> IO.puts(Formatter.format_error("Usage: /workflow init <name> [--from <template>]"))
+    end
+
+    :continue
+  end
+
+  def handle_input("/workflow run " <> rest, _session_pid, _session_id) do
+    case String.split(String.trim(rest), " ", parts: 2) do
+      [name, description] -> do_workflow_run(name, description)
+      [name] -> do_workflow_run(name, "")
+      _ -> IO.puts(Formatter.format_error("Usage: /workflow run <name> <task description>"))
+    end
+
+    :continue
+  end
+
+  def handle_input("/workflow status " <> run_id, _session_pid, _session_id) do
+    do_workflow_status(String.trim(run_id))
+    :continue
+  end
+
+  def handle_input("/workflow status", _session_pid, _session_id) do
+    metas = DeepSeekHarness.Workflow.Store.list_runs()
+
+    rows =
+      if Enum.empty?(metas) do
+        "*No workflow runs found in this workspace.*"
+      else
+        Enum.map_join(metas, "\n", fn m ->
+          "- `#{m.run_id}` [#{m.workflow}] — **#{m.status}** (step #{m.step_index}, branch `#{m.branch}`, updated #{m.updated_at})"
+        end)
+      end
+
+    md =
+      "### Workflow Runs (#{length(metas)})\n\n#{rows}\n\nInspect one with `/workflow status <run-id>`."
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    :continue
+  end
+
+  def handle_input("/workflow resume " <> run_id, _session_pid, _session_id) do
+    do_workflow_resume(String.trim(run_id))
+    :continue
+  end
+
+  def handle_input("/workflow abort " <> run_id, _session_pid, _session_id) do
+    id = String.trim(run_id)
+
+    case DeepSeekHarness.Workflow.Engine.abort(id) do
+      {:ok, _state} ->
+        IO.puts(Formatter.format_success("Marked workflow run '#{id}' as aborted."))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/workflow", _session_pid, _session_id) do
+    IO.puts(
+      Formatter.format_info(
+        "Usage: /workflow [list | run <name> <description> | status [run-id] | resume <run-id> | abort <run-id> | init <name> [--from <template>]]"
+      )
+    )
+
+    :continue
+  end
+
   # Catch any unknown slash command to avoid sending accidental mistyped commands to LLM
   def handle_input("/" <> command, _session_pid, _session_id) do
     IO.puts(
@@ -1208,6 +1306,77 @@ defmodule DeepSeekHarness.CLI.Repl do
             "Imported session '#{imported_id}' -> #{file_path}. Resume with /session resume #{imported_id} or /resume #{imported_id}."
           )
         )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+  end
+
+  defp do_workflow_init(name, template) do
+    case DeepSeekHarness.Workflow.Definition.init(name, template) do
+      {:ok, path} ->
+        IO.puts(
+          Formatter.format_success(
+            "Scaffolded workflow '#{name}' from template '#{template}' -> #{path}. Edit it, then run with /workflow run #{name}."
+          )
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+  end
+
+  defp do_workflow_run(name, description) do
+    IO.puts(Formatter.format_info("Starting workflow '#{name}'…"))
+
+    case DeepSeekHarness.Workflow.Engine.run(name, seed_prompt: description) do
+      {:ok, context} ->
+        IO.puts(
+          Formatter.format_success("Workflow '#{name}' completed (run '#{context.run_id}').")
+        )
+
+      {:halt, reason} ->
+        IO.puts(Formatter.format_info("Workflow halted: #{reason}"))
+
+      {:error, reason} ->
+        IO.puts(Formatter.format_error("Workflow failed: #{inspect(reason)}"))
+    end
+  end
+
+  defp do_workflow_resume(run_id) do
+    IO.puts(Formatter.format_info("Resuming workflow run '#{run_id}'…"))
+
+    case DeepSeekHarness.Workflow.Engine.resume(run_id) do
+      {:ok, _context} ->
+        IO.puts(Formatter.format_success("Workflow run '#{run_id}' completed."))
+
+      {:halt, reason} ->
+        IO.puts(Formatter.format_info("Workflow halted: #{reason}"))
+
+      {:error, reason} ->
+        IO.puts(
+          Formatter.format_error("Failed to resume workflow run '#{run_id}': #{inspect(reason)}")
+        )
+    end
+  end
+
+  defp do_workflow_status(run_id) do
+    case DeepSeekHarness.Workflow.Engine.status(run_id) do
+      {:ok, state} ->
+        reason_line = if state["reason"], do: "- **Reason**: #{state["reason"]}\n", else: ""
+
+        md = """
+        ### Workflow Run `#{run_id}`
+        - **Workflow**: `#{state["workflow"]}`
+        - **Status**: `#{state["status"]}`
+        - **Step**: `#{state["step_index"]}`
+        - **Branch**: `#{state["branch"]}`
+        - **Base Branch**: `#{state["base_branch"]}`
+        - **Updated**: `#{state["updated_at"]}`
+        #{reason_line}
+        """
+
+        IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
 
       {:error, err} ->
         IO.puts(Formatter.format_error(err))

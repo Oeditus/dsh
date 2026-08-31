@@ -84,6 +84,7 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
 
   @doc false
   def interactive_tool?("ask_question"), do: true
+  def interactive_tool?("run_workflow"), do: true
   def interactive_tool?(_), do: false
 
   defp run_single_tool(tc, session_state) do
@@ -170,6 +171,13 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
   # touching the TTY) until the current one fully returns.
   @doc false
   def get_lock_resource("ask_question", _args), do: "tty_interactive"
+
+  # `run_workflow` runs a full multi-step workflow, which can itself pause
+  # for interactive `ask_question`-style confirmations (branch warnings,
+  # split-plan approval) -- give it the same exclusive TTY lock as
+  # `ask_question` so it can never race a concurrently-dispatched
+  # `ask_question` tool call for the terminal.
+  def get_lock_resource("run_workflow", _args), do: "tty_interactive"
 
   def get_lock_resource(tool_name, args) when is_map(args) do
     if tool_name in ["write_file", "replace_file", "write_to_file", "replace_file_content"] do

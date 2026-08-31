@@ -51,3 +51,16 @@ Delegate complex or parallel sub-tasks to supervised background subagents:
 ```bash
 /subagent "Research quantum encryption algorithms and summarize in markdown"
 ```
+
+---
+
+## 6. Customizable Multi-Step Workflows (`/workflow`)
+Run a named, customizable, multi-step process on top of the ordinary agent
+loop -- branch, describe the task, propose a non-clashing parallel split,
+require tests + docs, lint, and commit -- with the entire run persisted
+under `.dsh/workflows/`:
+```bash
+/workflow run elixir Add JWT-based session refresh to the auth module
+```
+See [`docs/WORKFLOW_ENGINE.md`](WORKFLOW_ENGINE.md) for the full reference,
+including how to write your own custom workflow definitions.

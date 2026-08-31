@@ -14,7 +14,8 @@ A comprehensive quick-reference guide for **DeepSeek Harness (`dsh`)**, covering
 7. [Model Selection Strategy (`/model`)](#7-model-selection-strategy-model)
 8. [MCP & Ragex Code Analysis (`/mcp`, `/ragex`)](#8-mcp--ragex-code-analysis-mcp-ragex)
 9. [Subagents & Distributed Execution (`/subagent`, `/mode`, `/nodes`)](#9-subagents--distributed-execution-subagent-mode-nodes)
-10. [Keyboard Shortcuts & Navigation](#10-keyboard-shortcuts--navigation)
+10. [Customizable Workflows (`/workflow`)](#10-customizable-workflows-workflow)
+11. [Keyboard Shortcuts & Navigation](#11-keyboard-shortcuts--navigation)
 
 ---
 
@@ -112,6 +113,7 @@ my_app deepseek-chat >
 | `/cost` \| `/tokens` | Display token usage breakdown and cumulative session cost | `/cost` |
 | `/permissions` | Set tool execution safety mode (`auto` or `ask`) | `/permissions ask` |
 | `/subagent <prompt>` | Spawn a background subagent worker for heavy sub-tasks | `/subagent "Search all TODOs"` |
+| `/workflow [cmd]` | Run customizable multi-step workflows: `list\|run\|status\|resume\|abort\|init` | `/workflow run elixir Add dark mode` |
 | `/cb` \| `/clipboard` | Copy latest assistant response to system clipboard | `/cb` |
 | `/clear` | Clear terminal output screen | `/clear` |
 | `/help` | Print REPL help menu | `/help` |
@@ -261,7 +263,29 @@ Control where Hands tools execute:
 
 ---
 
-## 10. Keyboard Shortcuts & Navigation
+## 10. Customizable Workflows (`/workflow`)
+
+Runs a named, customizable, multi-step process on top of the ordinary agent
+loop -- branch, describe the task, propose a non-clashing parallel split,
+require tests + docs, lint, and commit -- with the entire run persisted under
+`.dsh/workflows/`. Full reference: [`docs/WORKFLOW_ENGINE.md`](WORKFLOW_ENGINE.md).
+
+```bash
+/workflow list                          # discover built-in + custom workflows
+/workflow run elixir Add dark mode      # run the bundled "elixir" workflow
+/workflow status [run-id]               # inspect a run (works even after a crash)
+/workflow resume <run-id>               # continue a failed/interrupted run
+/workflow abort <run-id>                # mark a run as aborted
+/workflow init <name> [--from <tmpl>]   # scaffold a custom workflow definition
+```
+
+Parallel subtasks each get their own git worktree and branch, so concurrent
+agent processes can never clash on disk even if the model's proposed split
+wasn't perfectly non-overlapping.
+
+---
+
+## 11. Keyboard Shortcuts & Navigation
 
 | Key Combination | Action |
 | :--- | :--- |

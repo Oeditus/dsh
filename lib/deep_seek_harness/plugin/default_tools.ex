@@ -172,6 +172,27 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
         execute: &import_session/1
       },
       %{
+        name: "run_workflow",
+        description:
+          "Runs a customizable, multi-step DSH workflow end-to-end (e.g. 'elixir': create a branch, summarize the task, propose a non-clashing parallel split, require tests + docs, lint, and commit). Use this ONLY when the user explicitly asks to run/kick off/start a named workflow for a task -- it can take a long time and may pause for interactive user confirmation (branch warnings, split-plan approval).",
+        parameters: %{
+          type: "object",
+          properties: %{
+            workflow: %{
+              type: "string",
+              description:
+                "Name of the workflow to run (e.g. 'elixir'). See /workflow list for available names."
+            },
+            task_description: %{
+              type: "string",
+              description: "The task to accomplish, in the user's own words."
+            }
+          },
+          required: ["workflow", "task_description"]
+        },
+        execute: &run_workflow/1
+      },
+      %{
         name: "glob_search",
         description: "Find files in the workspace matching a glob pattern (e.g. 'lib/**/*.ex').",
         parameters: %{
@@ -395,6 +416,25 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
 
   def import_session(_args) do
     {:error, "Invalid arguments for import_session. Expected 'path' to a session JSON file."}
+  end
+
+  def run_workflow(%{"workflow" => name, "task_description" => description})
+      when is_binary(name) and is_binary(description) do
+    case DeepSeekHarness.Workflow.Engine.run(name, seed_prompt: description) do
+      {:ok, context} ->
+        {:ok, "Workflow '#{name}' completed successfully (run '#{context.run_id}')."}
+
+      {:halt, reason} ->
+        {:ok, "Workflow '#{name}' halted before completion: #{reason}"}
+
+      {:error, reason} ->
+        {:error, "Workflow '#{name}' failed: #{inspect(reason)}"}
+    end
+  end
+
+  def run_workflow(_args) do
+    {:error,
+     "Invalid arguments for run_workflow. Expected 'workflow' (name) and 'task_description' strings."}
   end
 
   def glob_search(%{"pattern" => pattern}) do

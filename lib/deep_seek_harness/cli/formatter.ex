@@ -34,6 +34,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
     "Use /cost to display token usage and session cost statistics",
     "Use /permissions [auto|ask] to set tool execution safety mode",
     "Use /subagent <prompt> to spawn a background subagent worker for sub-tasks",
+    "Use /workflow [list|run|status|resume|abort|init] to run customizable multi-step workflows (branch, describe, split & parallelize, test/docs, lint, commit)",
     "Use /checkpoint [label] to create a temporal state snapshot",
     "Use /undo to roll back state to previous checkpoint",
     "Use /session to display active session metadata & statistics",
@@ -104,6 +105,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/cost#{reset()}                   Display token usage and session cost statistics
       #{cyan()}/permissions [auto|ask]#{reset()} Set tool execution safety mode
       #{cyan()}/subagent <prompt>#{reset()}      Spawn a background subagent worker for sub-tasks
+      #{cyan()}/workflow [cmd]#{reset()}         Run customizable multi-step workflows (list|run|status|resume|abort|init)
       #{cyan()}/checkpoint [label]#{reset()}     Create a temporal state snapshot
       #{cyan()}/undo#{reset()}                   Roll back state to previous checkpoint
       #{cyan()}/session#{reset()}                Display active session metadata & statistics

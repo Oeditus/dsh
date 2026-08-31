@@ -104,6 +104,11 @@ DeepSeek Harness supports the full suite of official DeepSeek models, local open
 - Switch prompt layout with `/config style <starship|extended|compact|minimal>` or supply a fully custom template via `/config prompt <template>`.
 - Toggle UI features (`enable_autosuggestions`, `enable_syntax_highlighting`, `enable_context_gauge`, `compact_status_bar`, and more) with `/config toggle <key>`.
 
+### 11. Customizable Multi-Step Workflows (`/workflow`)
+- Runs a named, customizable, multi-step process on top of the ordinary agent loop: branch off `main`/`master` (with a warn/confirm gate), summarize the task, propose a non-clashing split for parallel execution, require tests + docs, lint, and commit -- with the entire run persisted under `.dsh/workflows/`.
+- Parallel subtasks each get their own isolated `git worktree` and branch, so concurrent agent processes can never clash on disk.
+- Ships with a built-in `elixir` workflow; scaffold your own with `/workflow init <name> [--from <template>]`. Full reference: [`docs/WORKFLOW_ENGINE.md`](docs/WORKFLOW_ENGINE.md).
+
 ---
 
 <p align="center">
@@ -290,6 +295,7 @@ The full reference lives in [`docs/cheat_sheet.md`](docs/cheat_sheet.md); the es
 | `/ragex [stats\|reindex\|export]` | Mount and drive the first-class Ragex code analysis & refactoring MCP server |
 | `/skills` \| `/skill <name>` | List available skills or execute a skill instruction |
 | `/subagent <prompt>` | Spawn a background subagent worker for sub-tasks |
+| `/workflow [list\|run\|status\|resume\|abort\|init]` | Run customizable multi-step workflows (branch, describe, split & parallelize, test/docs, lint, commit) |
 | `/config [style\|prompt\|toggle]` | Manage prompt styles and UI toggles |
 | `/env` | Show runtime environment (Elixir/OTP version, model, workspace) |
 | `/update` | Background self-update `dsh` release to latest code |
@@ -326,7 +332,7 @@ Manage most of these live from the REPL with `/config style <name>`, `/config pr
 
 ## Documentation
 
-For full command reference, keyboard shortcuts, rule scoping tactics, and advanced BEAM distribution workflows, see [`docs/cheat_sheet.md`](docs/cheat_sheet.md).
+For full command reference, keyboard shortcuts, rule scoping tactics, and advanced BEAM distribution workflows, see [`docs/cheat_sheet.md`](docs/cheat_sheet.md). For the customizable multi-step Workflow Engine (`/workflow`), see [`docs/WORKFLOW_ENGINE.md`](docs/WORKFLOW_ENGINE.md).
 
 <p align="center">
   <img src="stuff/img/logos-128x128.png" width="48" alt="DeepSeek Harness" />
