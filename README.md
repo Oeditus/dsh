@@ -145,7 +145,7 @@ Choose **one** of the two installation methods below:
 Run this single command in your terminal to automatically clone, build, and install `dsh`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Oeditus/ragec/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Oeditus/dsh/main/install.sh | bash
 ```
 
 #### Option B: Manual Installation from Source
@@ -154,8 +154,8 @@ If you prefer installing manually from the source code:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Oeditus/ragec.git
-cd ragec
+git clone https://github.com/Oeditus/dsh.git
+cd dsh
 
 # 2. Fetch project dependencies
 mix deps.get
