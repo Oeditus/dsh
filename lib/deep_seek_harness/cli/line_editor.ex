@@ -59,6 +59,13 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/update"
   ]
 
+  # A pasted clipboard block (see `handle_paste/2`) collapses into a
+  # compact "📋 [N lines]" placeholder chip once it exceeds either of
+  # these thresholds -- otherwise it's inserted as ordinary, fully-
+  # editable multi-line text, same as a Ctrl+J-composed entry.
+  @paste_inline_max_lines 3
+  @paste_inline_max_chars 300
+
   # ---------------------------------------------------------------------
   # History persistence
   # ---------------------------------------------------------------------
@@ -280,11 +287,28 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       # suggestion. Needed so `erase_prefix/1` erases exactly what was
       # drawn instead of assuming a fixed 2-row block.
       last_rows: 0,
+      # Absolute row (0-indexed from the very top of the last-drawn
+      # ruler+prompt block) where the terminal's REAL cursor was left after
+      # the last draw. `draw_only/1` moves the cursor from the bottom of
+      # the block up to wherever the logical cursor belongs (see
+      # `compute_cursor_positioning/4`), so on a multi-row buffer the
+      # physical cursor often does NOT sit on the last row. `erase_prefix/1`
+      # must move up by exactly this many rows -- not `last_rows - 1`,
+      # which silently assumes the cursor is always at the bottom -- or
+      # moving the cursor within a multi-line/wrapped entry (arrow keys,
+      # Home/End) desyncs the next erase and the status bar visibly drifts.
+      last_cursor_row: 0,
       # Signature of the last-rendered ruler+prompt+text block plus the
       # cursor's {row, col}. Used by `render_bar/1` to skip the erase+redraw
       # entirely when nothing visible changed (see `render_signature/1`), so
       # the status bar stops blinking on every keystroke.
       last_render: nil,
+      # Maps a collapsed paste placeholder chip (e.g. "📋 [42 lines]",
+      # inserted by `handle_paste/2` for a large clipboard paste) back to
+      # the full original pasted text, so `handle_enter/1` can expand it
+      # before the line is submitted or saved to history -- the chip is
+      # purely a display convenience, never a loss of data.
+      pastes: %{},
       context: context
     }
   end
@@ -302,6 +326,58 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
   @doc "Jumps the cursor to the end of the line (End / Ctrl+E)."
   def move_to_end(%{buffer: buffer} = state), do: %{state | cursor: length(buffer)}
+
+  @doc """
+  Moves the cursor up or down one LOGICAL line (split on hard `\n`
+  boundaries, e.g. from Ctrl+J or a large inline clipboard paste) within a
+  multi-line buffer, preserving the in-line column as closely as possible
+  (clamped to the target line's length) -- the same "sticky column"
+  behavior most text editors use.
+
+  Returns `{:ok, new_state}` when the buffer has another logical line in
+  that direction, or `:out_of_bounds` when the buffer is single-line, or
+  the cursor is already on its first (for `:up`) or last (for `:down`)
+  line -- signaling the caller to fall back to history navigation instead.
+  """
+  def move_cursor_within_buffer(%{buffer: buffer, cursor: cursor} = state, direction)
+      when direction in [:up, :down] do
+    lines = buffer |> Enum.join() |> String.split("\n")
+
+    if length(lines) <= 1 do
+      :out_of_bounds
+    else
+      {line_idx, col} = line_and_column(lines, cursor)
+      target_idx = if direction == :up, do: line_idx - 1, else: line_idx + 1
+
+      if target_idx < 0 or target_idx >= length(lines) do
+        :out_of_bounds
+      else
+        target_line = Enum.at(lines, target_idx)
+        target_col = min(col, String.length(target_line))
+        new_cursor = cursor_for_line_and_column(lines, target_idx, target_col)
+        {:ok, %{state | cursor: new_cursor}}
+      end
+    end
+  end
+
+  defp line_and_column(lines, cursor) do
+    Enum.reduce_while(lines, {0, cursor}, fn line, {idx, remaining} ->
+      len = String.length(line)
+
+      if remaining <= len do
+        {:halt, {idx, remaining}}
+      else
+        {:cont, {idx + 1, remaining - len - 1}}
+      end
+    end)
+  end
+
+  defp cursor_for_line_and_column(lines, target_idx, target_col) do
+    lines
+    |> Enum.take(target_idx)
+    |> Enum.reduce(0, fn line, acc -> acc + String.length(line) + 1 end)
+    |> Kernel.+(target_col)
+  end
 
   @doc "Deletes the grapheme left of the cursor (Backspace)."
   def delete_backward(%{cursor: 0} = state), do: state
@@ -361,6 +437,99 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   terminals cannot distinguish from a plain Enter keypress in raw mode).
   """
   def insert_newline(state), do: insert_char(state, "\n")
+
+  @doc """
+  Normalizes clipboard line endings (`\\r\\n` and bare `\\r`, e.g. from a
+  Windows-originated clipboard, or a terminal that doesn't fully translate
+  them) to plain `\\n`, so a paste's embedded carriage returns are never
+  later misread as an Enter keypress.
+  """
+  def normalize_paste_text(text) when is_binary(text) do
+    text
+    |> String.replace("\r\n", "\n")
+    |> String.replace("\r", "\n")
+  end
+
+  @doc """
+  Inserts a clipboard paste at the cursor position (see
+  `enable_bracketed_paste/0` and `read_bracketed_paste/0` for how the full
+  payload is captured atomically, without ever being misread as Enter or
+  other editor commands). A no-op during reverse-incremental search
+  (pasting into a search query isn't supported) and for an empty payload.
+
+  Short pastes (within `@paste_inline_max_lines` lines and
+  `@paste_inline_max_chars` display columns) are inserted as ordinary,
+  fully-editable text -- multi-line ones render using the same hard-
+  newline layout as Ctrl+J. Anything larger collapses into a compact
+  "📋 [N lines]" (or "📋 [N chars]" for one very long line) placeholder
+  chip so a huge paste never floods the terminal; the full original text
+  is preserved in `state.pastes` and transparently restored by
+  `expand_pastes/2` when the line is submitted.
+  """
+  def handle_paste(%{search_mode: true} = state, _text), do: state
+
+  def handle_paste(state, text) when is_binary(text) do
+    normalized = normalize_paste_text(text)
+
+    if normalized == "" do
+      state
+    else
+      {display_text, state} = paste_display_text(state, normalized)
+      insert_char(state, display_text)
+    end
+  end
+
+  defp paste_display_text(state, text) do
+    line_count = text |> String.split("\n") |> length()
+
+    if line_count <= @paste_inline_max_lines and display_width(text) <= @paste_inline_max_chars do
+      {text, state}
+    else
+      pastes = Map.get(state, :pastes, %{})
+      placeholder = unique_paste_placeholder(pastes, text, line_count)
+      {placeholder, %{state | pastes: Map.put(pastes, placeholder, text)}}
+    end
+  end
+
+  defp unique_paste_placeholder(pastes, text, line_count) do
+    base =
+      if line_count > 1 do
+        "📋 [#{line_count} lines]"
+      else
+        "📋 [#{String.length(text)} chars]"
+      end
+
+    disambiguate_placeholder(base, pastes, text, 1)
+  end
+
+  # A repeat paste of the EXACT same content is allowed to reuse its
+  # existing label (harmless -- both refer to identical text), but a
+  # different paste that happens to collapse to the same base label (e.g.
+  # two different 10-line pastes) gets a "(2)", "(3)", ... suffix so
+  # `expand_pastes/2` can never confuse one paste's content for another's.
+  defp disambiguate_placeholder(base, pastes, text, attempt) do
+    candidate = if attempt == 1, do: base, else: "#{base} (#{attempt})"
+
+    case Map.fetch(pastes, candidate) do
+      {:ok, ^text} -> candidate
+      {:ok, _other} -> disambiguate_placeholder(base, pastes, text, attempt + 1)
+      :error -> candidate
+    end
+  end
+
+  @doc """
+  Expands every collapsed paste placeholder chip in `text` back into its
+  full original content (see `handle_paste/2`). A no-op when `pastes` is
+  empty, and safe to call unconditionally since a buffer with no collapsed
+  pastes simply has nothing to substitute.
+  """
+  def expand_pastes(text, pastes) when map_size(pastes) == 0, do: text
+
+  def expand_pastes(text, pastes) when is_map(pastes) do
+    Enum.reduce(pastes, text, fn {placeholder, full_text}, acc ->
+      String.replace(acc, placeholder, full_text)
+    end)
+  end
 
   @doc """
   Navigates history up (older) or down (newer), preserving uncommitted
@@ -516,21 +685,46 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp set_raw_mode do
-    case :shell.start_interactive({:noshell, :raw}) do
-      :ok -> :ok
-      {:error, :already_started} -> :ok
-      _ -> :error
-    end
+    result =
+      case :shell.start_interactive({:noshell, :raw}) do
+        :ok -> :ok
+        {:error, :already_started} -> :ok
+        _ -> :error
+      end
+
+    enable_bracketed_paste()
+    result
   rescue
     _ -> :error
   end
 
   defp restore_tty_mode do
+    disable_bracketed_paste()
+
     case :shell.start_interactive({:noshell, :cooked}) do
       :ok -> :ok
       {:error, :already_started} -> :ok
       _ -> :ok
     end
+  rescue
+    _ -> :ok
+  end
+
+  # xterm-style "bracketed paste mode": once enabled, the terminal wraps a
+  # pasted clipboard chunk in `\e[200~ ... \e[201~` instead of streaming it
+  # as ordinary keystrokes, letting `read_bracketed_paste/0` slurp the
+  # entire payload atomically -- including embedded `\r`/`\n` bytes -- so a
+  # pasted carriage return is never misread as pressing Enter. Disabled
+  # again on every exit path (normal return, crash, EOF) so it never leaks
+  # into a subsequent plain `IO.gets/1` prompt or an unrelated program.
+  defp enable_bracketed_paste do
+    IO.write("\e[?2004h")
+  rescue
+    _ -> :ok
+  end
+
+  defp disable_bracketed_paste do
+    IO.write("\e[?2004l")
   rescue
     _ -> :ok
   end
@@ -543,8 +737,8 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       :tab -> handle_tab(state)
       :ctrl_c -> handle_interrupt(state)
       :ctrl_d -> handle_eof(state)
-      :up -> raw_loop(navigate_unless_searching(state, :up))
-      :down -> raw_loop(navigate_unless_searching(state, :down))
+      :up -> raw_loop(handle_vertical_move(state, :up))
+      :down -> raw_loop(handle_vertical_move(state, :down))
       :left -> raw_loop(edit_unless_searching(state, &move_left/1))
       :right -> raw_loop(edit_unless_searching(state, &accept_ghost_suggestion/1))
       :home -> raw_loop(edit_unless_searching(state, &move_to_start/1))
@@ -561,14 +755,21 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       :newline -> raw_loop(edit_unless_searching(state, &insert_newline/1))
       :backspace -> raw_loop(handle_backspace(state))
       :delete -> raw_loop(edit_unless_searching(state, &delete_forward/1))
+      {:paste, text} -> raw_loop(handle_paste(state, text))
       {:char, 64} -> raw_loop(file_picker_modal(state))
       {:char, char_code} -> raw_loop(handle_char(state, <<char_code::utf8>>))
       _ -> raw_loop(state)
     end
   end
 
-  defp navigate_unless_searching(%{search_mode: true} = state, _direction), do: state
-  defp navigate_unless_searching(state, direction), do: history_navigate(state, direction)
+  defp handle_vertical_move(%{search_mode: true} = state, _direction), do: state
+
+  defp handle_vertical_move(state, direction) do
+    case move_cursor_within_buffer(state, direction) do
+      {:ok, new_state} -> new_state
+      :out_of_bounds -> history_navigate(state, direction)
+    end
+  end
 
   defp edit_unless_searching(%{search_mode: true} = state, _fun), do: state
   defp edit_unless_searching(state, fun), do: fun.(state)
@@ -589,9 +790,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp handle_enter(state) do
-    line = Enum.join(state.buffer)
+    raw_line = Enum.join(state.buffer)
+    line = expand_pastes(raw_line, Map.get(state, :pastes, %{}))
 
-    if multiline_continuation?(line) do
+    if multiline_continuation?(raw_line) do
       render_final(state)
       clean_current = String.trim_trailing(line, "\\")
       next_line = read_tty_line("... > ", state.history, Map.get(state, :context, %{}))
@@ -811,9 +1013,18 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     {cursor_row, cursor_col} =
       layout_cursor(prompt_visible_len, raw_cursor_text, cursor_index, cols)
 
-    position_cursor_2d(cursor_row, cursor_col, content_rows, cols)
+    {positioning_seq, content_target_row} =
+      compute_cursor_positioning(cursor_row, cursor_col, content_rows, cols)
 
-    new_state = %{state | first_render: false, last_rows: ruler_rows + content_rows}
+    IO.write(positioning_seq)
+
+    new_state = %{
+      state
+      | first_render: false,
+        last_rows: ruler_rows + content_rows,
+        last_cursor_row: ruler_rows + content_target_row
+    }
+
     TerminalOwner.set(&erase_only/1, &draw_only/1, new_state)
     new_state
   end
@@ -828,18 +1039,22 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     TerminalOwner.clear()
   end
 
-  # Erases the previously drawn ruler+prompt block in place, however many
-  # terminal rows it actually spanned (tracked in `state.last_rows`), or
-  # emits nothing on the very first render (when nothing has been drawn
-  # yet). A long typed line, embedded Ctrl+J newline, or a long fish-style
-  # ghost suggestion can wrap/expand the prompt across multiple terminal
-  # rows, so this must move the cursor up by `last_rows - 1` (not a
-  # hardcoded 1) before clearing, otherwise stale wrapped lines are left
-  # behind and subsequent redraws drift down the screen.
+  # Erases the previously drawn ruler+prompt block in place, or emits
+  # nothing on the very first render (when nothing has been drawn yet).
+  # Moves the cursor up by exactly `state.last_cursor_row` -- the absolute
+  # row (from the block's top) where the terminal's REAL cursor was left
+  # after the last draw (see `last_cursor_row` in `new_state/3`) -- rather
+  # than assuming it always sits on the block's last row. A long typed
+  # line, embedded Ctrl+J newline, or a long fish-style ghost suggestion
+  # can wrap/expand the prompt across multiple terminal rows, and the
+  # logical cursor can be sitting anywhere within that block (e.g. after
+  # moving it with arrow keys or Home/End), so using the wrong row count
+  # here erases/redraws the wrong lines and the status bar visibly drifts
+  # out of place.
   defp erase_prefix(%{first_render: true}), do: ""
 
   defp erase_prefix(state) do
-    case Map.get(state, :last_rows, 2) - 1 do
+    case Map.get(state, :last_cursor_row, 0) do
       up when up > 0 -> "\e[#{up}A\r\e[J"
       _ -> "\r\e[J"
     end
@@ -900,23 +1115,29 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     result || {0, start_col}
   end
 
-  # Positions the cursor within a (possibly hard-broken and/or wrapped)
-  # prompt+text block that was just written. `cursor_row`/`cursor_col` are
-  # the block-relative row/column computed by `layout_cursor/4`;
-  # `content_rows` is how many terminal rows the block spans in total. The
-  # terminal's real cursor is currently at the end of everything written
-  # (the last row), so this moves up to the row containing the cursor and
-  # over to the right column.
-  #
-  # The cursor can legitimately be computed to sit one row past the last
-  # occupied one: `layout_cursor/4` derives its row via `div(abs_col, cols)`,
-  # so when the cursor lands exactly on a wrap boundary (the block's last
-  # column) it reports the *next* row's column 0, while `layout_rows/3`
-  # (ceiling division) counts that block as ending on the current row. In
-  # that case we pin the cursor to the last column of the last occupied row
-  # rather than letting the stale column place it at the block's top-left,
-  # which is the source of the occasional "cursor 1 position off" glitch.
-  defp position_cursor_2d(cursor_row, cursor_col, content_rows, cols) do
+  @doc """
+  Computes the ANSI escape sequence that repositions the terminal's real
+  cursor -- currently sitting at the end of everything `draw_only/1` just
+  wrote (the block's last row) -- to the (possibly hard-broken and/or
+  wrapped) `{cursor_row, cursor_col}` computed by `layout_cursor/4`.
+  `content_rows` is how many terminal rows the block spans in total.
+
+  Returns `{ansi_sequence, target_row}` rather than writing to the
+  terminal directly, so `draw_only/1` can both perform the write AND
+  remember `target_row` (as `state.last_cursor_row`, offset by the
+  ruler's own row count) for the next `erase_prefix/1` call -- and so
+  this exact positioning math is unit-testable without a real TTY.
+
+  The cursor can legitimately be computed to sit one row past the last
+  occupied one: `layout_cursor/4` derives its row via `div(abs_col, cols)`,
+  so when the cursor lands exactly on a wrap boundary (the block's last
+  column) it reports the *next* row's column 0, while `layout_rows/3`
+  (ceiling division) counts that block as ending on the current row. In
+  that case we pin the cursor to the last column of the last occupied row
+  rather than letting the stale column place it at the block's top-left,
+  which is the source of the occasional "cursor 1 position off" glitch.
+  """
+  def compute_cursor_positioning(cursor_row, cursor_col, content_rows, cols) do
     last_row_index = max(content_rows - 1, 0)
 
     {target_row, target_col} =
@@ -929,9 +1150,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
     rows_up = last_row_index - target_row
 
-    if rows_up > 0, do: IO.write("\e[#{rows_up}A")
-    IO.write("\r")
-    if target_col > 0, do: IO.write("\e[#{target_col}C")
+    up_seq = if rows_up > 0, do: "\e[#{rows_up}A", else: ""
+    col_seq = if target_col > 0, do: "\e[#{target_col}C", else: ""
+
+    {up_seq <> "\r" <> col_seq, target_row}
   end
 
   defp terminal_cols do
@@ -1388,7 +1610,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   # ---------------------------------------------------------------------
 
   defp read_key do
-    match_key(get_raw_input_chunk())
+    case get_raw_input_chunk() do
+      "\e[200~" -> {:paste, read_bracketed_paste()}
+      other -> match_key(other)
+    end
   end
 
   defp match_key("\e[A"), do: :up
@@ -1456,7 +1681,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   defp get_raw_input_chunk do
     case read_char() do
       "\e" ->
-        seq = read_available_escape_bytes("", 3)
+        # 8 bytes comfortably covers every CSI sequence this editor cares
+        # about, including the 5-byte bracketed-paste-start marker
+        # (`[200~`) alongside the shorter arrow/Home/End/Delete sequences.
+        seq = read_available_escape_bytes("", 8)
         "\e" <> seq
 
       :eof ->
@@ -1487,6 +1715,50 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   defp read_available_escape_bytes(acc, _count), do: acc
+
+  @paste_end_marker "\e[201~"
+  @paste_end_marker_length String.length(@paste_end_marker)
+
+  # Reads the remainder of a bracketed-paste payload (see
+  # `enable_bracketed_paste/0`) one raw character at a time until the
+  # terminating `\e[201~` marker is seen, returning everything up to (but
+  # not including) that marker -- including any embedded `\r`, `\n`, or
+  # other control bytes, none of which are interpreted as editor commands
+  # while a paste is being captured. Bytes are accumulated as a reversed
+  # list so checking for the terminator only ever inspects the last few
+  # characters, rather than re-scanning the whole (potentially very large)
+  # paste on every single character.
+  defp read_bracketed_paste, do: read_bracketed_paste([])
+
+  defp read_bracketed_paste(acc) do
+    case read_char() do
+      char when is_binary(char) and char != "" ->
+        new_acc = [char | acc]
+
+        if paste_terminated?(new_acc) do
+          new_acc
+          |> Enum.reverse()
+          |> Enum.join()
+          |> String.trim_trailing(@paste_end_marker)
+        else
+          read_bracketed_paste(new_acc)
+        end
+
+      _ ->
+        # EOF or a read error mid-paste: return whatever was captured
+        # rather than blocking forever waiting for a terminator that will
+        # never arrive.
+        acc |> Enum.reverse() |> Enum.join()
+    end
+  end
+
+  defp paste_terminated?(acc) do
+    acc
+    |> Enum.take(@paste_end_marker_length)
+    |> Enum.reverse()
+    |> Enum.join()
+    |> String.ends_with?(@paste_end_marker)
+  end
 
   defp read_char do
     case :io.get_chars("", 1) do

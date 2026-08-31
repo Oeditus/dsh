@@ -419,4 +419,155 @@ defmodule DeepSeekHarness.LineEditorTest do
       refute String.contains?(LineEditor.truncate_to_width(short, 80), "…")
     end
   end
+
+  describe "clipboard paste handling" do
+    test "handle_paste/2 inserts short multi-line pastes inline without collapsing" do
+      state = LineEditor.new_state("> ")
+      text = "line one\nline two"
+      new_state = LineEditor.handle_paste(state, text)
+
+      assert Enum.join(new_state.buffer) == text
+      assert new_state.cursor == length(String.graphemes(text))
+      assert new_state.pastes == %{}
+    end
+
+    test "handle_paste/2 collapses large multi-line pastes into a placeholder chip" do
+      state = LineEditor.new_state("> ")
+      text = Enum.map_join(1..20, "\n", &"line #{&1}")
+      new_state = LineEditor.handle_paste(state, text)
+
+      assert Enum.join(new_state.buffer) == "📋 [20 lines]"
+      assert new_state.pastes["📋 [20 lines]"] == text
+    end
+
+    test "handle_paste/2 collapses a single very long line by character count" do
+      state = LineEditor.new_state("> ")
+      text = String.duplicate("x", 500)
+      new_state = LineEditor.handle_paste(state, text)
+
+      assert Enum.join(new_state.buffer) == "📋 [500 chars]"
+      assert new_state.pastes["📋 [500 chars]"] == text
+    end
+
+    test "handle_paste/2 normalizes CRLF and bare CR line endings before inserting" do
+      state = LineEditor.new_state("> ")
+      new_state = LineEditor.handle_paste(state, "a\r\nb\rc")
+
+      assert Enum.join(new_state.buffer) == "a\nb\nc"
+    end
+
+    test "handle_paste/2 disambiguates two distinct pastes that would collapse to the same label" do
+      state = LineEditor.new_state("> ")
+      text_a = Enum.map_join(1..10, "\n", &"a#{&1}")
+      text_b = Enum.map_join(1..10, "\n", &"b#{&1}")
+
+      state = LineEditor.handle_paste(state, text_a)
+      state = LineEditor.handle_paste(state, text_b)
+
+      assert state.pastes["📋 [10 lines]"] == text_a
+      assert state.pastes["📋 [10 lines] (2)"] == text_b
+      assert Enum.join(state.buffer) == "📋 [10 lines]📋 [10 lines] (2)"
+    end
+
+    test "handle_paste/2 reuses the same label for a repeated identical paste" do
+      state = LineEditor.new_state("> ")
+      text = Enum.map_join(1..10, "\n", &"a#{&1}")
+
+      state = LineEditor.handle_paste(state, text)
+      state = LineEditor.handle_paste(state, text)
+
+      assert map_size(state.pastes) == 1
+      assert Enum.join(state.buffer) == "📋 [10 lines]📋 [10 lines]"
+    end
+
+    test "handle_paste/2 ignores pastes while in reverse-search mode" do
+      state = %{LineEditor.new_state("> ") | search_mode: true}
+      new_state = LineEditor.handle_paste(state, "anything")
+
+      assert new_state == state
+    end
+
+    test "handle_paste/2 no-ops on an empty paste" do
+      state = LineEditor.new_state("> ")
+      new_state = LineEditor.handle_paste(state, "")
+
+      assert new_state == state
+    end
+
+    test "expand_pastes/2 substitutes placeholder chips back into their full original content" do
+      pastes = %{"📋 [3 lines]" => "a\nb\nc"}
+      line = "prefix 📋 [3 lines] suffix"
+
+      assert LineEditor.expand_pastes(line, pastes) == "prefix a\nb\nc suffix"
+    end
+
+    test "expand_pastes/2 is a no-op when there are no tracked pastes" do
+      assert LineEditor.expand_pastes("hello", %{}) == "hello"
+    end
+  end
+
+  describe "vertical cursor movement within a multi-line buffer" do
+    test "signals out of bounds on a single-line buffer, deferring to history navigation" do
+      state = %{LineEditor.new_state("> ") | buffer: String.graphemes("hello"), cursor: 3}
+
+      assert LineEditor.move_cursor_within_buffer(state, :up) == :out_of_bounds
+      assert LineEditor.move_cursor_within_buffer(state, :down) == :out_of_bounds
+    end
+
+    test "moves the cursor to the previous logical line, clamping the column" do
+      text = "ab\nlong line\nxy"
+      # Column 5 of the middle line -> absolute offset 2 + 1 + 5 = 8.
+      state = %{LineEditor.new_state("> ") | buffer: String.graphemes(text), cursor: 8}
+
+      {:ok, new_state} = LineEditor.move_cursor_within_buffer(state, :up)
+      # First line "ab" has length 2, so the column clamps to its end.
+      assert new_state.cursor == 2
+    end
+
+    test "moves the cursor to the next logical line, clamping the column" do
+      text = "ab\nlong line\nxy"
+      state = %{LineEditor.new_state("> ") | buffer: String.graphemes(text), cursor: 8}
+
+      {:ok, new_state} = LineEditor.move_cursor_within_buffer(state, :down)
+      # Last line "xy" has length 2, so the column clamps to its end.
+      assert new_state.cursor == length(String.graphemes(text))
+    end
+
+    test "preserves the in-line column when the target line is long enough" do
+      text = "hello\nworld"
+      state = %{LineEditor.new_state("> ") | buffer: String.graphemes(text), cursor: 2}
+
+      {:ok, new_state} = LineEditor.move_cursor_within_buffer(state, :down)
+      # Column 2 within "hello" -> column 2 within "world" -> offset 6 + 2.
+      assert new_state.cursor == 8
+    end
+
+    test "signals out of bounds at the buffer's first line when moving up" do
+      state = %{LineEditor.new_state("> ") | buffer: String.graphemes("a\nb"), cursor: 0}
+      assert LineEditor.move_cursor_within_buffer(state, :up) == :out_of_bounds
+    end
+
+    test "signals out of bounds at the buffer's last line when moving down" do
+      state = %{LineEditor.new_state("> ") | buffer: String.graphemes("a\nb"), cursor: 2}
+      assert LineEditor.move_cursor_within_buffer(state, :down) == :out_of_bounds
+    end
+  end
+
+  describe "cursor repositioning math after a multi-row draw" do
+    test "moves straight over when the cursor already sits on the last row" do
+      assert LineEditor.compute_cursor_positioning(2, 5, 3, 80) == {"\r\e[5C", 2}
+    end
+
+    test "moves up the correct number of rows when the cursor sits above the last row" do
+      assert LineEditor.compute_cursor_positioning(0, 3, 3, 80) == {"\e[2A\r\e[3C", 0}
+    end
+
+    test "pins the cursor to the end of the last row at a wrap boundary" do
+      assert LineEditor.compute_cursor_positioning(2, 0, 2, 8) == {"\r\e[7C", 1}
+    end
+
+    test "omits the column-move segment when the target column is 0" do
+      assert LineEditor.compute_cursor_positioning(0, 0, 1, 80) == {"\r", 0}
+    end
+  end
 end
