@@ -149,13 +149,13 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       %{
         name: "import_session",
         description:
-          "Imports an externally-produced session JSON file into DSH's own on-disk session store (.dsh/sessions/<id>.json), so it can be resumed via /resume or /session switch. Accepts a top-level {\"messages\": [...]} object, a bare JSON array of messages, or the native session/export schema. Replaces converting/importing sessions via an external script.",
+          "Imports an externally-produced session file into DSH's own on-disk session store (.dsh/sessions/<id>.lmml), so it can be resumed via /resume or /session switch. Accepts an .lmml conversation narrative, a top-level {\"messages\": [...]} JSON object, a bare JSON array of messages, or the native session/export schema. Replaces converting/importing sessions via an external script.",
         parameters: %{
           type: "object",
           properties: %{
             path: %{
               type: "string",
-              description: "Path to the source session JSON file to import."
+              description: "Path to the source session file (.lmml or JSON) to import."
             },
             session_id: %{
               type: "string",
@@ -436,7 +436,8 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
   end
 
   def import_session(_args) do
-    {:error, "Invalid arguments for import_session. Expected 'path' to a session JSON file."}
+    {:error,
+     "Invalid arguments for import_session. Expected 'path' to a session .lmml or JSON file."}
   end
 
   @doc """

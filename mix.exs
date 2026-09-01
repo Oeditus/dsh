@@ -39,6 +39,7 @@ defmodule DeepSeekHarness.MixProject do
       {:req, "~> 0.7"},
       {:jason, "~> 1.4"},
       {:marcli, "~> 0.3"},
+      {:lmml, path: "../lmml"},
       {:makeup_elixir, ">= 0.0.0", optional: true},
       {:makeup_erlang, ">= 0.0.0", optional: true},
       {:makeup_cure, ">= 0.0.0", optional: true},

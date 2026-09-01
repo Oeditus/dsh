@@ -1,31 +1,36 @@
 defmodule DeepSeekHarness.Brain.SessionStore do
   @moduledoc """
   Handles disk persistence for session memory, history checkpoints, and snapshots.
-  Enables session resumption across CLI restarts (~/.dsh/sessions/<session_id>.json).
+  Enables session resumption across CLI restarts.
+
+  ## Storage markup
+
+  Conversations are persisted in **`lmml`** -- a Markdown-superset markup
+  language for LLM conversations (see `Lmml` and
+  `DeepSeekHarness.Brain.SessionLmml`) -- as a bare `.lmml` narrative file
+  per session under `.dsh/sessions/<session_id>.lmml`. This is the default
+  markup for stored conversations: human-readable Markdown that any Markdown
+  viewer renders sensibly, yet losslessly round-trips every structured
+  message (metadata, snapshots, tool calls, multimodal content) through its
+  inline-embed model.
+
+  Legacy `.json` session files written by earlier versions are still read
+  transparently on `load_session/2` / `load_session_metadata/2`, so existing
+  conversations remain resumable; new saves always write `.lmml`.
   """
   require Logger
 
-  @doc "Saves session state and snapshots to disk."
+  alias DeepSeekHarness.Brain.SessionLmml
+
+  @doc "Saves session state and snapshots to disk as an `.lmml` narrative."
   def save_session(session_state, cwd \\ ".") do
     session_id = session_state.session_id
     dir = session_dir(cwd)
-    file_path = Path.join(dir, "#{session_id}.json")
-
-    payload = %{
-      "session_id" => session_id,
-      "model" => session_state.model,
-      "permission_mode" => to_string(session_state.permission_mode),
-      "updated_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "step_count" => session_state.step_count,
-      "total_prompt_tokens" => session_state.total_prompt_tokens,
-      "total_completion_tokens" => session_state.total_completion_tokens,
-      "messages" => session_state.messages,
-      "snapshots" => serialize_snapshots(session_state.snapshots)
-    }
+    file_path = Path.join(dir, "#{session_id}.lmml")
 
     with :ok <- File.mkdir_p(dir),
-         {:ok, json} <- Jason.encode(payload, pretty: true),
-         :ok <- File.write(file_path, json) do
+         {:ok, narrative} <- SessionLmml.encode(session_state, session_id),
+         :ok <- File.write(file_path, narrative) do
       {:ok, file_path}
     else
       err ->
@@ -74,29 +79,52 @@ defmodule DeepSeekHarness.Brain.SessionStore do
 
   defp compact_payload(val), do: val
 
-  @doc "Loads a persisted session from disk."
-  def load_session(session_id, cwd \\ ".") do
-    file_path = Path.join(session_dir(cwd), "#{session_id}.json")
+  @doc """
+  Loads a persisted session from disk.
 
-    if File.exists?(file_path) do
-      with {:ok, content} <- File.read(file_path),
-           {:ok, data} when is_map(data) <- Jason.decode(content) do
-        {:ok, data}
-      else
-        err -> {:error, "Failed to decode session file '#{file_path}': #{inspect(err)}"}
-      end
+  Prefers the `.lmml` narrative (the default markup); if no `.lmml` file
+  exists but a legacy `<session_id>.json` does, it is read and its content
+  is returned as-is (so older conversations remain resumable).
+  """
+  def load_session(session_id, cwd \\ ".") do
+    lmml_path = Path.join(session_dir(cwd), "#{session_id}.lmml")
+    json_path = Path.join(session_dir(cwd), "#{session_id}.json")
+
+    cond do
+      File.exists?(lmml_path) ->
+        load_lmml_session(lmml_path)
+
+      File.exists?(json_path) ->
+        load_legacy_json(json_path)
+
+      true ->
+        {:error, "Session file for '#{session_id}' does not exist in #{session_dir(cwd)}."}
+    end
+  end
+
+  defp load_lmml_session(lmml_path) do
+    case File.read(lmml_path) do
+      {:ok, content} -> SessionLmml.decode(content)
+      err -> {:error, "Failed to read session file '#{lmml_path}': #{inspect(err)}"}
+    end
+  end
+
+  defp load_legacy_json(json_path) do
+    with {:ok, content} <- File.read(json_path),
+         {:ok, data} when is_map(data) <- Jason.decode(content) do
+      {:ok, data}
     else
-      {:error, "Session file '#{file_path}' does not exist."}
+      err -> {:error, "Failed to decode legacy session file '#{json_path}': #{inspect(err)}"}
     end
   end
 
   @doc """
-  Imports an externally-produced session JSON file into DSH's own on-disk
+  Imports an externally-produced session file into DSH's own on-disk
   session store, so it can be resumed like any native session via `/resume`
   or `/session switch`. Replaces ad-hoc external scripts previously used to
   massage foreign session exports into a loadable shape.
 
-  Tolerantly accepts several JSON shapes at `source_path`:
+  Tolerantly accepts several shapes at `source_path`:
     - the native `save_session/2` schema (`session_id`, `model`,
       `permission_mode`, `step_count`, `total_prompt_tokens`,
       `total_completion_tokens`, `messages`, `snapshots`)
@@ -104,6 +132,7 @@ defmodule DeepSeekHarness.Brain.SessionStore do
       `total_tokens`, `messages`)
     - a bare `%{"messages" => [...]}` object
     - a raw top-level JSON array of message objects
+    - a `.lmml` narrative (imported directly, metadata + messages intact)
 
   `opts` supports:
     - `:session_id` -- target session ID (defaults to the source file's own
@@ -115,11 +144,9 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   """
   def import_session(source_path, opts \\ [], cwd \\ ".") do
     with {:ok, content} <- read_import_file(source_path),
-         {:ok, data} <- decode_import_json(content, source_path),
-         {:ok, messages} <- extract_import_messages(data) do
-      meta = if is_map(data), do: data, else: %{}
+         {:ok, messages, meta} <- parse_import_content(content, source_path) do
       session_id = opts[:session_id] || meta["session_id"] || generate_session_id()
-      file_path = Path.join(session_dir(cwd), "#{session_id}.json")
+      file_path = Path.join(session_dir(cwd), "#{session_id}.lmml")
 
       if File.exists?(file_path) and !Keyword.get(opts, :overwrite, false) do
         {:error,
@@ -151,19 +178,50 @@ defmodule DeepSeekHarness.Brain.SessionStore do
     end
   end
 
-  defp decode_import_json(content, source_path) do
-    case Jason.decode(content) do
-      {:ok, data} -> {:ok, data}
-      {:error, err} -> {:error, "Invalid JSON in '#{source_path}': #{Exception.message(err)}"}
+  # An `.lmml` narrative (sniffed by its content) is parsed through
+  # `SessionLmml` so its metadata and messages are imported intact.
+  defp parse_import_content(content, source_path) do
+    if lmml_narrative?(content) do
+      case SessionLmml.decode(content) do
+        {:ok, data} ->
+          {:ok, data["messages"], data}
+
+        {:error, reason} ->
+          {:error, "Invalid lmml narrative in '#{source_path}': #{inspect(reason)}"}
+      end
+    else
+      parse_import_json(content, source_path)
     end
   end
 
-  defp extract_import_messages(data) when is_list(data), do: {:ok, data}
-  defp extract_import_messages(%{"messages" => msgs}) when is_list(msgs), do: {:ok, msgs}
+  defp lmml_narrative?(content) when is_binary(content) do
+    # A bare `.lmml` text narrative (not a zip archive) is our storage form.
+    # Detect it by the presence of `@@@` inline-embed fences -- the one
+    # syntactic construct native JSON session files never contain. This
+    # covers both DSH-produced narratives (which carry a `@@@manifest.json`
+    # embed) and generic `.lmml` conversations built with `Lmml.Bundle`.
+    String.contains?(content, "@@@")
+  end
 
-  defp extract_import_messages(_) do
-    {:error,
-     "Source JSON must be either a top-level array of messages, or an object with a 'messages' array."}
+  defp parse_import_json(content, source_path) do
+    case Jason.decode(content) do
+      {:ok, data} when is_list(data) ->
+        {:ok, data, %{}}
+
+      {:ok, %{"messages" => msgs} = data} when is_list(msgs) ->
+        {:ok, msgs, data}
+
+      {:ok, data} when is_map(data) ->
+        {:error,
+         "Source JSON must be either a top-level array of messages, or an object with a 'messages' array."}
+
+      {:ok, _other} ->
+        {:error,
+         "Source JSON must be either a top-level array of messages, or an object with a 'messages' array."}
+
+      {:error, err} ->
+        {:error, "Invalid JSON in '#{source_path}': #{Exception.message(err)}"}
+    end
   end
 
   defp normalize_permission_mode(mode) when mode in ["auto_approve", "ask_confirm"], do: mode
@@ -176,7 +234,7 @@ defmodule DeepSeekHarness.Brain.SessionStore do
     |> IO.iodata_to_binary()
   end
 
-  @doc "Lists all saved session IDs."
+  @doc "Lists all saved session IDs (`.lmml` and legacy `.json`)."
   def list_sessions(cwd \\ ".") do
     dir = session_dir(cwd)
 
@@ -184,8 +242,14 @@ defmodule DeepSeekHarness.Brain.SessionStore do
       case File.ls(dir) do
         {:ok, files} ->
           files
-          |> Enum.filter(&String.ends_with?(&1, ".json"))
-          |> Enum.map(&String.replace(&1, ".json", ""))
+          |> Enum.filter(fn f ->
+            String.ends_with?(f, ".lmml") or String.ends_with?(f, ".json")
+          end)
+          |> Enum.map(fn f ->
+            f
+            |> String.replace_suffix(".lmml", "")
+            |> String.replace_suffix(".json", "")
+          end)
 
         _ ->
           []
@@ -198,16 +262,35 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   @doc """
   Deletes a persisted session state file from disk.
 
-  Returns `{:ok, path}` on success, or `{:error, reason}` when the session
-  file does not exist or could not be removed.
+  Removes both the `.lmml` narrative (the default markup) and any legacy
+  `.json` file for the session. Returns `{:ok, path}` on success, or
+  `{:error, reason}` when no session file exists or a removal fails.
   """
   def delete_session(session_id, cwd \\ ".") do
-    file_path = Path.join(session_dir(cwd), "#{session_id}.json")
+    dir = session_dir(cwd)
+    lmml_path = Path.join(dir, "#{session_id}.lmml")
+    json_path = Path.join(dir, "#{session_id}.json")
 
-    case File.rm(file_path) do
-      :ok -> {:ok, file_path}
-      {:error, :enoent} -> {:error, "Session '#{session_id}' has no persisted state to delete."}
-      {:error, reason} -> {:error, "Failed to delete session file: #{inspect(reason)}"}
+    case File.rm(lmml_path) do
+      :ok ->
+        # Best-effort removal of a legacy `.json` sibling if present.
+        if File.exists?(json_path), do: File.rm(json_path)
+        {:ok, lmml_path}
+
+      {:error, :enoent} ->
+        case File.rm(json_path) do
+          :ok ->
+            {:ok, json_path}
+
+          {:error, :enoent} ->
+            {:error, "Session '#{session_id}' has no persisted state to delete."}
+
+          {:error, reason} ->
+            {:error, "Failed to delete session file: #{inspect(reason)}"}
+        end
+
+      {:error, reason} ->
+        {:error, "Failed to delete session file: #{inspect(reason)}"}
     end
   end
 
@@ -225,7 +308,9 @@ defmodule DeepSeekHarness.Brain.SessionStore do
       case File.ls(dir) do
         {:ok, files} ->
           files
-          |> Enum.filter(&String.ends_with?(&1, ".json"))
+          |> Enum.filter(fn f ->
+            String.ends_with?(f, ".lmml") or String.ends_with?(f, ".json")
+          end)
           |> Enum.map(&Path.join(dir, &1))
           |> Enum.map(&read_session_metadata/1)
           |> Enum.reject(&is_nil/1)
@@ -244,33 +329,53 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   history) for a given session id, or `nil` when no such session exists.
   """
   def load_session_metadata(session_id, cwd \\ ".") do
-    file_path = Path.join(session_dir(cwd), "#{session_id}.json")
-    read_session_metadata(file_path)
+    dir = session_dir(cwd)
+    lmml_path = Path.join(dir, "#{session_id}.lmml")
+    json_path = Path.join(dir, "#{session_id}.json")
+
+    cond do
+      File.exists?(lmml_path) -> read_session_metadata(lmml_path)
+      File.exists?(json_path) -> read_session_metadata(json_path)
+      true -> nil
+    end
   end
 
   defp read_session_metadata(file_path) do
     case File.read(file_path) do
       {:ok, content} ->
-        case Jason.decode(content) do
-          {:ok, map} when is_map(map) ->
-            messages = Map.get(map, "messages", [])
-
-            %{
-              session_id: map["session_id"],
-              model: map["model"],
-              updated_at: parse_timestamp(map["updated_at"]),
-              message_count: length(messages),
-              step_count: Map.get(map, "step_count", 0),
-              title: extract_first_user_message(messages)
-            }
-
-          _ ->
-            nil
-        end
+        parse_metadata_content(file_path, content)
 
       _ ->
         nil
     end
+  end
+
+  defp parse_metadata_content(file_path, content) do
+    if String.ends_with?(file_path, ".lmml") do
+      case SessionLmml.decode(content) do
+        {:ok, data} -> build_metadata(data)
+        _ -> nil
+      end
+    else
+      case Jason.decode(content) do
+        {:ok, map} when is_map(map) -> build_metadata(map)
+        _ -> nil
+      end
+    end
+  end
+
+  defp build_metadata(map) do
+    messages = Map.get(map, "messages", [])
+    updated_at = parse_timestamp(map["updated_at"])
+
+    %{
+      session_id: map["session_id"],
+      model: map["model"],
+      updated_at: updated_at,
+      message_count: length(messages),
+      step_count: Map.get(map, "step_count", 0),
+      title: extract_first_user_message(messages)
+    }
   end
 
   @doc "Extracts and truncates the first user message content from session history."
@@ -341,17 +446,5 @@ defmodule DeepSeekHarness.Brain.SessionStore do
 
   def session_dir(cwd \\ ".") do
     Path.join(cwd, ".dsh/sessions")
-  end
-
-  defp serialize_snapshots(snapshots) when is_list(snapshots) do
-    Enum.map(snapshots, fn s ->
-      %{
-        "id" => s[:id] || s["id"],
-        "label" => s[:label] || s["label"],
-        "timestamp" => s[:timestamp] || s["timestamp"],
-        "model" => s[:model] || s["model"],
-        "messages" => s[:messages] || s["messages"]
-      }
-    end)
   end
 end

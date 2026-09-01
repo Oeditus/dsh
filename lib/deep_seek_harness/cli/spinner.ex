@@ -186,6 +186,10 @@ defmodule DeepSeekHarness.CLI.Spinner do
   def handle_call(:stop, _from, state) do
     if state.enabled? do
       clear_line()
+      # Flush the clear immediately so the next writer (e.g. the REPL
+      # printing an assistant response) starts from a clean, current line
+      # rather than racing a still-buffered `\r\e[2K`.
+      Formatter.flush()
     end
 
     if state.timer, do: Process.cancel_timer(state.timer)

@@ -185,7 +185,7 @@ Stages all workspace modifications and creates a git commit:
 ## 6. Session Management & Persistence (`-c`, `/resume`, Transcripts)
 
 ### Session State Persistence
-All REPL and one-shot sessions automatically save their GenServer state, snapshots, and conversation messages to `.dsh/sessions/<session_id>.json`.
+All REPL and one-shot sessions automatically save their GenServer state, snapshots, and conversation messages to `.dsh/sessions/<session_id>.lmml` -- an `lmml` narrative (a Markdown-superset markup for LLM conversations). The file is plain, self-contained Markdown that any Markdown viewer renders sensibly, yet round-trips every structured message losslessly through its inline-embed model. Legacy `.json` session files from earlier versions are still read transparently on resume.
 
 ### Exit Resume Banner
 Upon exit via `/exit`, `/quit`, or `Ctrl+D`, `dsh` prints your exact conversation UUID:

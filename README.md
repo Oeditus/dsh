@@ -63,6 +63,7 @@ DeepSeek Harness supports the full suite of official DeepSeek models, local open
   dsh --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
   ```
 - Resume any conversation across restarts with `dsh -c <id>` or interactively pick past sessions in the REPL via `/resume`.
+- Conversations are stored in **`lmml`** (a Markdown-superset markup for LLM conversations) as `<session_id>.lmml` narratives under `.dsh/sessions/` — plain, self-contained Markdown that any Markdown viewer renders sensibly, yet round-trips every structured message losslessly through its inline-embed model. Legacy `.json` session files from earlier versions are still read transparently on resume.
 
 ### 2. Scoped Rule Engine (`/rules`)
 - Manage prompt preambles and execution constraints.

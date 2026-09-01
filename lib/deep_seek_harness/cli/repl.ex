@@ -300,9 +300,11 @@ defmodule DeepSeekHarness.CLI.Repl do
     case res do
       {:ok, %{content: review_md}} ->
         IO.puts("\n" <> Formatter.format_agent_response(review_md) <> "\n")
+        Formatter.flush()
 
       {:error, err} ->
         IO.puts(Formatter.format_error(err))
+        Formatter.flush()
     end
 
     :continue
@@ -328,16 +330,23 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/import " <> args, _session_pid, _session_id) do
     case String.split(String.trim(args), ~r/\s+/, trim: true) do
-      [path] -> handle_import_session(path, nil)
-      [path, session_id | _] -> handle_import_session(path, session_id)
-      [] -> IO.puts(Formatter.format_error("Usage: /import <path/to/session.json> [session_id]"))
+      [path] ->
+        handle_import_session(path, nil)
+
+      [path, session_id | _] ->
+        handle_import_session(path, session_id)
+
+      [] ->
+        IO.puts(
+          Formatter.format_error("Usage: /import <path/to/session.lmml|.json> [session_id]")
+        )
     end
 
     :continue
   end
 
   def handle_input("/import", _session_pid, _session_id) do
-    IO.puts(Formatter.format_error("Usage: /import <path/to/session.json> [session_id]"))
+    IO.puts(Formatter.format_error("Usage: /import <path/to/session.lmml|.json> [session_id]"))
     :continue
   end
 
@@ -500,9 +509,11 @@ defmodule DeepSeekHarness.CLI.Repl do
         case Session.send_user_message(session_pid, prompt) do
           {:ok, %{content: out}} ->
             IO.puts("\n" <> Formatter.format_agent_response(out) <> "\n")
+            Formatter.flush()
 
           {:error, err} ->
             IO.puts(Formatter.format_error(err))
+            Formatter.flush()
         end
 
       nil ->
@@ -1243,9 +1254,15 @@ defmodule DeepSeekHarness.CLI.Repl do
     case res do
       {:ok, %{content: content}} ->
         IO.puts("\n" <> Formatter.format_agent_response(content) <> "\n")
+        # Flush so the response is guaranteed on the terminal before the
+        # LineEditor re-enters raw mode to redraw the prompt -- otherwise a
+        # buffered response can be swallowed/corrupted by the next raw-mode
+        # render, leaving an "empty screen" where the response should be.
+        Formatter.flush()
 
       {:error, reason} ->
         IO.puts(Formatter.format_error("Turn failed: #{reason}"))
+        Formatter.flush()
     end
 
     :continue

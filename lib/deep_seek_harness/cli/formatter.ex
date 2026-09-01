@@ -16,6 +16,23 @@ defmodule DeepSeekHarness.CLI.Formatter do
   def gray, do: IO.ANSI.light_black()
   def blink, do: IO.ANSI.blink_slow()
 
+  @doc """
+  Forces buffered standard output to the terminal.
+
+  Elixir has no `IO.flush/0`, and `:io.request(:standard_io, :flush)` is not a
+  supported request, so the reliable way to push a partial (newline-less)
+  write out immediately is a zero-length binary write to `:stdio`, which
+  bypasses the group leader's character buffer. Call this after writing a
+  response (or clearing a spinner line) before the LineEditor re-enters raw
+  mode, so the output is guaranteed visible rather than swallowed by the next
+  raw-mode render.
+  """
+  def flush do
+    IO.binwrite(:stdio, "")
+  rescue
+    _ -> :ok
+  end
+
   @tips [
     "Use !command to execute shell commands directly (e.g. !git status)",
     "Use !! to flip into pure console mode -- a plain shell passthrough with no AI/tooling in between -- and !! again to flip back",
@@ -101,7 +118,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/diff#{reset()}                   Show colorized git diff of workspace changes
       #{cyan()}/review <base> [head]#{reset()}   Compare two git branches and generate a detailed Code Review
       #{cyan()}/commit <message>#{reset()}       Auto-commit staged workspace changes to git
-      #{cyan()}/import <path> [id]#{reset()}     Import an external session JSON file into DSH's own session store
+      #{cyan()}/import <path> [id]#{reset()}     Import an external session .lmml or JSON file into DSH's session store
       #{cyan()}/cost#{reset()}                   Display token usage and session cost statistics
       #{cyan()}/permissions [auto|ask]#{reset()} Set tool execution safety mode
       #{cyan()}/subagent <prompt>#{reset()}      Spawn a background subagent worker for sub-tasks

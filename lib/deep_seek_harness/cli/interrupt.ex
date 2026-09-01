@@ -50,13 +50,40 @@ defmodule DeepSeekHarness.CLI.Interrupt do
 
   defp run_interruptible(session_pid, turn_fun) do
     task = Task.async(turn_fun)
-    watcher = spawn(fn -> watch_for_interrupt(session_pid) end)
+
+    # `spawn_monitor/1` (rather than `spawn/1` + a later `Process.monitor/1`)
+    # guarantees we hold a monitor ref for the watcher from the instant it
+    # exists, so the `after` block below can synchronously wait for it to
+    # die before touching the terminal mode.
+    {watcher, watcher_ref} = spawn_monitor(fn -> watch_for_interrupt(session_pid) end)
 
     try do
       Task.await(task, :infinity)
     after
-      Process.exit(watcher, :kill)
+      # `Process.exit(watcher, :kill)` is *asynchronous* -- it sends the kill
+      # signal and returns immediately, but the watcher (which re-asserts raw
+      # terminal mode on every loop iteration) may still be alive for a brief
+      # window. If it called `set_raw_mode/0` after we restore cooked mode,
+      # the terminal would be left in raw mode and the next LineEditor render
+      # (and any typed input) would corrupt the screen -- the "empty screen
+      # / reset brings it back" symptom. So we block until the watcher is
+      # confirmed dead BEFORE restoring cooked mode, then flush so the
+      # response output is actually on the terminal before control returns.
+      stop_watcher(watcher, watcher_ref)
       restore_tty_mode()
+      DeepSeekHarness.CLI.Formatter.flush()
+    end
+  end
+
+  # Kills the watcher and waits (bounded) for its `:DOWN` before returning,
+  # so no in-flight `set_raw_mode/0` can race the caller's `restore_tty_mode/0`.
+  defp stop_watcher(watcher, ref) do
+    Process.exit(watcher, :kill)
+
+    receive do
+      {:DOWN, ^ref, :process, _pid, _reason} -> :ok
+    after
+      500 -> :ok
     end
   end
 
