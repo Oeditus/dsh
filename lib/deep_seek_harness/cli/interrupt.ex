@@ -93,7 +93,6 @@ defmodule DeepSeekHarness.CLI.Interrupt do
       {:error, _reason} -> :eof
       char when is_binary(char) -> char
       char when is_list(char) -> IO.iodata_to_binary(char)
-      _ -> ""
     end
   end
 
@@ -101,7 +100,6 @@ defmodule DeepSeekHarness.CLI.Interrupt do
     case :shell.start_interactive({:noshell, :raw}) do
       :ok -> :ok
       {:error, :already_started} -> :ok
-      _ -> :error
     end
   rescue
     _ -> :error
@@ -111,7 +109,6 @@ defmodule DeepSeekHarness.CLI.Interrupt do
     case :shell.start_interactive({:noshell, :cooked}) do
       :ok -> :ok
       {:error, :already_started} -> :ok
-      _ -> :ok
     end
   rescue
     _ -> :ok
