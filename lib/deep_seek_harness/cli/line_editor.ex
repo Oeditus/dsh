@@ -272,6 +272,18 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
   @doc "Builds a fresh editor state for a new input line."
   def new_state(prompt_text, history \\ [], context \\ %{}) do
+    # `gauge_content/1` and `compact_session_content/1` fall back to a live
+    # `length(Process.list())` count whenever `:serving_processes` is absent
+    # from `context`. That count naturally drifts from one BEAM scheduler
+    # tick to the next (timers, monitors, GC helper processes, etc.), so
+    # leaving it to be recomputed on every `render_bar/1` call would make
+    # `render_signature/1` compare unequal almost every keystroke -- quietly
+    # defeating the "skip redraw unless changed" optimization below and
+    # reintroducing the exact status-bar blinking it exists to prevent.
+    # Freezing it once here, for the lifetime of this single line-edit
+    # session, keeps the signature stable while the user is simply typing.
+    context = Map.put_new_lazy(context, :serving_processes, fn -> length(Process.list()) end)
+
     %{
       buffer: [],
       cursor: 0,

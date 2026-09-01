@@ -39,7 +39,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     IO.puts(
       Formatter.format_info(
-        "Hotkeys: Ctrl+P permission mode · Ctrl+G sandbox · Ctrl+B status bar mode · Ctrl+J insert newline\n"
+        "Hotkeys: Ctrl+P permission mode · Ctrl+G sandbox · Ctrl+B status bar mode · Ctrl+J insert newline · Ctrl+Q interrupt AI response\n"
       )
     )
 
@@ -289,7 +289,15 @@ defmodule DeepSeekHarness.CLI.Repl do
       )
     )
 
-    case Session.generate_code_review(session_pid, base_branch, head_branch) do
+    review_fn = fn -> Session.generate_code_review(session_pid, base_branch, head_branch) end
+
+    res =
+      DeepSeekHarness.CLI.Spinner.run(
+        fn -> DeepSeekHarness.CLI.Interrupt.run(session_pid, review_fn) end,
+        title: "Generating Code Review… (Ctrl+Q to interrupt)"
+      )
+
+    case res do
       {:ok, %{content: review_md}} ->
         IO.puts("\n" <> Formatter.format_agent_response(review_md) <> "\n")
 
@@ -1226,7 +1234,11 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input(user_prompt, session_pid, _session_id) do
     turn_fn = fn -> try_send_message(session_pid, user_prompt) end
 
-    res = DeepSeekHarness.CLI.Spinner.run(turn_fn, title: "Thinking & coordinating with Hands…")
+    res =
+      DeepSeekHarness.CLI.Spinner.run(
+        fn -> DeepSeekHarness.CLI.Interrupt.run(session_pid, turn_fn) end,
+        title: "Thinking & coordinating with Hands… (Ctrl+Q to interrupt)"
+      )
 
     case res do
       {:ok, %{content: content}} ->

@@ -15,7 +15,8 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
     [
       %{
         name: "read_file",
-        description: "Read the full text content of a file given its path.",
+        description:
+          "Read the full text content of a SINGLE file given its path. When you need to inspect more than one file, prefer a single read_files call (batching every path together) instead of issuing multiple separate read_file calls one after another.",
         parameters: %{
           type: "object",
           properties: %{
@@ -170,6 +171,26 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
           required: ["path"]
         },
         execute: &import_session/1
+      },
+      %{
+        name: "spawn_subagent",
+        description:
+          "Spawns an independent background subagent worker session to execute a sub-task concurrently, in parallel with your own continued work in this turn. Use `async: true` (the default) for fire-and-forget parallel work -- this returns immediately, and the subagent's final response is appended to this conversation as a new message once it completes. Use `async: false` to block and receive the subagent's final response directly as this tool call's result. Prefer this whenever breaking down complex or multi-step work into independent, parallelizable sub-tasks instead of doing them one after another yourself.",
+        parameters: %{
+          type: "object",
+          properties: %{
+            prompt: %{
+              type: "string",
+              description: "The task/instructions to hand off to the subagent, in full detail."
+            },
+            async: %{
+              type: "boolean",
+              description: "Whether to run the subagent asynchronously (default: true)."
+            }
+          },
+          required: ["prompt"]
+        },
+        execute: &spawn_subagent/1
       },
       %{
         name: "run_workflow",
@@ -417,6 +438,96 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
   def import_session(_args) do
     {:error, "Invalid arguments for import_session. Expected 'path' to a session JSON file."}
   end
+
+  @doc """
+  Spawns an independent subagent worker session to run `args["prompt"]` as
+  its own agentic turn.
+
+  `_session_id`/`_session_model`/`_session_cwd` are injected server-side by
+  `DeepSeekHarness.TaskEngine.Orchestrator` (never declared to or supplied
+  by the model -- see `tools/0`'s `spawn_subagent` parameter schema, which
+  only exposes `prompt`/`async`) so this can identify and report back to
+  the calling session without needing a live PID passed through the tool
+  call arguments.
+
+  Deliberately does NOT route through `DeepSeekHarness.Brain.Session.spawn_subagent/3`
+  (a `GenServer.call` back into the very session invoking this tool): this
+  code runs from inside that same session's own in-flight turn (see
+  `Orchestrator.execute_batch/3`), which is synchronously blocked awaiting
+  this and any sibling tool calls to finish. Calling back into it here
+  would deadlock until the batch's own execution timeout expired. Spawning
+  the child session directly, and delivering the async result via a plain
+  (non-blocking) `send/2` instead of a `GenServer.call`, sidesteps that
+  reentrancy hazard entirely.
+  """
+  def spawn_subagent(%{"prompt" => prompt} = args) when is_binary(prompt) do
+    if String.trim(prompt) == "" do
+      {:error, "spawn_subagent requires a non-empty 'prompt' argument."}
+    else
+      if Map.get(args, "async", true) do
+        spawn_subagent_async(args, prompt)
+      else
+        spawn_subagent_sync(args, prompt)
+      end
+    end
+  end
+
+  def spawn_subagent(_args) do
+    {:error, "Invalid arguments for spawn_subagent. Expected a non-empty 'prompt' string."}
+  end
+
+  defp spawn_subagent_async(args, prompt) do
+    sub_id = "sub_#{System.unique_integer([:positive])}"
+    parent_session_id = Map.get(args, "_session_id")
+    model = Map.get(args, "_session_model")
+    cwd = Map.get(args, "_session_cwd", ".")
+
+    Task.start(fn ->
+      result = run_subagent_turn(sub_id, model, cwd, prompt)
+      notify_parent_session(parent_session_id, sub_id, result)
+    end)
+
+    {:ok,
+     "Subagent '#{sub_id}' spawned asynchronously; its result will be appended to this conversation once it completes."}
+  end
+
+  defp spawn_subagent_sync(args, prompt) do
+    sub_id = "sub_#{System.unique_integer([:positive])}"
+    model = Map.get(args, "_session_model")
+    cwd = Map.get(args, "_session_cwd", ".")
+
+    case run_subagent_turn(sub_id, model, cwd, prompt) do
+      {:ok, %{content: content}} -> {:ok, content}
+      {:ok, text} when is_binary(text) -> {:ok, text}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  defp run_subagent_turn(sub_id, model, cwd, prompt) do
+    case DeepSeekHarness.Brain.SessionSupervisor.start_session(
+           session_id: sub_id,
+           model: model,
+           cwd: cwd
+         ) do
+      {:ok, sub_pid} ->
+        result = DeepSeekHarness.Brain.Session.send_user_message(sub_pid, prompt)
+        DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
+        result
+
+      {:error, err} ->
+        {:error, "Failed to spawn subagent: #{inspect(err)}"}
+    end
+  end
+
+  defp notify_parent_session(parent_session_id, sub_id, result)
+       when is_binary(parent_session_id) do
+    case Registry.lookup(DeepSeekHarness.Registry, "session_" <> parent_session_id) do
+      [{parent_pid, _}] -> send(parent_pid, {:subagent_completed, sub_id, result})
+      [] -> :ok
+    end
+  end
+
+  defp notify_parent_session(_parent_session_id, _sub_id, _result), do: :ok
 
   def run_workflow(%{"workflow" => name, "task_description" => description})
       when is_binary(name) and is_binary(description) do

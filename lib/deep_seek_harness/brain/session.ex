@@ -16,6 +16,7 @@ defmodule DeepSeekHarness.Brain.Session do
   alias DeepSeekHarness.Config
   alias DeepSeekHarness.Hands.Executor, as: HandsExecutor
   alias DeepSeekHarness.Plugin.Loader, as: PluginLoader
+  alias DeepSeekHarness.TaskEngine.TaskSupervisor
 
   @default_system_prompt """
   You are an expert agentic AI coding assistant powered by DeepSeek.
@@ -52,6 +53,29 @@ defmodule DeepSeekHarness.Brain.Session do
   @doc "Sends a user prompt to the session actor, expanding @ references."
   def send_user_message(pid, text) do
     GenServer.call(pid, {:send_user_message, text}, :infinity)
+  end
+
+  @doc """
+  Cancels the session's currently in-flight agent turn (started by
+  `send_user_message/2` or `generate_code_review/3`), if any.
+
+  Forcibly stops the turn's background Task -- aborting the in-progress
+  DeepSeek API request or tool execution wherever it happens to be -- and
+  makes whichever caller is *currently blocked inside that original call*
+  receive `{:error, "Turn cancelled by user (Ctrl+Q)."}` immediately. The
+  session actor itself is never killed: conversation history up to (but
+  not including) the interrupted turn's own messages is preserved intact,
+  so the user can simply try again.
+
+  This is a fast, always-responsive call -- bounded by the session actor's
+  own mailbox, not by however long the turn being cancelled might
+  otherwise run -- because this actor no longer blocks its own mailbox
+  while a turn's agent loop is running. See `start_agent_turn/2`.
+  """
+  def cancel_current_turn(pid) do
+    GenServer.call(pid, :cancel_current_turn, 5_000)
+  catch
+    :exit, _ -> {:error, "Session process unavailable; nothing to cancel."}
   end
 
   @doc "Sets the DeepSeek model ('deepseek-chat' or 'deepseek-reasoner')."
@@ -172,7 +196,14 @@ defmodule DeepSeekHarness.Brain.Session do
       total_completion_tokens: 0,
       turn_history: [],
       cwd: cwd,
-      status: :idle
+      status: :idle,
+      # `%{task: %Task{}, from: GenServer.from()}` while an agent turn
+      # (started by `send_user_message/2` or `generate_code_review/3`) is
+      # running in its own background Task -- see `start_agent_turn/2` --
+      # or `nil` when idle. Lets `cancel_current_turn/1` (Ctrl+Q) abort the
+      # turn and reply to its still-waiting caller without this GenServer
+      # ever blocking its own mailbox for the turn's duration.
+      active_turn: nil
     }
 
     # Attempt to restore session state if persisted
@@ -194,7 +225,7 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   @impl true
-  def handle_call({:send_user_message, raw_text}, _from, state) do
+  def handle_call({:send_user_message, raw_text}, from, state) do
     # Expand @filename, @relative_path, @file://..., @https://... and ambiguous error references ("error above")
     opts = [
       sandbox_workspace: state.sandbox_workspace,
@@ -237,8 +268,24 @@ defmodule DeepSeekHarness.Brain.Session do
 
     state = auto_checkpoint(state, "Pre-turn ##{state.step_count + 1}")
 
-    {final_response, new_state} = run_agent_loop(state, state.max_tool_depth)
-    {:reply, final_response, new_state}
+    start_agent_turn(state, from)
+  end
+
+  @impl true
+  def handle_call(
+        :cancel_current_turn,
+        _from,
+        %{active_turn: %{task: task, from: waiting_from}} = state
+      ) do
+    Task.shutdown(task, :brutal_kill)
+    GenServer.reply(waiting_from, {:error, "Turn cancelled by user (Ctrl+Q)."})
+    Logger.info("[Brain.Session] In-flight agent turn cancelled by user (Ctrl+Q).")
+    {:reply, :ok, %{state | active_turn: nil, status: :idle}}
+  end
+
+  @impl true
+  def handle_call(:cancel_current_turn, _from, state) do
+    {:reply, {:error, "No turn currently in progress to cancel."}, state}
   end
 
   @impl true
@@ -370,7 +417,7 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   @impl true
-  def handle_call({:generate_code_review, base_branch, head_branch}, _from, state) do
+  def handle_call({:generate_code_review, base_branch, head_branch}, from, state) do
     case DeepSeekHarness.Git.diff_branches(base_branch, head_branch, state.cwd) do
       {:ok, data} ->
         prompt = """
@@ -406,8 +453,7 @@ defmodule DeepSeekHarness.Brain.Session do
         user_msg = %{"role" => "user", "content" => final_prompt}
         state_with_msg = %{state | messages: state.messages ++ [user_msg], status: :thinking}
 
-        {final_response, new_state} = run_agent_loop(state_with_msg, state.max_tool_depth)
-        {:reply, final_response, new_state}
+        start_agent_turn(state_with_msg, from)
 
       {:error, err} ->
         {:reply, {:error, err}, state}
@@ -595,6 +641,32 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   @impl true
+  def handle_info({ref, result}, %{active_turn: %{task: %Task{ref: ref}, from: from}})
+      when is_reference(ref) do
+    # The agent-loop Task started by `start_agent_turn/2` finished on its
+    # own (as opposed to being cut short by `cancel_current_turn/1`).
+    # Demonitor+flush so the matching `:DOWN` message this same Task also
+    # sends right after doesn't fall through to the catch-all clause below.
+    Process.demonitor(ref, [:flush])
+    {final_response, new_turn_state} = result
+    GenServer.reply(from, final_response)
+    {:noreply, %{new_turn_state | active_turn: nil}}
+  end
+
+  @impl true
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{active_turn: %{task: %Task{ref: ref}, from: from}} = state
+      ) do
+    # The agent-loop Task crashed outright (an uncaught exception) rather
+    # than returning a `{final_response, new_state}` result -- reply with
+    # an error instead of leaving the original caller hanging forever.
+    Logger.error("[Brain.Session] Agent turn task crashed: #{inspect(reason)}")
+    GenServer.reply(from, {:error, "Agent turn crashed unexpectedly: #{inspect(reason)}"})
+    {:noreply, %{state | active_turn: nil, status: :idle}}
+  end
+
+  @impl true
   def handle_info({:subagent_completed, sub_id, result}, state) do
     Logger.info("[Brain.Session] Async subagent '#{sub_id}' completed with result.")
 
@@ -622,6 +694,24 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   # Agent Execution Loop
+
+  # Runs `run_agent_loop/2` in its own supervised Task instead of blocking
+  # this GenServer's own mailbox -- keeping this session actor responsive
+  # to `cancel_current_turn/1` (Ctrl+Q) and any other call for the entire
+  # duration of what can otherwise be a very long-running turn (an LLM
+  # round-trip plus however many tool-calling iterations it takes).
+  # `from` (the caller's own `GenServer.call` tag) is stashed in
+  # `active_turn` and only replied to once `handle_info/2` above receives
+  # this Task's result or crash -- or once `cancel_current_turn/1` cuts it
+  # short and replies early itself.
+  defp start_agent_turn(state, from) do
+    task =
+      Task.Supervisor.async_nolink(TaskSupervisor, fn ->
+        run_agent_loop(state, state.max_tool_depth)
+      end)
+
+    {:noreply, %{state | active_turn: %{task: task, from: from}}}
+  end
 
   defp run_agent_loop(state, depth) when depth <= 0 do
     question =

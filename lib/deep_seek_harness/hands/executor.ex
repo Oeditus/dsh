@@ -154,13 +154,25 @@ defmodule DeepSeekHarness.Hands.Executor do
     do: "#{tool_name}()"
 
   def format_tool_call(tool_name, args) when is_map(args) do
-    formatted_args =
-      Enum.map_join(args, ", ", fn
-        {k, v} when is_binary(k) -> "#{k}: #{format_arg_val(k, v)}"
-        {k, v} -> "#{inspect(k)}: #{format_arg_val(to_string(k), v)}"
-      end)
+    # Underscore-prefixed keys (e.g. `_session_id`, injected server-side by
+    # `DeepSeekHarness.TaskEngine.Orchestrator` for tools like
+    # `spawn_subagent` that need session context the model never supplies
+    # or even sees in the tool's own parameter schema) are a "private
+    # argument" convention -- always hidden from this user-facing summary.
+    visible_args =
+      Map.reject(args, fn {k, _v} -> is_binary(k) and String.starts_with?(k, "_") end)
 
-    "#{tool_name}(#{formatted_args})"
+    if map_size(visible_args) == 0 do
+      "#{tool_name}()"
+    else
+      formatted_args =
+        Enum.map_join(visible_args, ", ", fn
+          {k, v} when is_binary(k) -> "#{k}: #{format_arg_val(k, v)}"
+          {k, v} -> "#{inspect(k)}: #{format_arg_val(to_string(k), v)}"
+        end)
+
+      "#{tool_name}(#{formatted_args})"
+    end
   end
 
   def format_tool_call(tool_name, args) do

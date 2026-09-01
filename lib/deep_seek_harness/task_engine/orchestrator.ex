@@ -85,6 +85,14 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
   @doc false
   def interactive_tool?("ask_question"), do: true
   def interactive_tool?("run_workflow"), do: true
+  # `spawn_subagent(async: false)` blocks on a full nested agentic turn
+  # (its own multi-step tool-calling loop), which can easily run past the
+  # standard tool-execution timeout -- give it the same unbounded await as
+  # the other long-running tools rather than risk `Task.shutdown/2`
+  # brutally killing a subagent that is still legitimately working.
+  # `spawn_subagent(async: true)` (the default) returns almost immediately
+  # regardless, so this is harmless in that case.
+  def interactive_tool?("spawn_subagent"), do: true
   def interactive_tool?(_), do: false
 
   defp run_single_tool(tc, session_state) do
@@ -107,13 +115,29 @@ defmodule DeepSeekHarness.TaskEngine.Orchestrator do
     end
 
     try do
-      HandsExecutor.execute(session_state.hands, tc.name, tc.arguments)
+      HandsExecutor.execute(session_state.hands, tc.name, effective_arguments(tc, session_state))
     after
       if lock_key do
         release_lock(lock_key)
       end
     end
   end
+
+  # `spawn_subagent` needs to identify and report back to the session it
+  # was invoked from, without the model ever having to know or supply that
+  # PID/id itself (it isn't declared in the tool's own parameter schema in
+  # `DefaultTools.tools/0`). Inject it here, server-side, as underscore-
+  # prefixed "private" arguments -- `HandsExecutor.format_tool_call/2`
+  # hides any such key from the tool-call summary line so this never leaks
+  # into what the user sees echoed for the call.
+  defp effective_arguments(%{name: "spawn_subagent", arguments: args}, session_state) do
+    args
+    |> Map.put("_session_id", session_state.session_id)
+    |> Map.put("_session_model", session_state.model)
+    |> Map.put("_session_cwd", session_state.cwd)
+  end
+
+  defp effective_arguments(%{arguments: args}, _session_state), do: args
 
   @doc "Formats a short human-readable summary of a tool call for real-time status display."
   def format_short_summary(tool_name, args) when is_map(args) do

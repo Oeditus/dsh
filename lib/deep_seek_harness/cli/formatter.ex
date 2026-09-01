@@ -118,6 +118,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}Ctrl+P#{reset()}                  Toggle permission mode (ask_confirm ⇄ auto_approve)
       #{cyan()}Ctrl+G#{reset()}                  Toggle workspace sandbox bounds on/off
       #{cyan()}Ctrl+B#{reset()}                  Toggle idle status bar mode (gauge ⇄ compact session line)
+      #{cyan()}Ctrl+Q#{reset()}                  Interrupt the AI's current turn while it's responding (Ctrl+C kills the whole app instead)
     """
   end
 

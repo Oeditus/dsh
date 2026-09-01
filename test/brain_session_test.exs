@@ -168,6 +168,54 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert Session.get_stats(override_pid).max_tool_depth == 7
   end
 
+  test "cancel_current_turn/1 aborts an in-flight turn and replies to its original caller", %{
+    pid: pid
+  } do
+    test_pid = self()
+
+    # Fabricate an in-flight turn deterministically instead of racing a real
+    # (near-instant, mocked) `send_user_message/2` call: a long-sleeping Task
+    # standing in for a slow LLM round-trip / tool execution, plus a `from`
+    # tag built exactly like `GenServer.call/3` builds one internally
+    # (`GenServer.reply/2`'s only real contract is `send(pid, {tag, reply})`),
+    # so `assert_receive` below can observe the same reply a real blocked
+    # caller would receive.
+    #
+    # The Task must be created *from inside the session process* (hence
+    # doing it inside this `:sys.replace_state/2` callback, which OTP runs
+    # in the target process's own context) -- `Task.shutdown/2` requires the
+    # calling process to be the task's original owner, exactly like
+    # `start_agent_turn/2` and `cancel_current_turn/1`'s own handler always
+    # run on the very same session process in production.
+    :sys.replace_state(pid, fn state ->
+      fake_task =
+        Task.Supervisor.async_nolink(DeepSeekHarness.TaskEngine.TaskSupervisor, fn ->
+          Process.sleep(:infinity)
+        end)
+
+      tag = make_ref()
+      send(test_pid, {:fake_turn, fake_task, tag})
+      %{state | active_turn: %{task: fake_task, from: {test_pid, tag}}}
+    end)
+
+    assert_receive {:fake_turn, fake_task, tag}, 1_000
+
+    assert :ok = Session.cancel_current_turn(pid)
+    assert_receive {^tag, {:error, "Turn cancelled by user (Ctrl+Q)."}}, 1_000
+
+    refute Process.alive?(fake_task.pid)
+
+    # The session actor itself survives the cancellation and is immediately
+    # usable again, back in its idle state.
+    info = Session.get_info(pid)
+    assert info.status == :idle
+    assert info.pid == pid
+  end
+
+  test "cancel_current_turn/1 returns an error when no turn is in flight", %{pid: pid} do
+    assert {:error, _reason} = Session.cancel_current_turn(pid)
+  end
+
   test "whitelists all ragex tools automatically without asking for user confirmation" do
     # Verify that ragex tool names starting with mcp_ragex_, ragex_, or ragex are permitted
     state = %{
