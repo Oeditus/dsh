@@ -24,4 +24,5 @@ if config_env() == :test do
   config :dllb, enabled: false
   config :nx, :default_backend, Nx.BinaryBackend
   config :exla, start_log_sink: false
+  config :logger, level: :warning
 end
