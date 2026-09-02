@@ -466,10 +466,7 @@ defmodule DeepSeekHarness.Brain.Session do
     completion_tokens = state.total_completion_tokens
     total = prompt_tokens + completion_tokens
 
-    # DeepSeek Pricing: V3 prompt $0.14/1M, completion $0.28/1M
-    cost_prompt = prompt_tokens * 0.00000014
-    cost_completion = completion_tokens * 0.00000028
-    total_cost = cost_prompt + cost_completion
+    total_cost = estimate_cost(state, prompt_tokens, completion_tokens)
 
     proc_status = DeepSeekHarness.process_status()
 
@@ -546,9 +543,7 @@ defmodule DeepSeekHarness.Brain.Session do
     completion_tokens = state.total_completion_tokens
     total = prompt_tokens + completion_tokens
 
-    cost_prompt = prompt_tokens * 0.00000014
-    cost_completion = completion_tokens * 0.00000028
-    total_cost = cost_prompt + cost_completion
+    total_cost = estimate_cost(state, prompt_tokens, completion_tokens)
 
     mcp_servers = DeepSeekHarness.MCP.ServerManager.list_servers()
 
@@ -931,6 +926,24 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   def message_content_text(_), do: ""
+
+  # Computes the estimated session cost in USD from the cumulative prompt
+  # and completion token counts, using the per-million-token prices from
+  # system-global config (~/.dsh/config.json) or a workspace override
+  # (.dsh/config.json). Falls back to DeepSeek's published V3 rates
+  # (prompt $0.14/1M, completion $0.28/1M) when unset, so existing
+  # installations without the new keys keep their previous estimates.
+  defp estimate_cost(state, prompt_tokens, completion_tokens) do
+    config = Config.load_config(state.cwd)
+
+    prompt_per_million =
+      Map.get(config, "price_per_million_prompt_tokens", 0.14) / 1_000_000
+
+    completion_per_million =
+      Map.get(config, "price_per_million_completion_tokens", 0.28) / 1_000_000
+
+    prompt_tokens * prompt_per_million + completion_tokens * completion_per_million
+  end
 
   defp execute_tool_calls(tool_calls, state) do
     alias DeepSeekHarness.TaskEngine.Orchestrator

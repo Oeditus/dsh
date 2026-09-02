@@ -168,6 +168,70 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert Session.get_stats(override_pid).max_tool_depth == 7
   end
 
+  test "estimated cost honors configurable per-million-token prices" do
+    tmp_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "session_price_test_#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(tmp_dir)
+
+    # Override pricing in the session's workspace config: prompt $1.00/1M,
+    # completion $2.00/1M (well above the 0.14/0.28 defaults, so the test
+    # clearly distinguishes the configured values from the fallbacks).
+    DeepSeekHarness.Config.save_config(
+      %{
+        "price_per_million_prompt_tokens" => 1.0,
+        "price_per_million_completion_tokens" => 2.0
+      },
+      tmp_dir
+    )
+
+    sess_id = "price_override_test_#{System.unique_integer([:positive])}"
+
+    {:ok, pid} =
+      SessionSupervisor.start_session(session_id: sess_id, model: "deepseek-chat", cwd: tmp_dir)
+
+    # 1,000,000 prompt tokens + 1,000,000 completion tokens => $1.00 + $2.00 = $3.00
+    :sys.replace_state(pid, fn state ->
+      %{state | total_prompt_tokens: 1_000_000, total_completion_tokens: 1_000_000}
+    end)
+
+    token_stats = Session.get_token_stats(pid)
+    assert Float.round(token_stats.estimated_cost_usd, 4) == 3.0
+
+    stats = Session.get_stats(pid)
+    assert Float.round(stats.estimated_cost_usd, 4) == 3.0
+
+    File.rm_rf!(tmp_dir)
+  end
+
+  test "estimated cost falls back to DeepSeek V3 rates when pricing is unset" do
+    tmp_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "session_price_default_test_#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(tmp_dir)
+
+    sess_id = "price_default_test_#{System.unique_integer([:positive])}"
+
+    {:ok, pid} =
+      SessionSupervisor.start_session(session_id: sess_id, model: "deepseek-chat", cwd: tmp_dir)
+
+    # 1,000,000 prompt + 1,000,000 completion => $0.14 + $0.28 = $0.42
+    :sys.replace_state(pid, fn state ->
+      %{state | total_prompt_tokens: 1_000_000, total_completion_tokens: 1_000_000}
+    end)
+
+    token_stats = Session.get_token_stats(pid)
+    assert Float.round(token_stats.estimated_cost_usd, 4) == 0.42
+
+    File.rm_rf!(tmp_dir)
+  end
+
   test "cancel_current_turn/1 aborts an in-flight turn and replies to its original caller", %{
     pid: pid
   } do

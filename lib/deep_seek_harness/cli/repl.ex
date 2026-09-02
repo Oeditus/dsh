@@ -753,6 +753,13 @@ defmodule DeepSeekHarness.CLI.Repl do
     to `.dsh/config.json`. While the agent is "thinking", the spinner also shows
     elapsed turn time and the live OTP parallel task count.
 
+    Set the model's per-million-token prices (used for the status bar cost
+    gauge, `/cost`, and `/stats`) by adding `"price_per_million_prompt_tokens": <n>`
+    and `"price_per_million_completion_tokens": <n>` to `~/.dsh/config.json`
+    (USD per 1M tokens; defaults: prompt 0.14, completion 0.28). Set them
+    globally when you use a model/provider other than DeepSeek V3 so the
+    reported cost reflects your actual rate.
+
     Override how many consecutive tool-calling turns a single agent loop
     runs before pausing to ask whether to continue by adding
     `"max_tool_depth": <n>` to `.dsh/config.json` (default: `100`).

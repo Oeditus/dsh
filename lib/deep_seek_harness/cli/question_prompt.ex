@@ -506,7 +506,17 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   defp read_key do
     case IO.getn(:user, "", 1) do
       "\e" ->
-        case IO.getn(:user, "", 2) do
+        # An arrow key arrives as a 3-byte CSI sequence (\e[A .. \e[D).
+        # Instead of requesting a hard-coded "exactly 2 more bytes" (which
+        # can miss the remainder when the terminal delivers the escape byte
+        # and the rest of the sequence with a small gap -- most likely on
+        # the very first keystroke right after raw mode is entered, making
+        # the first ArrowDown a silent no-op), read available bytes one at
+        # a time and stop as soon as a terminating char is seen. This
+        # mirrors `DeepSeekHarness.CLI.LineEditor.read_available_escape_bytes/2`.
+        seq = read_available_escape_bytes("", 4)
+
+        case seq do
           "[A" -> :up
           "[B" -> :down
           "[C" -> :right
@@ -537,6 +547,37 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
       _ ->
         :eof
+    end
+  end
+
+  # Reads up to `count` bytes following an escape byte, stopping early as
+  # soon as a CSI terminator (A/B/C/D) is seen. Handles terminals that
+  # deliver the escape sequence across separate reads, so the first arrow
+  # keypress after entering raw mode is recognized instead of being dropped.
+  defp read_available_escape_bytes(acc, count) when count > 0 do
+    case read_char() do
+      char when is_binary(char) and char != "" ->
+        new_acc = acc <> char
+
+        if char in ["A", "B", "C", "D"] do
+          new_acc
+        else
+          read_available_escape_bytes(new_acc, count - 1)
+        end
+
+      _ ->
+        acc
+    end
+  end
+
+  defp read_available_escape_bytes(acc, _count), do: acc
+
+  defp read_char do
+    case IO.getn(:user, "", 1) do
+      :eof -> :eof
+      {:error, _reason} -> :eof
+      char when is_binary(char) -> char
+      char when is_list(char) -> IO.iodata_to_binary(char)
     end
   end
 end

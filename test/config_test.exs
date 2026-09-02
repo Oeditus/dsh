@@ -9,6 +9,31 @@ defmodule DeepSeekHarness.ConfigTest do
     assert Map.has_key?(config, "model")
   end
 
+  test "defaults per-million-token prices to DeepSeek V3 rates" do
+    config = Config.load_config()
+    assert config["price_per_million_prompt_tokens"] == 0.14
+    assert config["price_per_million_completion_tokens"] == 0.28
+  end
+
+  test "allows overriding per-million-token prices in config" do
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "config_price_test_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(tmp_dir)
+
+    cfg = %{
+      "price_per_million_prompt_tokens" => 1.0,
+      "price_per_million_completion_tokens" => 2.0
+    }
+
+    assert :ok = Config.save_config(cfg, tmp_dir)
+    loaded = Config.load_config(tmp_dir)
+    assert loaded["price_per_million_prompt_tokens"] == 1.0
+    assert loaded["price_per_million_completion_tokens"] == 2.0
+
+    File.rm_rf!(tmp_dir)
+  end
+
   test "defaults max_tool_depth to 100 and allows workspace override" do
     assert Config.load_config()["max_tool_depth"] == 100
 

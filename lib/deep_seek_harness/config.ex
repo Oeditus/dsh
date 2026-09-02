@@ -26,6 +26,15 @@ defmodule DeepSeekHarness.Config do
     # Assumed model context window size (tokens) used by the status bar's
     # usage gauge. Override per-workspace if DeepSeek's limits change.
     "max_context_tokens" => 64_000,
+    # Model pricing, expressed as USD per 1,000,000 tokens, used to compute
+    # the estimated session cost shown by the status bar gauge, /cost, and
+    # /stats. Defaults to DeepSeek's published V3 rates (prompt $0.14/1M,
+    # completion $0.28/1M). Override globally in ~/.dsh/config.json (or per
+    # workspace in .dsh/config.json) when you use a different model/provider
+    # (e.g. deepseek-reasoner or an OpenRouter/SiliconFlow route) so the
+    # reported cost reflects your actual per-million price.
+    "price_per_million_prompt_tokens" => 0.14,
+    "price_per_million_completion_tokens" => 0.28,
     # Maximum number of consecutive tool-calling turns a single agent loop
     # will run before pausing to ask the user whether to continue. Override
     # per-workspace (or globally) by adding "max_tool_depth": <n> to
