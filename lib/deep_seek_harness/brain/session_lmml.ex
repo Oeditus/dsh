@@ -70,7 +70,7 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
     as inline embeds below; the role headings are a human-readable view.
 
     @@@#{@manifest_name}
-    #{Jason.encode!(manifest, pretty: true)}
+    #{escape_json(Jason.encode!(manifest, pretty: true))}
     @@@
     """
 
@@ -87,7 +87,7 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
         #{text}
 
         @@@#{@message_prefix}#{idx}#{@message_suffix}
-        #{Jason.encode!(msg)}
+        #{escape_json(Jason.encode!(msg))}
         @@@
         """
       end)
@@ -101,6 +101,26 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
   rescue
     e -> {:error, Exception.message(e)}
   end
+
+  # The `@@@` sequence is the lmml inline-embed delimiter: the narrative
+  # parser terminates an `@@@name ... @@@` block at the FIRST `@@@` it
+  # encounters, with no escape mechanism. A message's content can legitimately
+  # contain a literal `@@@` -- most commonly when a tool result reads a `.lmml`
+  # file or a session export, which embeds its own `@@@manifest.json` /
+  # `@@@message.N.json` markers. If that content were JSON-encoded verbatim
+  # into an embed block, the nested `@@@` would truncate the embed early,
+  # corrupting the whole narrative (save failures + undecodable files).
+  #
+  # Fix: before a JSON payload is written into an embed, escape every literal
+  # `@@@` as `\u0040\u0040\u0040` (the valid JSON unicode escape for `@`). The
+  # embed content then contains no delimiter, so parsing is safe; and because
+  # `Jason.decode/1` resolves `\u0040` back to `@` automatically, a
+  # decode/load round-trip is lossless with NO decode-side change needed.
+  defp escape_json(json) when is_binary(json) do
+    String.replace(json, "@@@", "\\u0040\\u0040\\u0040")
+  end
+
+  defp escape_json(other), do: other
 
   @doc """
   Decodes a `.lmml` narrative (or a parsed `Lmml.Bundle`) back into the

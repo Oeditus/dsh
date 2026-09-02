@@ -61,6 +61,72 @@ defmodule DeepSeekHarness.Brain.SessionLmmlTest do
       assert String.contains?(narrative, "What is this?")
       assert String.contains?(narrative, "tool calls: bash")
     end
+
+    test "escapes literal @@@ in message content so it cannot truncate the embed" do
+      # A tool result that read a nested .lmml file (or a session export) embeds
+      # its own @@@manifest.json / @@@message.N.json markers as literal content.
+      # Un-escaped, that @@@ would terminate the enclosing embed block early and
+      # corrupt the narrative (see the SessionLmml.escape_json/1 doc).
+      nested_lmml =
+        "# nested\n\n@@@manifest.json\n{\"session_id\":\"inner\"}\n@@@\n\n" <>
+          "@@@message.0.json\n{\"role\":\"user\",\"content\":\"hi\"}\n@@@\n"
+
+      session_state = %{
+        session_id: "esc",
+        model: "deepseek-chat",
+        permission_mode: :ask_confirm,
+        step_count: 1,
+        total_prompt_tokens: 0,
+        total_completion_tokens: 0,
+        messages: [
+          %{"role" => "user", "content" => "read the lmml file"},
+          %{"role" => "tool", "tool_call_id" => "c1", "content" => nested_lmml}
+        ],
+        snapshots: []
+      }
+
+      assert {:ok, narrative} = SessionLmml.encode(session_state, "esc")
+
+      # The message JSON embed must not contain a bare @@@ that would close it
+      # early; the literal markers must be JSON-escaped as \u0040\u0040\u0040.
+      assert String.contains?(narrative, "\\u0040\\u0040\\u0040")
+
+      # And the narrative must round-trip losslessly, restoring the literal @@@.
+      assert {:ok, decoded} = SessionLmml.decode(narrative)
+
+      tool_msg = Enum.find(decoded["messages"], &(&1["role"] == "tool"))
+      assert tool_msg["content"] == nested_lmml
+    end
+
+    test "escapes literal @@@ inside snapshot messages in the manifest" do
+      # Snapshots carry full message history, including tool results that may
+      # contain literal @@@ (e.g. a prior read of a .lmml file). Those live in
+      # the @@manifest.json embed, which must also be protected.
+      nested = "result with @@@marker and @@@manifest.json inside"
+
+      session_state = %{
+        session_id: "snap",
+        model: "deepseek-chat",
+        permission_mode: :ask_confirm,
+        step_count: 1,
+        total_prompt_tokens: 0,
+        total_completion_tokens: 0,
+        messages: [%{"role" => "user", "content" => "hi"}],
+        snapshots: [
+          %{
+            id: "s1",
+            label: "L1",
+            timestamp: nil,
+            model: "m",
+            messages: [%{"role" => "tool", "tool_call_id" => "c", "content" => nested}]
+          }
+        ]
+      }
+
+      assert {:ok, narrative} = SessionLmml.encode(session_state, "snap")
+      assert String.contains?(narrative, "\\u0040\\u0040\\u0040")
+      assert {:ok, _decoded} = SessionLmml.decode(narrative)
+    end
   end
 
   describe "decode/1" do
