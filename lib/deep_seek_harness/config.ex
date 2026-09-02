@@ -26,6 +26,13 @@ defmodule DeepSeekHarness.Config do
     # Assumed model context window size (tokens) used by the status bar's
     # usage gauge. Override per-workspace if DeepSeek's limits change.
     "max_context_tokens" => 64_000,
+    # Maximum number of tokens to request per API completion call (sent as
+    # the `max_tokens` field on each DeepSeek chat-completions request). This
+    # bounds the length of a single model response. It is configurable so
+    # users can tune it per model/provider; set it to `null` to omit the
+    # parameter and let the provider apply its own default. Override globally
+    # in ~/.dsh/config.json (or per workspace in .dsh/config.json).
+    "max_tokens" => nil,
     # Model pricing, expressed as USD per 1,000,000 tokens, used to compute
     # the estimated session cost shown by the status bar gauge, /cost, and
     # /stats. Defaults to DeepSeek's published V3 rates (prompt $0.14/1M,

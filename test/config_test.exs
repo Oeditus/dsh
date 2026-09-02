@@ -47,6 +47,20 @@ defmodule DeepSeekHarness.ConfigTest do
     File.rm_rf!(tmp_dir)
   end
 
+  test "defaults max_tokens to nil and allows workspace override" do
+    # By default no per-request max_tokens is set, so the provider's own
+    # default (rather than a hardcoded value) applies for each request.
+    assert Config.load_config()["max_tokens"] == nil
+
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "config_maxtokens_test_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(tmp_dir)
+    assert :ok = Config.save_config(%{"max_tokens" => 64_000}, tmp_dir)
+    assert Config.load_config(tmp_dir)["max_tokens"] == 64_000
+
+    File.rm_rf!(tmp_dir)
+  end
   test "discovers project rules if present or returns empty string" do
     rules = Config.discover_project_rules()
     assert is_binary(rules)

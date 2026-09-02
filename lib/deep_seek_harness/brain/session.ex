@@ -192,6 +192,10 @@ defmodule DeepSeekHarness.Brain.Session do
       step_count: 0,
       max_tool_depth:
         opts[:max_tool_depth] || Map.get(Config.load_config(cwd), "max_tool_depth", 100),
+      # Optional per-request completion-token cap, read from config
+      # ("max_tokens") and forwarded to the DeepSeek API on each call.
+      # `nil` means "not set" and the field is omitted from requests.
+      max_tokens: opts[:max_tokens] || Map.get(Config.load_config(cwd), "max_tokens"),
       total_prompt_tokens: 0,
       total_completion_tokens: 0,
       turn_history: [],
@@ -316,6 +320,13 @@ defmodule DeepSeekHarness.Brain.Session do
   @impl true
   def handle_call(:compact_context, _from, state) do
     opts = [model: state.model, api_key: state.api_key]
+
+    opts =
+      if is_integer(state.max_tokens) and state.max_tokens > 0 do
+        Keyword.put(opts, :max_tokens, state.max_tokens)
+      else
+        opts
+      end
 
     case ContextCompressor.compress_messages(state.messages, opts) do
       {:ok, new_messages, summary} ->
@@ -741,6 +752,14 @@ defmodule DeepSeekHarness.Brain.Session do
 
   defp run_agent_loop(state, depth) do
     opts = [model: state.model, api_key: state.api_key]
+
+    opts =
+      if is_integer(state.max_tokens) and state.max_tokens > 0 do
+        Keyword.put(opts, :max_tokens, state.max_tokens)
+      else
+        opts
+      end
+
     sanitized_messages = sanitize_messages(state.messages)
 
     case DeepSeekAPI.chat_completion(sanitized_messages, state.tools, opts) do

@@ -753,6 +753,12 @@ defmodule DeepSeekHarness.CLI.Repl do
     to `.dsh/config.json`. While the agent is "thinking", the spinner also shows
     elapsed turn time and the live OTP parallel task count.
 
+    Cap how many tokens each API request may generate by adding
+    `"max_tokens": <n>` to `.dsh/config.json` (or `~/.dsh/config.json`). The
+    value is sent as the `max_tokens` field on every DeepSeek chat-completions
+    request. Omit it (or set `null`) to let the provider apply its own default;
+    tune it per model/provider (e.g. `deepseek-reasoner`) as needed.
+
     Set the model's per-million-token prices (used for the status bar cost
     gauge, `/cost`, and `/stats`) by adding `"price_per_million_prompt_tokens": <n>`
     and `"price_per_million_completion_tokens": <n>` to `~/.dsh/config.json`

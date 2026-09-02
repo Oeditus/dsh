@@ -15,6 +15,10 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
               api_key: nil,
               endpoint: "https://api.deepseek.com/chat/completions",
               temperature: 0.7,
+              # Optional per-request cap on generated completion tokens
+              # (sent as `max_tokens`). `nil` omits the field so the
+              # provider's own default applies.
+              max_tokens: nil,
               stream: false,
               stream_fun: nil,
               mock: false
@@ -53,6 +57,7 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
       api_key: opts[:api_key] || System.get_env("DEEPSEEK_API_KEY"),
       endpoint: opts[:endpoint] || @default_endpoint,
       temperature: opts[:temperature] || 0.7,
+      max_tokens: opts[:max_tokens],
       stream: opts[:stream] || false,
       stream_fun: opts[:stream_fun],
       mock: mock_default
@@ -67,6 +72,15 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
       "messages" => messages,
       "temperature" => config.temperature
     }
+
+    # Only send `max_tokens` when explicitly configured (a positive integer),
+    # so callers that don't set it keep the provider's own default behavior.
+    body =
+      if is_integer(config.max_tokens) and config.max_tokens > 0 do
+        Map.put(body, "max_tokens", config.max_tokens)
+      else
+        body
+      end
 
     body =
       if Enum.empty?(formatted_tools) do

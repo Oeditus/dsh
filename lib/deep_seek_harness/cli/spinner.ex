@@ -203,13 +203,20 @@ defmodule DeepSeekHarness.CLI.Spinner do
 
   @impl true
   def handle_call(:get_current_line, _from, state) do
+    # `current_line/0` reports what the spinner would render right now. It is
+    # a pure query of state, so it does NOT depend on `enabled?` (whether this
+    # process is attached to a real terminal and actually writing frames) --
+    # that flag only gates the write path (`render_frame`/`clear_line`). Gating
+    # the query on it made the getter return "" in non-TTY test/CI runs even
+    # though the spinner was active and unpaused. Only an explicit `pause`
+    # suppresses the current line.
     line =
-      if state.enabled? and not state.paused do
+      if state.paused do
+        ""
+      else
         frame = Enum.at(@frames, state.frame_idx)
         raw_line = format_line(frame, state.title, state.tip, status_extra(state))
         truncate_line(raw_line, terminal_cols() - 1)
-      else
-        ""
       end
 
     {:reply, line, state}
