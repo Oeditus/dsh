@@ -15,8 +15,10 @@ defmodule DeepSeekHarness.Brain.Session do
   alias DeepSeekHarness.Client.DeepSeekAPI
   alias DeepSeekHarness.Config
   alias DeepSeekHarness.Hands.Executor, as: HandsExecutor
+  alias DeepSeekHarness.PlanGate
   alias DeepSeekHarness.Plugin.Loader, as: PluginLoader
   alias DeepSeekHarness.TaskEngine.TaskSupervisor
+  alias DeepSeekHarness.Workflow.Plan, as: WorkflowPlan
 
   @default_system_prompt """
   You are an expert agentic AI coding assistant powered by DeepSeek.
@@ -192,6 +194,17 @@ defmodule DeepSeekHarness.Brain.Session do
       step_count: 0,
       max_tool_depth:
         opts[:max_tool_depth] || Map.get(Config.load_config(cwd), "max_tool_depth", 100),
+      # Hardcoded "plan -> approve -> execute" gate for non-trivial tasks. The
+      # gate is default-ON and read from config (`plan_gate_enabled`,
+      # `plan_gate_threshold`). `plan_approved_for_turn` is set true once the
+      # user approves a plan for the current agent turn, so later tool-call
+      # batches in the SAME turn don't re-prompt. Subagent and workflow
+      # sessions keep their own behavior (they never arm the gate).
+      plan_gate_enabled:
+        opts[:plan_gate_enabled] || Map.get(Config.load_config(cwd), "plan_gate_enabled", true),
+      plan_gate_threshold:
+        opts[:plan_gate_threshold] || Map.get(Config.load_config(cwd), "plan_gate_threshold", 2),
+      plan_approved_for_turn: false,
       # Optional per-request completion-token cap, read from config
       # ("max_tokens") and forwarded to the DeepSeek API on each call.
       # `nil` means "not set" and the field is omitted from requests.
@@ -269,6 +282,10 @@ defmodule DeepSeekHarness.Brain.Session do
       end
 
     state = %{state | messages: state.messages ++ [user_msg], status: :thinking}
+
+    # A fresh user turn starts with no approved plan; the plan gate may arm
+    # once this turn's tool calls look non-trivial.
+    state = %{state | plan_approved_for_turn: false}
 
     state = auto_checkpoint(state, "Pre-turn ##{state.step_count + 1}")
 
@@ -512,6 +529,8 @@ defmodule DeepSeekHarness.Brain.Session do
       hands_target: state.hands.remote_node || state.hands.docker_container || "local",
       tools_count: length(state.tools),
       status: state.status,
+      plan_gate_enabled: state.plan_gate_enabled,
+      plan_gate_threshold: state.plan_gate_threshold,
       serving_processes: proc_status.total_serving_processes,
       active_task_workers: proc_status.active_task_workers,
       serving_report: DeepSeekHarness.report_serving_processes(),
@@ -811,16 +830,164 @@ defmodule DeepSeekHarness.Brain.Session do
 
       run_agent_loop(state_with_feedback, depth - 1)
     else
-      {tool_messages, updated_hands_state} = execute_tool_calls(tool_calls, state_after_assistant)
+      state_after_gate =
+        maybe_run_plan_gate(tool_calls, state_after_assistant)
 
-      state_after_tools = %{
-        updated_hands_state
-        | messages: updated_hands_state.messages ++ tool_messages,
-          step_count: updated_hands_state.step_count + 1
-      }
+      case state_after_gate do
+        {:denied, denied_state} ->
+          {{:error, "Turn stopped by user: plan was not approved for a non-trivial task."},
+           %{denied_state | status: :idle}}
 
-      run_agent_loop(state_after_tools, depth - 1)
+        {:ok, gated_state} ->
+          {tool_messages, updated_hands_state} = execute_tool_calls(tool_calls, gated_state)
+
+          state_after_tools = %{
+            updated_hands_state
+            | messages: updated_hands_state.messages ++ tool_messages,
+              step_count: updated_hands_state.step_count + 1
+          }
+
+          run_agent_loop(state_after_tools, depth - 1)
+      end
     end
+  end
+
+  # ---------------------------------------------------------------------
+  # Hardcoded "plan -> approve -> execute" gate for non-trivial tasks
+  # ---------------------------------------------------------------------
+
+  # Returns `{:ok, state}` to continue executing (either the gate did not
+  # fire, or the user approved the plan), or `{:denied, state}` to stop the
+  # turn because the user denied the plan for a non-trivial batch of tool
+  # calls.
+  defp maybe_run_plan_gate(tool_calls, state) do
+    if plan_gate_active?(state) and PlanGate.needs_plan?(tool_calls, state.plan_gate_threshold) do
+      case request_plan_approval(state) do
+        {:approved, approved_state} -> {:ok, approved_state}
+        {:denied, denied_state} -> {:denied, denied_state}
+      end
+    else
+      {:ok, state}
+    end
+  end
+
+  # The gate is armed only for the main interactive session's own user turns:
+  # it must be enabled in config, the session must be a top-level session (not
+  # a `sub_*` subagent or `workflow-*` workflow Brain), and no plan may yet
+  # have been approved for the current turn.
+  defp plan_gate_active?(state) do
+    state.plan_gate_enabled and not state.plan_approved_for_turn and
+      top_level_session?(state.session_id)
+  end
+
+  defp top_level_session?(session_id) when is_binary(session_id) do
+    not (String.starts_with?(session_id, "sub_") or
+           String.starts_with?(session_id, "workflow-"))
+  end
+
+  defp top_level_session?(_), do: false
+
+  # Drafts a plan from the user's own most recent request, shows it for
+  # approval via the paused question modal, and returns `{:approved, state}`
+  # (with the approved plan injected into the conversation so the model
+  # executes against it) or `{:denied, state}`.
+  defp request_plan_approval(state) do
+    task_text = latest_user_request(state)
+
+    plan =
+      case WorkflowPlan.draft(task_text, model: state.model, api_key: state.api_key) do
+        {:ok, plan} -> plan
+        {:error, reason} -> %{"summary" => "(plan drafting failed: #{reason})", "steps" => []}
+      end
+
+    rendered = PlanGate.render_plan(plan)
+
+    question =
+      "This task looks non-trivial (several file-modifying actions). " <>
+        "Here is the proposed plan -- approve it before I proceed:\n\n#{rendered}"
+
+    options = ["Approve & execute", "Request changes", "Deny"]
+
+    answer =
+      DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+        DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(question, options, false)
+      end)
+
+    decision =
+      case answer do
+        %{selected: [sel]} -> PlanGate.decision_from_selection(sel)
+        %{custom: custom} when is_binary(custom) and custom != "" -> :request_changes
+        _ -> :deny
+      end
+
+    case decision do
+      :approve ->
+        approved_state = inject_approved_plan(state, rendered)
+        {:approved, %{approved_state | plan_approved_for_turn: true}}
+
+      :request_changes ->
+        handle_plan_revisions(state, plan, rendered)
+
+      _ ->
+        {:denied, state}
+    end
+  end
+
+  # When the user asks for changes, prompt for their concrete feedback and
+  # fold it into the plan (asking again). If they cancel or give nothing,
+  # treat as denied.
+  defp handle_plan_revisions(state, _plan, rendered) do
+    feedback =
+      DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+        DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
+          "Approved plan needs changes. What should change? (type your feedback)",
+          ["Approve as-is anyway", "Deny"],
+          false
+        )
+      end)
+
+    custom =
+      case feedback do
+        %{custom: text} when is_binary(text) and text != "" -> text
+        _ -> ""
+      end
+
+    cond do
+      custom != "" ->
+        # Fold the user's feedback into the conversation so the model revises
+        # its approach accordingly, then treat the plan as approved with the
+        # requested changes noted.
+        amended = rendered <> "\n\n### User amendments\n#{custom}"
+        approved_state = inject_approved_plan(state, amended)
+        {:approved, %{approved_state | plan_approved_for_turn: true}}
+
+      true ->
+        {:denied, state}
+    end
+  end
+
+  # Appends the approved/amended plan as a user-role message so the model is
+  # instructed to execute against it (rather than improvising).
+  defp inject_approved_plan(state, rendered) do
+    notice = %{
+      "role" => "user",
+      "content" =>
+        "PLAN APPROVED. Execute this plan now. Do not improvise beyond it:\n\n#{rendered}"
+    }
+
+    %{state | messages: state.messages ++ [notice]}
+  end
+
+  # The user's own most recent plain request, used as the seed for planning.
+  defp latest_user_request(state) do
+    state.messages
+    |> Enum.reverse()
+    |> Enum.find_value("", fn
+      %{"role" => "user", "content" => content} when is_binary(content) -> content
+      _ -> nil
+    end)
+    |> String.replace_prefix("=== Prompt & Execution Rules ===", "")
+    |> String.trim()
   end
 
   @doc "Sanitizes message history to ensure all assistant tool_calls are followed by matching tool response messages."

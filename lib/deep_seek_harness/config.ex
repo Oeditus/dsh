@@ -46,7 +46,15 @@ defmodule DeepSeekHarness.Config do
     # will run before pausing to ask the user whether to continue. Override
     # per-workspace (or globally) by adding "max_tool_depth": <n> to
     # .dsh/config.json (or ~/.dsh/config.json).
-    "max_tool_depth" => 100
+    "max_tool_depth" => 100,
+    # These enforce the built-in "plan -> approve -> execute" gate for
+    # non-trivial tasks. The gate is default-ON: once a task requires more
+    # than `plan_gate_threshold` modifying tool calls, DSH pauses to present
+    # a plan and require explicit approval before proceeding. Override by
+    # adding "plan_gate_enabled": <bool> / "plan_gate_threshold": <n> to
+    # .dsh/config.json (or ~/.dsh/config.json).
+    "plan_gate_enabled" => true,
+    "plan_gate_threshold" => 2
   }
 
   @doc "Loads combined configuration (global + workspace override)."

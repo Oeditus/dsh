@@ -57,7 +57,11 @@ defmodule DeepSeekHarness.Workflow.Steps.TaskSplit do
     end
   end
 
-  @doc "Builds the LLM prompt asking for a JSON, non-clashing subtask split proposal."
+  @doc """
+  Builds the LLM prompt asking for a JSON, non-clashing subtask split proposal.
+  Also reused by `Workflow.Plan.draft/2` (the session plan gate), which calls
+  this directly rather than through a workflow run.
+  """
   def split_prompt(description) do
     """
     Given the following task specification, decide whether it can be split \
@@ -78,7 +82,12 @@ defmodule DeepSeekHarness.Workflow.Steps.TaskSplit do
     """
   end
 
-  @doc false
+  @doc """
+  Turns a model response into a split plan map `%{"subtasks" => [...]}`,
+  collapsing unparseable/declined/single-subtask responses to
+  `%{"subtasks" => []}`. Also reused by `Workflow.Plan.draft/2` (the session
+  plan gate) to derive the plan's `"steps"` list.
+  """
   def build_plan(model_text) do
     case extract_subtasks(model_text) do
       {:ok, subtasks} when length(subtasks) > 1 ->
@@ -95,6 +104,8 @@ defmodule DeepSeekHarness.Workflow.Steps.TaskSplit do
   :unparseable}` for anything that doesn't decode into the expected
   shape, so callers can fall back to running the task as a single unit
   rather than crashing on a malformed/mocked model response.
+
+  Also reused by `Workflow.Plan.draft/2` (the session plan gate).
   """
   def extract_subtasks(text) when is_binary(text) do
     with {:ok, json_text} <- extract_json_object(text),
@@ -129,7 +140,10 @@ defmodule DeepSeekHarness.Workflow.Steps.TaskSplit do
     |> String.trim("-")
   end
 
-  @doc "Extracts the first top-level `{...}` JSON object substring from arbitrary text."
+  @doc """
+  Extracts the first top-level `{...}` JSON object substring from arbitrary text.
+  Also reused by `Workflow.Plan.draft/2` (the session plan gate).
+  """
   def extract_json_object(text) do
     case Regex.run(~r/\{.*\}/s, text) do
       [json] -> {:ok, json}

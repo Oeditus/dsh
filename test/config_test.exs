@@ -47,6 +47,28 @@ defmodule DeepSeekHarness.ConfigTest do
     File.rm_rf!(tmp_dir)
   end
 
+  test "defaults plan gate to enabled with threshold 2" do
+    config = Config.load_config()
+    assert config["plan_gate_enabled"] == true
+    assert config["plan_gate_threshold"] == 2
+  end
+
+  test "allows overriding plan gate defaults in config" do
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "config_plangate_test_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(tmp_dir)
+
+    cfg = %{"plan_gate_enabled" => false, "plan_gate_threshold" => 5}
+    assert :ok = Config.save_config(cfg, tmp_dir)
+
+    loaded = Config.load_config(tmp_dir)
+    assert loaded["plan_gate_enabled"] == false
+    assert loaded["plan_gate_threshold"] == 5
+
+    File.rm_rf!(tmp_dir)
+  end
+
   test "defaults max_tokens to nil and allows workspace override" do
     # By default no per-request max_tokens is set, so the provider's own
     # default (rather than a hardcoded value) applies for each request.
@@ -61,6 +83,7 @@ defmodule DeepSeekHarness.ConfigTest do
 
     File.rm_rf!(tmp_dir)
   end
+
   test "discovers project rules if present or returns empty string" do
     rules = Config.discover_project_rules()
     assert is_binary(rules)

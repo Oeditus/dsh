@@ -845,6 +845,50 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/plan on", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+    updated = Map.put(cfg, "plan_gate_enabled", true)
+    DeepSeekHarness.Config.save_config(updated)
+
+    IO.puts(
+      Formatter.format_success(
+        "Plan gate ENABLED (threshold: #{cfg["plan_gate_threshold"]} modifying tool calls)"
+      )
+    )
+
+    :continue
+  end
+
+  def handle_input("/plan off", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+    updated = Map.put(cfg, "plan_gate_enabled", false)
+    DeepSeekHarness.Config.save_config(updated)
+    IO.puts(Formatter.format_success("Plan gate DISABLED"))
+    :continue
+  end
+
+  def handle_input("/plan status", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+    plan_gate_status(cfg)
+    :continue
+  end
+
+  def handle_input("/plan", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+    plan_gate_status(cfg)
+    :continue
+  end
+
+  def handle_input("/plan " <> other, _session_pid, _session_id) do
+    other = String.trim(other)
+
+    IO.puts(
+      Formatter.format_error("Unknown /plan option '#{other}'. Usage: /plan [on | off | status]")
+    )
+
+    :continue
+  end
+
   def handle_input("/mode " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 
@@ -1445,6 +1489,22 @@ defmodule DeepSeekHarness.CLI.Repl do
     end
 
     :continue
+  end
+
+  defp plan_gate_status(cfg) do
+    enabled = Map.get(cfg, "plan_gate_enabled", true)
+    threshold = Map.get(cfg, "plan_gate_threshold", 2)
+
+    state =
+      if enabled do
+        "enabled"
+      else
+        "disabled"
+      end
+
+    IO.puts(
+      Formatter.format_info("Plan gate: #{state} (threshold: #{threshold} modifying tool calls)")
+    )
   end
 
   defp handle_rules_delete do

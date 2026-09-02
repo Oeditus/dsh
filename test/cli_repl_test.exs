@@ -71,4 +71,32 @@ defmodule DeepSeekHarness.CLIReplTest do
     assert {:switch_session, ^target_id, _} =
              Repl.handle_input("/session resume " <> target_id, pid, id)
   end
+
+  test "handles /plan slash commands without writing to the repo config", %{
+    session_pid: pid,
+    session_id: id
+  } do
+    # The /plan on|off handlers persist to the workspace .dsh/config.json
+    # (cwd "."), which would pollute the repo. Back up any existing file and
+    # restore it afterwards to keep the workspace clean.
+    cfg_path = Path.join(File.cwd!(), ".dsh/config.json")
+    backup_path = cfg_path <> ".repl_test_backup"
+
+    if File.exists?(cfg_path) do
+      File.cp!(cfg_path, backup_path)
+    end
+
+    on_exit(fn ->
+      if File.exists?(backup_path) do
+        File.rm(cfg_path)
+        File.rename!(backup_path, cfg_path)
+      end
+    end)
+
+    assert :continue = Repl.handle_input("/plan status", pid, id)
+    assert :continue = Repl.handle_input("/plan", pid, id)
+    assert :continue = Repl.handle_input("/plan on", pid, id)
+    assert :continue = Repl.handle_input("/plan off", pid, id)
+    assert :continue = Repl.handle_input("/plan foo", pid, id)
+  end
 end

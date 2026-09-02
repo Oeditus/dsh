@@ -37,7 +37,11 @@ defmodule DeepSeekHarness.Workflow.Steps.TaskDescription do
     end
   end
 
-  @doc "Builds the LLM prompt used to turn a raw request into a structured task specification."
+  @doc """
+  Builds the LLM prompt used to turn a raw request into a structured task
+  specification. Also reused by `Workflow.Plan.draft/2` (the session plan
+  gate), which calls this directly rather than through a workflow run.
+  """
   def prompt(seed) do
     """
     Summarize the following task request into a clear, structured task \
