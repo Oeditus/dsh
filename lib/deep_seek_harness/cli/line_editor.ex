@@ -24,6 +24,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   alias DeepSeekHarness.CLI.Formatter
   alias DeepSeekHarness.CLI.TerminalOwner
   alias DeepSeekHarness.Config
+  alias DeepSeekHarness.TaskEngine.PackageTracker
 
   @slash_commands [
     "/cb",
@@ -172,9 +173,9 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
       _ ->
         template = Map.get(config, "prompt_format", "user@{session} [{model}]> ")
-        active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
-        task_count = length(active_tasks)
-        task_str = if task_count > 0, do: "󱐋#{task_count} running", else: "idle"
+
+        task_str =
+          if running_units_count() > 0, do: "󱐋#{running_units_count()} running", else: "idle"
 
         template
         |> String.replace("{session}", session_id)
@@ -229,12 +230,9 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     branch_str = if branch != "", do: " 󰘬 #{branch}", else: ""
     sandbox = if sandbox?, do: " 󰌾 sandbox", else: ""
 
-    active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
-    task_count = length(active_tasks)
-
     task_badge =
-      if task_count > 0 do
-        " #{Formatter.yellow()}⚡#{task_count} running#{Formatter.reset()}"
+      if running_units_count() > 0 do
+        " #{Formatter.yellow()}⚡#{running_units_count()} running#{Formatter.reset()}"
       else
         ""
       end
@@ -1196,12 +1194,13 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   #   3. A plain dim divider, when the status bar is disabled entirely
   defp ruler_line(context) do
     cols = terminal_cols()
+    packages = PackageTracker.list()
     active_tasks = DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks()
 
     ruler =
       cond do
-        not Enum.empty?(active_tasks) ->
-          task_badge_ruler(cols, active_tasks)
+        packages != [] or active_tasks != [] ->
+          activity_badge_ruler(cols, packages, active_tasks)
 
         context_gauge_enabled?() and is_map(context) and map_size(context) > 0 ->
           idle_status_ruler(cols, context)
@@ -1224,9 +1223,15 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     Formatter.dim() <> String.duplicate("─", max(10, cols - 1)) <> Formatter.reset()
   end
 
-  defp task_badge_ruler(cols, active_tasks) do
-    count = length(active_tasks)
-    summaries = Enum.map_join(active_tasks, ", ", fn t -> t.summary end)
+  # Renders the status-bar badge for in-flight work: named parallel packages
+  # (async subagents, workflow subtasks) take precedence and are shown by
+  # label, with any individual tool-call workers appended after them.
+  defp activity_badge_ruler(cols, packages, active_tasks) do
+    package_labels = Enum.map(packages, fn p -> p.label end)
+    task_summaries = Enum.map(active_tasks, fn t -> t.summary end)
+    units = package_labels ++ task_summaries
+    count = length(units)
+    summaries = Enum.join(units, ", ")
     raw_badge = " 󱐋 #{count} running: #{summaries} "
 
     max_allowed = max(10, cols - 12)
@@ -1316,6 +1321,13 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
   defp context_gauge_enabled? do
     Map.get(Config.load_config(), "enable_context_gauge", true)
+  end
+
+  # Total in-flight units (named packages + individual tool-call workers) for
+  # the prompt's "N running" badge.
+  defp running_units_count do
+    length(PackageTracker.list()) +
+      length(DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks())
   end
 
   # DeepSeek's chat/reasoner models currently expose a 64K-token context

@@ -405,41 +405,61 @@ defmodule DeepSeekHarness.Brain.Session do
       parent_pid = self()
 
       Task.start(fn ->
+        DeepSeekHarness.TaskEngine.PackageTracker.register(
+          "sub: " <> DeepSeekHarness.TaskEngine.PackageTracker.derive_label(prompt),
+          :subagent,
+          id: sub_id
+        )
+
+        try do
+          case DeepSeekHarness.Brain.SessionSupervisor.start_session(
+                 session_id: sub_id,
+                 model: state.model,
+                 cwd: state.cwd
+               ) do
+            {:ok, sub_pid} ->
+              res = send_user_message(sub_pid, prompt)
+              send(parent_pid, {:subagent_completed, sub_id, res})
+              DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
+
+            {:error, err} ->
+              send(parent_pid, {:subagent_completed, sub_id, {:error, err}})
+          end
+        after
+          DeepSeekHarness.TaskEngine.PackageTracker.unregister()
+        end
+      end)
+
+      {:reply, {:ok, "Subagent '#{sub_id}' spawned asynchronously."}, state}
+    else
+      DeepSeekHarness.TaskEngine.PackageTracker.register(
+        "sub: " <> DeepSeekHarness.TaskEngine.PackageTracker.derive_label(prompt),
+        :subagent,
+        id: sub_id
+      )
+
+      try do
         case DeepSeekHarness.Brain.SessionSupervisor.start_session(
                session_id: sub_id,
                model: state.model,
                cwd: state.cwd
              ) do
           {:ok, sub_pid} ->
-            res = send_user_message(sub_pid, prompt)
-            send(parent_pid, {:subagent_completed, sub_id, res})
-            DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
+            case send_user_message(sub_pid, prompt) do
+              {:ok, response} ->
+                DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
+                {:reply, {:ok, response.content}, state}
+
+              {:error, err} ->
+                DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
+                {:reply, {:error, err}, state}
+            end
 
           {:error, err} ->
-            send(parent_pid, {:subagent_completed, sub_id, {:error, err}})
+            {:reply, {:error, "Failed to spawn subagent: #{inspect(err)}"}, state}
         end
-      end)
-
-      {:reply, {:ok, "Subagent '#{sub_id}' spawned asynchronously."}, state}
-    else
-      case DeepSeekHarness.Brain.SessionSupervisor.start_session(
-             session_id: sub_id,
-             model: state.model,
-             cwd: state.cwd
-           ) do
-        {:ok, sub_pid} ->
-          case send_user_message(sub_pid, prompt) do
-            {:ok, response} ->
-              DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
-              {:reply, {:ok, response.content}, state}
-
-            {:error, err} ->
-              DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
-              {:reply, {:error, err}, state}
-          end
-
-        {:error, err} ->
-          {:reply, {:error, "Failed to spawn subagent: #{inspect(err)}"}, state}
+      after
+        DeepSeekHarness.TaskEngine.PackageTracker.unregister()
       end
     end
   end

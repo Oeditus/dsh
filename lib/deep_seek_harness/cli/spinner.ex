@@ -325,21 +325,39 @@ defmodule DeepSeekHarness.CLI.Spinner do
   end
 
   # Builds the live "(elapsed) ⚡N parallel" fragment shown while the spinner
-  # runs, surfacing the OTP TaskEngine's real-time parallel task count and
-  # how long the current turn has been running.
+  # runs, surfacing the OTP TaskEngine's real-time parallel task count AND any
+  # named packages (async subagents, workflow subtasks) currently running, so
+  # the user stays aware of what is in flight.
   defp status_extra(state) do
     elapsed = format_elapsed(System.monotonic_time(:millisecond) - Map.get(state, :start_time, 0))
 
-    task_str =
-      case DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks() do
-        [] ->
-          ""
+    packages = DeepSeekHarness.TaskEngine.PackageTracker.list()
 
-        tasks ->
-          " #{Formatter.yellow()}⚡#{length(tasks)} parallel#{Formatter.reset()}"
+    tasks =
+      case DeepSeekHarness.TaskEngine.Supervisor.list_active_tasks() do
+        [] -> []
+        ts -> ts
       end
 
-    "#{Formatter.dim()}(#{elapsed})#{Formatter.reset()}#{task_str}"
+    unit_count = length(packages) + length(tasks)
+
+    labels = Enum.map(packages, fn p -> p.label end)
+    summaries = Enum.map(tasks, fn t -> t.summary end)
+
+    detail =
+      case labels ++ summaries do
+        [] -> ""
+        list -> " (" <> Enum.join(list, ", ") <> ")"
+      end
+
+    task_str =
+      if unit_count > 0 do
+        " #{Formatter.yellow()}⚡#{unit_count} running#{Formatter.reset()}"
+      else
+        ""
+      end
+
+    "#{Formatter.dim()}(#{elapsed})#{Formatter.reset()}#{task_str}#{Formatter.dim()}#{detail}#{Formatter.reset()}"
   rescue
     _ -> ""
   end

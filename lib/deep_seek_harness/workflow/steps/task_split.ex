@@ -242,16 +242,31 @@ defmodule DeepSeekHarness.Workflow.Steps.TaskSplit do
     branch = "#{context.branch}/subtask/#{id}"
     worktree = Path.join(base_dir, "#{Path.basename(context.branch)}-#{id}")
 
-    with {:ok, _} <- Git.add_worktree(worktree, branch, context.cwd),
-         :ok <- Store.write_subtask_field!(context.run_id, id, "branch", branch, context.cwd),
-         :ok <- Store.write_subtask_field!(context.run_id, id, "worktree", worktree, context.cwd),
-         {:ok, exec_result} <-
-           execute_agent_task(context.run_id, subtask["summary"], worktree, id),
-         {:ok, _tests_summary} <- TestsAndDocs.run_for(worktree, context.run_id, id) do
-      Store.write_subtask_result!(context.run_id, id, exec_result, context.cwd)
-      {:ok, %{"id" => id, "branch" => branch, "worktree" => worktree, "result" => exec_result}}
-    else
-      {:error, reason} -> {:error, "Subtask '#{id}' failed: #{reason}"}
+    # Surface this parallel subtask as a running "package" in the status bar
+    # while it executes; registration is process-linked to this subtask's Task,
+    # so it auto-unregisters when the subtask finishes or crashes.
+    DeepSeekHarness.TaskEngine.PackageTracker.register(
+      "[#{id}] " <> DeepSeekHarness.TaskEngine.PackageTracker.derive_label(subtask["summary"]),
+      :workflow_subtask,
+      id: "wf-subtask-#{id}"
+    )
+
+    try do
+      with {:ok, _} <- Git.add_worktree(worktree, branch, context.cwd),
+           :ok <- Store.write_subtask_field!(context.run_id, id, "branch", branch, context.cwd),
+           :ok <-
+             Store.write_subtask_field!(context.run_id, id, "worktree", worktree, context.cwd),
+           {:ok, exec_result} <-
+             execute_agent_task(context.run_id, subtask["summary"], worktree, id),
+           {:ok, _tests_summary} <- TestsAndDocs.run_for(worktree, context.run_id, id) do
+        Store.write_subtask_result!(context.run_id, id, exec_result, context.cwd)
+
+        {:ok, %{"id" => id, "branch" => branch, "worktree" => worktree, "result" => exec_result}}
+      else
+        {:error, reason} -> {:error, "Subtask '#{id}' failed: #{reason}"}
+      end
+    after
+      DeepSeekHarness.TaskEngine.PackageTracker.unregister()
     end
   end
 

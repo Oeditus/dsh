@@ -505,18 +505,31 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
   end
 
   defp run_subagent_turn(sub_id, model, cwd, prompt) do
-    case DeepSeekHarness.Brain.SessionSupervisor.start_session(
-           session_id: sub_id,
-           model: model,
-           cwd: cwd
-         ) do
-      {:ok, sub_pid} ->
-        result = DeepSeekHarness.Brain.Session.send_user_message(sub_pid, prompt)
-        DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
-        result
+    # Register this subagent as a running "package" so the status bar & spinner
+    # surface it while it works; registration is process-linked to this Task, so
+    # it auto-unregisters when the turn finishes (or crashes).
+    DeepSeekHarness.TaskEngine.PackageTracker.register(
+      "sub: " <> DeepSeekHarness.TaskEngine.PackageTracker.derive_label(prompt),
+      :subagent,
+      id: sub_id
+    )
 
-      {:error, err} ->
-        {:error, "Failed to spawn subagent: #{inspect(err)}"}
+    try do
+      case DeepSeekHarness.Brain.SessionSupervisor.start_session(
+             session_id: sub_id,
+             model: model,
+             cwd: cwd
+           ) do
+        {:ok, sub_pid} ->
+          result = DeepSeekHarness.Brain.Session.send_user_message(sub_pid, prompt)
+          DeepSeekHarness.Brain.SessionSupervisor.stop_session(sub_pid)
+          result
+
+        {:error, err} ->
+          {:error, "Failed to spawn subagent: #{inspect(err)}"}
+      end
+    after
+      DeepSeekHarness.TaskEngine.PackageTracker.unregister()
     end
   end
 

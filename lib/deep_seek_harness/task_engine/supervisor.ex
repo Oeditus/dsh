@@ -16,7 +16,11 @@ defmodule DeepSeekHarness.TaskEngine.Supervisor do
     children = [
       {Task.Supervisor, name: DeepSeekHarness.TaskEngine.TaskSupervisor},
       {Registry, keys: :unique, name: DeepSeekHarness.TaskEngine.LockRegistry},
-      {Registry, keys: :duplicate, name: DeepSeekHarness.TaskEngine.TaskRegistry}
+      {Registry, keys: :duplicate, name: DeepSeekHarness.TaskEngine.TaskRegistry},
+      # Duplicate registry tracking long-running named "packages" (async
+      # subagents, workflow parallel subtasks) so the status bar & spinner
+      # can surface them. See `TaskEngine.PackageTracker`.
+      {Registry, keys: :duplicate, name: DeepSeekHarness.PackageRegistry}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
