@@ -1,5 +1,5 @@
 defmodule DeepSeekHarness.CLIReplTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias DeepSeekHarness.Brain.SessionSupervisor
   alias DeepSeekHarness.CLI.Repl
@@ -82,14 +82,20 @@ defmodule DeepSeekHarness.CLIReplTest do
     cfg_path = Path.join(File.cwd!(), ".dsh/config.json")
     backup_path = cfg_path <> ".repl_test_backup"
 
-    if File.exists?(cfg_path) do
+    existed? = File.exists?(cfg_path)
+
+    if existed? do
       File.cp!(cfg_path, backup_path)
     end
 
     on_exit(fn ->
-      if File.exists?(backup_path) do
+      if existed? do
+        if File.exists?(backup_path) do
+          File.rm(cfg_path)
+          File.rename!(backup_path, cfg_path)
+        end
+      else
         File.rm(cfg_path)
-        File.rename!(backup_path, cfg_path)
       end
     end)
 

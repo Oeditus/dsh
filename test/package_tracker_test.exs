@@ -67,13 +67,16 @@ defmodule DeepSeekHarness.TaskEngine.PackageTrackerTest do
       spawn_monitor(fn ->
         {:ok, id} = PackageTracker.register("crashy", :workflow_subtask)
         send(parent, {:registered, id})
-        # Crash immediately after registering.
-        exit(:boom)
+
+        receive do
+          :crash -> exit(:boom)
+        end
       end)
 
     assert_receive {:registered, id}, 1_000
     assert Enum.any?(PackageTracker.list(), &(&1.id == id))
 
+    send(pid, :crash)
     assert_receive {:DOWN, _ref, :process, ^pid, :boom}, 1_000
     Process.sleep(20)
     refute Enum.any?(PackageTracker.list(), &(&1.id == id))
