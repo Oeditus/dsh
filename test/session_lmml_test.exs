@@ -68,8 +68,8 @@ defmodule DeepSeekHarness.Brain.SessionLmmlTest do
       # Un-escaped, that @@@ would terminate the enclosing embed block early and
       # corrupt the narrative (see the SessionLmml.escape_json/1 doc).
       nested_lmml =
-        "# nested\n\n@@@manifest.json\n{\"session_id\":\"inner\"}\n@@@\n\n" <>
-          "@@@message.0.json\n{\"role\":\"user\",\"content\":\"hi\"}\n@@@\n"
+        ~s|# nested\n\n@@@manifest.json\n{"session_id":"inner"}\n@@@\n\n| <>
+          ~s|@@@message.0.json\n{"role":"user","content":"hi"}\n@@@\n|
 
       session_state = %{
         session_id: "esc",

@@ -112,24 +112,22 @@ defmodule DeepSeekHarness.PlanGate do
       Map.get(plan, "files", Map.get(plan, :files, []))
       |> normalize_list()
 
-    cond do
-      summary == "" and steps == [] and files == [] ->
-        "(no plan structure provided)"
-
-      true ->
-        [
-          if(summary == "", do: nil, else: "## Summary\n\n#{summary}"),
-          if(steps == [],
-            do: nil,
-            else: "## Steps\n\n" <> Enum.map_join(steps, "\n", &("- " <> &1))
-          ),
-          if(files == [],
-            do: nil,
-            else: "## Files\n\n" <> Enum.map_join(files, "\n", &("- `" <> &1 <> "`"))
-          )
-        ]
-        |> Enum.reject(&is_nil/1)
-        |> Enum.join("\n\n")
+    if summary == "" and steps == [] and files == [] do
+      "(no plan structure provided)"
+    else
+      [
+        if(summary == "", do: nil, else: "## Summary\n\n#{summary}"),
+        if(steps == [],
+          do: nil,
+          else: "## Steps\n\n" <> Enum.map_join(steps, "\n", &("- " <> &1))
+        ),
+        if(files == [],
+          do: nil,
+          else: "## Files\n\n" <> Enum.map_join(files, "\n", &("- `" <> &1 <> "`"))
+        )
+      ]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join("\n\n")
     end
   end
 

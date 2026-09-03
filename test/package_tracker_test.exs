@@ -37,7 +37,7 @@ defmodule DeepSeekHarness.TaskEngine.PackageTrackerTest do
   test "unregister removes the calling process's package" do
     parent = self()
 
-    {_pid, _ref} =
+    {pid, _ref} =
       spawn_monitor(fn ->
         {:ok, id} = PackageTracker.register("worker", :subagent)
         send(parent, {:registered, id})

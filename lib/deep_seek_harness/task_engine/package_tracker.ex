@@ -62,9 +62,7 @@ defmodule DeepSeekHarness.TaskEngine.PackageTracker do
 
   @doc "Returns a short, comma-joined label summary of all running packages."
   def list_labels do
-    list()
-    |> Enum.map(fn %{label: label} -> label end)
-    |> Enum.join(", ")
+    Enum.map_join(list(), ", ", fn %{label: label} -> label end)
   end
 
   @doc """

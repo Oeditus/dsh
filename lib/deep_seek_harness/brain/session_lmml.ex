@@ -120,8 +120,6 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
     String.replace(json, "@@@", "\\u0040\\u0040\\u0040")
   end
 
-  defp escape_json(other), do: other
-
   @doc """
   Decodes a `.lmml` narrative (or a parsed `Lmml.Bundle`) back into the
   string-keyed map shape `DeepSeekHarness.Brain.SessionStore.load_session/2`

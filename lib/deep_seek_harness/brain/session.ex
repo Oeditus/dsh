@@ -972,17 +972,15 @@ defmodule DeepSeekHarness.Brain.Session do
         _ -> ""
       end
 
-    cond do
-      custom != "" ->
-        # Fold the user's feedback into the conversation so the model revises
-        # its approach accordingly, then treat the plan as approved with the
-        # requested changes noted.
-        amended = rendered <> "\n\n### User amendments\n#{custom}"
-        approved_state = inject_approved_plan(state, amended)
-        {:approved, %{approved_state | plan_approved_for_turn: true}}
-
-      true ->
-        {:denied, state}
+    if custom != "" do
+      # Fold the user's feedback into the conversation so the model revises
+      # its approach accordingly, then treat the plan as approved with the
+      # requested changes noted.
+      amended = rendered <> "\n\n### User amendments\n#{custom}"
+      approved_state = inject_approved_plan(state, amended)
+      {:approved, %{approved_state | plan_approved_for_turn: true}}
+    else
+      {:denied, state}
     end
   end
 
