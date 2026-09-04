@@ -361,7 +361,19 @@ defmodule DeepSeekHarness.LineEditorTest do
       raw_len = String.length(String.replace(prompt_str, ~r/\e\[[0-9;]*[mGKH]/, ""))
       width = LineEditor.display_width(prompt_str)
 
-      assert width >= raw_len
+      assert width == raw_len
+      assert LineEditor.display_width("❯ ") == 2
+    end
+
+    test "positions cursor at exact prompt boundary without +1 offset" do
+      prompt_width = LineEditor.display_width("\e[36m❯\e[0m ")
+      assert prompt_width == 2
+
+      {row, col} = LineEditor.layout_cursor(prompt_width, "", 0, 80)
+      assert {row, col} == {0, 2}
+
+      {row_h, col_h} = LineEditor.layout_cursor(prompt_width, "hello", 0, 80)
+      assert {row_h, col_h} == {0, 2}
     end
   end
 

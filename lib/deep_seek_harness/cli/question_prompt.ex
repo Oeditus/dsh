@@ -37,6 +37,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
   def ask(_), do: "No questions provided."
 
+  @doc "Delegates God mode check to DeepSeekHarness.Config."
+  def god_mode?, do: DeepSeekHarness.Config.god_mode?()
+
   @doc """
   Asks a single question and returns choice result map.
 
@@ -45,15 +48,50 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   """
   def ask_single_question(question, options, is_multi \\ false, show_numbers \\ true, opts \\ []) do
     options = if is_list(options) and options != [], do: options, else: ["Yes", "No"]
-    all_options = options ++ ["Write custom response…"]
-    custom_idx = length(all_options) - 1
-    progress = Keyword.get(opts, :progress)
 
-    if tty?() do
-      prompt_tty(question, all_options, is_multi, custom_idx, show_numbers, progress)
+    if god_mode?() do
+      selected_opt =
+        Enum.find(options, Enum.at(options, 0), fn opt ->
+          String.contains?(to_string(opt), "(Recommended)")
+        end)
+
+      selected = [selected_opt]
+      write_god_mode_notice(question, selected_opt)
+      %{selected: selected}
     else
-      prompt_non_tty(question, all_options, is_multi, custom_idx, progress)
+      all_options = options ++ ["Write custom response…"]
+      custom_idx = length(all_options) - 1
+      progress = Keyword.get(opts, :progress)
+
+      if tty?() do
+        prompt_tty(question, all_options, is_multi, custom_idx, show_numbers, progress)
+      else
+        prompt_non_tty(question, all_options, is_multi, custom_idx, progress)
+      end
     end
+  end
+
+  defp write_god_mode_notice(question, selected_opt) do
+    q_short =
+      if String.length(question) > 60, do: String.slice(question, 0, 57) <> "...", else: question
+
+    target = if Process.whereis(:user), do: :user, else: :stdio
+
+    IO.write(
+      target,
+      "\r\n" <>
+        Formatter.cyan() <>
+        "⚡ [God Mode] Auto-answering question: " <>
+        Formatter.bold() <>
+        q_short <>
+        Formatter.reset() <>
+        "\r\n" <>
+        Formatter.dim() <>
+        "   Selected option: #{selected_opt}" <>
+        Formatter.reset() <> "\r\n"
+    )
+  rescue
+    _ -> :ok
   end
 
   # ---------------------------------------------------------------------

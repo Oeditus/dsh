@@ -130,6 +130,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/cb#{reset()} or #{cyan()}/clipboard#{reset()}       Copy latest assistant response to system clipboard (Markdown)
       #{cyan()}/clear#{reset()}                  Clear terminal output
       #{cyan()}/reset#{reset()}                  Reset conversation context, history, and clear screen
+      #{cyan()}/god [on|off|status]#{reset()}    Toggle God mode (auto-answer all model questions/confirmations)
       #{cyan()}/exit#{reset()} or #{cyan()}/quit#{reset()}            Exit DeepSeek Harness
 
     #{bold()}HOTKEYS:#{reset()}
@@ -272,7 +273,6 @@ defmodule DeepSeekHarness.CLI.Formatter do
   defp codepoint_width(cp) do
     cond do
       cp in 0x1100..0x115F -> 2
-      cp in 0x2600..0x27BF -> 2
       cp in 0x2E80..0x303E -> 2
       cp in 0x3041..0x33FF -> 2
       cp in 0x3400..0x4DBF -> 2

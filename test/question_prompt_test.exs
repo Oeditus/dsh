@@ -163,4 +163,38 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
       assert msg =~ "Invalid arguments"
     end
   end
+
+  describe "God Mode auto-answering" do
+    setup do
+      Application.put_env(:deep_seek_harness, :god_mode, true)
+      on_exit(fn -> Application.delete_env(:deep_seek_harness, :god_mode) end)
+      :ok
+    end
+
+    test "ask_single_question automatically selects first/recommended option in God mode" do
+      res = QuestionPrompt.ask_single_question("Which option?", ["Option A", "Option B"])
+      assert res == %{selected: ["Option A"]}
+
+      res_rec =
+        QuestionPrompt.ask_single_question("Which framework?", [
+          "Phoenix",
+          "(Recommended) Absinthe"
+        ])
+
+      assert res_rec == %{selected: ["(Recommended) Absinthe"]}
+    end
+
+    test "DefaultTools.ask_question returns auto-answered JSON without prompting user in God mode" do
+      args = %{
+        "questions" => [
+          %{"question" => "Continue build?", "options" => ["Yes", "No"]}
+        ]
+      }
+
+      assert {:ok, json} = DefaultTools.ask_question(args)
+      assert {:ok, decoded} = Jason.decode(json)
+      assert decoded["status"] == "answered"
+      assert decoded["selected_options"] == ["Yes"]
+    end
+  end
 end

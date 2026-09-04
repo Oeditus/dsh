@@ -105,5 +105,13 @@ defmodule DeepSeekHarness.CLIReplTest do
     assert :continue = Repl.handle_input("/plan on", pid, id)
     assert :continue = Repl.handle_input("/plan off", pid, id)
     assert :continue = Repl.handle_input("/plan foo", pid, id)
+
+    assert :continue = Repl.handle_input("/god status", pid, id)
+    assert :continue = Repl.handle_input("/god", pid, id)
+    assert :continue = Repl.handle_input("/god on", pid, id)
+    assert DeepSeekHarness.Config.god_mode?() == true
+    assert :continue = Repl.handle_input("/god off", pid, id)
+    assert DeepSeekHarness.Config.god_mode?() == false
+    assert :continue = Repl.handle_input("/god foo", pid, id)
   end
 end

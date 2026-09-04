@@ -907,6 +907,64 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/god on", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+    updated = Map.put(cfg, "god_mode", true)
+    DeepSeekHarness.Config.save_config(updated)
+
+    IO.puts(
+      Formatter.format_success(
+        "God mode ENABLED (all model questions and confirmations will be auto-answered without user input)"
+      )
+    )
+
+    :continue
+  end
+
+  def handle_input("/god off", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+    updated = Map.put(cfg, "god_mode", false)
+    DeepSeekHarness.Config.save_config(updated)
+    IO.puts(Formatter.format_success("God mode DISABLED"))
+    :continue
+  end
+
+  def handle_input("/god status", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+    god_mode_status(cfg)
+    :continue
+  end
+
+  def handle_input("/god toggle", _session_pid, _session_id) do
+    cfg = DeepSeekHarness.Config.load_config()
+    current = Map.get(cfg, "god_mode", false)
+    new_mode = not current
+    updated = Map.put(cfg, "god_mode", new_mode)
+    DeepSeekHarness.Config.save_config(updated)
+
+    status_str =
+      if new_mode, do: "ENABLED (all questions & confirmations auto-answered)", else: "DISABLED"
+
+    IO.puts(Formatter.format_success("God mode #{status_str}"))
+    :continue
+  end
+
+  def handle_input("/god", session_pid, session_id) do
+    handle_input("/god toggle", session_pid, session_id)
+  end
+
+  def handle_input("/god " <> other, _session_pid, _session_id) do
+    other = String.trim(other)
+
+    IO.puts(
+      Formatter.format_error(
+        "Unknown /god option '#{other}'. Usage: /god [on | off | status | toggle]"
+      )
+    )
+
+    :continue
+  end
+
   def handle_input("/mode " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 
@@ -1523,6 +1581,19 @@ defmodule DeepSeekHarness.CLI.Repl do
     IO.puts(
       Formatter.format_info("Plan gate: #{state} (threshold: #{threshold} modifying tool calls)")
     )
+  end
+
+  defp god_mode_status(cfg) do
+    enabled? = Map.get(cfg, "god_mode", false)
+
+    state =
+      if enabled? do
+        "enabled (auto-answering all model questions & confirmations)"
+      else
+        "disabled"
+      end
+
+    IO.puts(Formatter.format_info("God mode: #{state}"))
   end
 
   defp handle_rules_delete do

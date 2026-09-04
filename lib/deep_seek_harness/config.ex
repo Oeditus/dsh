@@ -54,8 +54,23 @@ defmodule DeepSeekHarness.Config do
     # adding "plan_gate_enabled": <bool> / "plan_gate_threshold": <n> to
     # .dsh/config.json (or ~/.dsh/config.json).
     "plan_gate_enabled" => true,
-    "plan_gate_threshold" => 2
+    "plan_gate_threshold" => 2,
+    # God mode switcher: when enabled, all questions and confirmations are
+    # automatically answered without user interaction. Default: false.
+    "god_mode" => false
   }
+
+  @doc "Returns true if God mode is enabled (auto-answering all model questions and confirmations)."
+  def god_mode?(cwd \\ ".") do
+    case Application.get_env(:deep_seek_harness, :god_mode) do
+      b when is_boolean(b) ->
+        b
+
+      _ ->
+        cfg = load_config(cwd)
+        Map.get(cfg, "god_mode", false) or Map.get(cfg, "god_mode_enabled", false)
+    end
+  end
 
   @doc "Loads combined configuration (global + workspace override)."
   def load_config(cwd \\ ".") do
