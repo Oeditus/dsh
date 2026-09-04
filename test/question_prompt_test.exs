@@ -1,5 +1,6 @@
 defmodule DeepSeekHarness.CLI.QuestionPromptTest do
-  use ExUnit.Case, async: true
+  # Not async: tests capture global :user IO device output
+  use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
   alias DeepSeekHarness.CLI.QuestionPrompt
