@@ -23,6 +23,16 @@ defmodule DeepSeekHarness.Git do
     end
   end
 
+  @doc "Returns absolute path to the top-level root of the git repository (git rev-parse --show-toplevel)."
+  def root_dir(cwd \\ ".") do
+    case System.cmd("git", ["rev-parse", "--show-toplevel"], cd: cwd, stderr_to_stdout: true) do
+      {out, 0} -> {:ok, String.trim(out)}
+      {out, code} -> {:error, "git rev-parse --show-toplevel exited with status #{code}: #{out}"}
+    end
+  rescue
+    e -> {:error, "Git not available: #{Exception.message(e)}"}
+  end
+
   @doc "Returns current git branch name or empty string."
   def current_branch(cwd \\ ".") do
     case System.cmd("git", ["branch", "--show-current"], cd: cwd, stderr_to_stdout: true) do

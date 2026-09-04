@@ -49,6 +49,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/plugins",
     "/quit",
     "/ragex",
+    "/reset",
     "/resume",
     "/review",
     "/rules",
@@ -325,11 +326,16 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   @doc "Moves the cursor one grapheme to the left, clamped at 0."
-  def move_left(%{cursor: cursor} = state), do: %{state | cursor: max(cursor - 1, 0)}
+  def move_left(%{cursor: cursor, buffer: buffer} = state) do
+    clamped = max(0, min(cursor, length(buffer)))
+    %{state | cursor: max(clamped - 1, 0)}
+  end
 
   @doc "Moves the cursor one grapheme to the right, clamped at buffer length."
   def move_right(%{cursor: cursor, buffer: buffer} = state) do
-    %{state | cursor: min(cursor + 1, length(buffer))}
+    len = length(buffer)
+    clamped = max(0, min(cursor, len))
+    %{state | cursor: min(clamped + 1, len)}
   end
 
   @doc "Jumps the cursor to the start of the line (Home / Ctrl+A)."
@@ -391,39 +397,47 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   @doc "Deletes the grapheme left of the cursor (Backspace)."
-  def delete_backward(%{cursor: 0} = state), do: state
-
   def delete_backward(%{buffer: buffer, cursor: cursor} = state) do
-    {left, right} = Enum.split(buffer, cursor)
-    new_left = Enum.drop(left, -1)
-    %{state | buffer: new_left ++ right, cursor: cursor - 1}
+    clamped = max(0, min(cursor, length(buffer)))
+
+    if clamped == 0 do
+      %{state | cursor: 0}
+    else
+      {left, right} = Enum.split(buffer, clamped)
+      new_left = Enum.drop(left, -1)
+      %{state | buffer: new_left ++ right, cursor: clamped - 1}
+    end
   end
 
   @doc "Deletes the grapheme at the cursor (Delete / \\e[3~)."
   def delete_forward(%{buffer: buffer, cursor: cursor} = state) do
-    {left, right} = Enum.split(buffer, cursor)
+    clamped = max(0, min(cursor, length(buffer)))
+    {left, right} = Enum.split(buffer, clamped)
 
     case right do
-      [] -> state
-      [_ | rest] -> %{state | buffer: left ++ rest}
+      [] -> %{state | cursor: clamped}
+      [_ | rest] -> %{state | buffer: left ++ rest, cursor: clamped}
     end
   end
 
   @doc "Clears the line left of the cursor (Ctrl+U)."
   def kill_to_start(%{buffer: buffer, cursor: cursor} = state) do
-    {_left, right} = Enum.split(buffer, cursor)
+    clamped = max(0, min(cursor, length(buffer)))
+    {_left, right} = Enum.split(buffer, clamped)
     %{state | buffer: right, cursor: 0}
   end
 
   @doc "Clears the line right of the cursor (Ctrl+K)."
   def kill_to_end(%{buffer: buffer, cursor: cursor} = state) do
-    {left, _right} = Enum.split(buffer, cursor)
-    %{state | buffer: left}
+    clamped = max(0, min(cursor, length(buffer)))
+    {left, _right} = Enum.split(buffer, clamped)
+    %{state | buffer: left, cursor: length(left)}
   end
 
   @doc "Deletes the word behind the cursor (Ctrl+W)."
   def delete_word_backward(%{buffer: buffer, cursor: cursor} = state) do
-    {left, right} = Enum.split(buffer, cursor)
+    clamped = max(0, min(cursor, length(buffer)))
+    {left, right} = Enum.split(buffer, clamped)
     left_str = Enum.join(left)
     new_left_str = Regex.replace(~r/\S+\s*$/, left_str, "")
     new_left = String.graphemes(new_left_str)
@@ -436,7 +450,8 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   character regardless of how they were typed.
   """
   def insert_char(%{buffer: buffer, cursor: cursor} = state, char) when is_binary(char) do
-    {left, right} = Enum.split(buffer, cursor)
+    clamped = max(0, min(cursor, length(buffer)))
+    {left, right} = Enum.split(buffer, clamped)
     new_prefix = String.graphemes(Enum.join(left) <> char)
     %{state | buffer: new_prefix ++ right, cursor: length(new_prefix)}
   end
@@ -762,6 +777,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       :ctrl_p -> raw_loop(edit_unless_searching(state, &toggle_permission_mode/1))
       :ctrl_g -> raw_loop(edit_unless_searching(state, &toggle_sandbox_mode/1))
       :ctrl_b -> raw_loop(edit_unless_searching(state, &toggle_status_bar_mode/1))
+      :ctrl_o -> raw_loop(edit_unless_searching(state, &toggle_expand_tool_calls/1))
       :ctrl_r -> raw_loop(handle_ctrl_r(state))
       :newline -> raw_loop(edit_unless_searching(state, &insert_newline/1))
       :backspace -> raw_loop(handle_backspace(state))
@@ -917,6 +933,30 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
     persist_compact_status_bar(new_val)
     %{state | context: Map.put(context, :compact_status_bar?, new_val)}
+  end
+
+  @doc "Returns true when tool call expansion mode (Ctrl+O) is toggled ON."
+  def expand_tool_calls? do
+    Application.get_env(:deep_seek_harness, :expand_tool_calls, false)
+  end
+
+  @doc "Toggles tool call expansion mode (Ctrl+O) between collapsed (truncated) and expanded (full text)."
+  def toggle_expand_tool_calls(state) do
+    current = expand_tool_calls?()
+    new_val = not current
+    Application.put_env(:deep_seek_harness, :expand_tool_calls, new_val)
+
+    status_str = if new_val, do: "expanded (full text)", else: "collapsed (truncated)"
+    msg = Formatter.format_info("Tool call log mode: #{status_str} (Ctrl+O to toggle)")
+
+    if TerminalOwner.active?() do
+      TerminalOwner.interject(msg <> "\r\n")
+    else
+      IO.puts(msg)
+    end
+
+    context = Map.get(state, :context, %{})
+    %{state | context: Map.put(context, :expand_tool_calls, new_val)}
   end
 
   defp persist_compact_status_bar(value) do
@@ -1103,6 +1143,9 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   """
   def layout_cursor(start_col, raw_text, cursor_offset, cols) do
     cols = max(cols, 1)
+    graphemes = String.graphemes(raw_text)
+    total_graphemes = length(graphemes)
+    cursor_offset = max(0, min(cursor_offset, total_graphemes))
     lines = String.split(raw_text, "\n")
 
     {result, _rows_acc, _consumed} =
@@ -1390,14 +1433,18 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         ""
       end
 
+    clamped_cursor = max(0, min(state.cursor, length(state.buffer)))
+
     buffer_prefix_len =
-      state.buffer |> Enum.take(state.cursor) |> Enum.join() |> String.length()
+      state.buffer |> Enum.take(clamped_cursor) |> Enum.join() |> String.length()
 
     {prompt_str, highlighted_text <> ghost_str, buffer_prefix_len}
   end
 
   def accept_ghost_suggestion(%{cursor: cursor, buffer: buffer, history: history} = state) do
-    if cursor == length(buffer) do
+    clamped = max(0, min(cursor, length(buffer)))
+
+    if clamped == length(buffer) do
       raw_text = Enum.join(buffer)
       config = Config.load_config()
       suggestion = get_ghost_suggestion(raw_text, history, config)
@@ -1406,10 +1453,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
         new_chars = String.graphemes(raw_text <> suggestion)
         %{state | buffer: new_chars, cursor: length(new_chars)}
       else
-        move_right(state)
+        move_right(%{state | cursor: clamped})
       end
     else
-      move_right(state)
+      move_right(%{state | cursor: clamped})
     end
   end
 
@@ -1670,6 +1717,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   defp match_key("\x07"), do: :ctrl_g
   defp match_key("\x0b"), do: :ctrl_k
   defp match_key("\x0c"), do: :ctrl_l
+  defp match_key("\x0f"), do: :ctrl_o
   defp match_key("\x10"), do: :ctrl_p
   defp match_key("\x12"), do: :ctrl_r
   defp match_key("\x15"), do: :ctrl_u

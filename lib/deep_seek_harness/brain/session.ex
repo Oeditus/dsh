@@ -100,6 +100,11 @@ defmodule DeepSeekHarness.Brain.Session do
     GenServer.call(pid, :compact_context, :infinity)
   end
 
+  @doc "Resets session state, clearing conversation history, context tokens, checkpoints, and persisted state."
+  def reset(pid) do
+    GenServer.call(pid, :reset, :infinity)
+  end
+
   @doc "Creates a temporal state snapshot (checkpoint)."
   def checkpoint(pid, label \\ nil) do
     GenServer.call(pid, {:checkpoint, label}, :infinity)
@@ -354,6 +359,31 @@ defmodule DeepSeekHarness.Brain.Session do
       {:error, err} ->
         {:reply, {:error, err}, state}
     end
+  end
+
+  @impl true
+  def handle_call(:reset, _from, state) do
+    system_msg =
+      Enum.find(state.messages, fn m -> m["role"] == "system" end) ||
+        %{"role" => "system", "content" => @default_system_prompt}
+
+    new_messages = [system_msg]
+
+    new_state = %{
+      state
+      | messages: new_messages,
+        snapshots: [],
+        tool_failure_counts: %{},
+        session_tool_permissions: %{},
+        total_prompt_tokens: 0,
+        total_completion_tokens: 0,
+        step_count: 0,
+        plan_approved_for_turn: false,
+        turn_history: []
+    }
+
+    SessionStore.save_session(new_state, state.cwd)
+    {:reply, :ok, new_state}
   end
 
   @impl true

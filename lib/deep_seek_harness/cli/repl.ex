@@ -168,6 +168,24 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/reset", session_pid, _session_id) do
+    case Session.reset(session_pid) do
+      :ok ->
+        IO.write("\e[H\e[2J")
+
+        IO.puts(
+          Formatter.format_success(
+            "Session reset! Conversation history, context tokens, checkpoints, and screen cleared."
+          )
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
   def handle_input("/compact", session_pid, _session_id) do
     IO.puts(Formatter.format_info("Compressing conversation context…"))
 

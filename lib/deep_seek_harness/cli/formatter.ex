@@ -129,12 +129,14 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/nodes#{reset()}                  View distributed Erlang node cluster status
       #{cyan()}/cb#{reset()} or #{cyan()}/clipboard#{reset()}       Copy latest assistant response to system clipboard (Markdown)
       #{cyan()}/clear#{reset()}                  Clear terminal output
+      #{cyan()}/reset#{reset()}                  Reset conversation context, history, and clear screen
       #{cyan()}/exit#{reset()} or #{cyan()}/quit#{reset()}            Exit DeepSeek Harness
 
     #{bold()}HOTKEYS:#{reset()}
       #{cyan()}Ctrl+P#{reset()}                  Toggle permission mode (ask_confirm ⇄ auto_approve)
       #{cyan()}Ctrl+G#{reset()}                  Toggle workspace sandbox bounds on/off
       #{cyan()}Ctrl+B#{reset()}                  Toggle idle status bar mode (gauge ⇄ compact session line)
+      #{cyan()}Ctrl+O#{reset()}                  Toggle tool call expansion mode (collapsed ⇄ expanded)
       #{cyan()}Ctrl+Q#{reset()}                  Interrupt the AI's current turn while it's responding (Ctrl+C kills the whole app instead)
     """
   end
@@ -270,6 +272,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
   defp codepoint_width(cp) do
     cond do
       cp in 0x1100..0x115F -> 2
+      cp in 0x2600..0x27BF -> 2
       cp in 0x2E80..0x303E -> 2
       cp in 0x3041..0x33FF -> 2
       cp in 0x3400..0x4DBF -> 2
@@ -283,9 +286,11 @@ defmodule DeepSeekHarness.CLI.Formatter do
       cp in 0x16FE0..0x16FE4 -> 2
       cp in 0x17000..0x18CFF -> 2
       cp in 0x1B000..0x1B2FF -> 2
+      cp in 0x1F000..0x1F2FF -> 2
       cp in 0x1F300..0x1F64F -> 2
       cp in 0x1F680..0x1F6FF -> 2
       cp in 0x1F900..0x1F9FF -> 2
+      cp in 0x1FA00..0x1FA6F -> 2
       cp in 0x1FA70..0x1FAFF -> 2
       cp in 0x20000..0x3FFFD -> 2
       true -> 1

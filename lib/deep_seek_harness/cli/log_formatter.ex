@@ -82,13 +82,25 @@ defmodule DeepSeekHarness.CLI.LogFormatter do
   # when a line actually got cut, so a long line always fits on-screen
   # without corrupting whatever redraws around it.
   defp truncate_to_terminal(line) do
-    content = String.trim_trailing(line, "\r\n")
-    budget = max(terminal_cols() - 2, 1)
+    if LineEditor.expand_tool_calls?() do
+      to_crlf(line)
+    else
+      content = String.trim_trailing(line, "\r\n")
+      budget = max(terminal_cols() - 2, 1)
 
-    content
-    |> String.split("\n")
-    |> Enum.map_join("\n", &LineEditor.truncate_to_width(&1, budget))
-    |> Kernel.<>("\r\n")
+      content
+      |> String.split("\n")
+      |> Enum.map_join("\n", &LineEditor.truncate_to_width(&1, budget))
+      |> Kernel.<>("\r\n")
+    end
+  end
+
+  defp to_crlf(line) do
+    if String.ends_with?(line, "\r\n") do
+      line
+    else
+      line |> String.trim_trailing("\n") |> String.replace("\n", "\r\n") |> Kernel.<>("\r\n")
+    end
   end
 
   defp terminal_cols do

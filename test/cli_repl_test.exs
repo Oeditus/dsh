@@ -13,6 +13,7 @@ defmodule DeepSeekHarness.CLIReplTest do
   test "handles standard slash commands", %{session_pid: pid, session_id: id} do
     assert :continue = Repl.handle_input("/help", pid, id)
     assert :continue = Repl.handle_input("/clear", pid, id)
+    assert :continue = Repl.handle_input("/reset", pid, id)
     assert :continue = Repl.handle_input("/cost", pid, id)
     assert :continue = Repl.handle_input("/session", pid, id)
     assert :continue = Repl.handle_input("/nodes", pid, id)

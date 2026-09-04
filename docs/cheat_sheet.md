@@ -116,8 +116,16 @@ my_app deepseek-chat >
 | `/workflow [cmd]` | Run customizable multi-step workflows: `list\|run\|status\|resume\|abort\|init` | `/workflow run elixir Add dark mode` |
 | `/cb` \| `/clipboard` | Copy latest assistant response to system clipboard | `/cb` |
 | `/clear` | Clear terminal output screen | `/clear` |
+| `/reset` | Reset conversation context, history, checkpoints, and clear screen | `/reset` |
 | `/help` | Print REPL help menu | `/help` |
 | `/exit` \| `/quit` | Exit DeepSeek Harness and print conversation resume banner | `/exit` |
+
+### Keyboard Shortcuts & Hotkeys
+- **`Ctrl+P`**: Toggle tool execution safety mode (`ask_confirm` ⇄ `auto_approve`)
+- **`Ctrl+G`**: Toggle workspace sandbox bounds on/off
+- **`Ctrl+B`**: Toggle idle status bar mode (gauge ⇄ compact session line)
+- **`Ctrl+O`**: Toggle tool call log expansion mode (collapsed/truncated ⇄ expanded/full text)
+- **`Ctrl+Q`**: Interrupt active AI turn while responding
 
 ---
 

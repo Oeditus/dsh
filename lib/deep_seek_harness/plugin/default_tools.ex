@@ -278,6 +278,13 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
           required: ["message"]
         },
         execute: &git_commit_tool/1
+      },
+      %{
+        name: "git_root",
+        description:
+          "Returns the absolute top-level root directory path of the active git repository (git rev-parse --show-toplevel). Use this instead of running raw bash shell commands like 'git rev-parse --show-toplevel'.",
+        parameters: %{type: "object", properties: %{}},
+        execute: &git_root_tool/1
       }
     ]
   end
@@ -595,6 +602,13 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
 
   def git_commit_tool(%{"message" => message}) do
     case DeepSeekHarness.Git.commit(message) do
+      {:ok, out} -> {:ok, out}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  def git_root_tool(_args) do
+    case DeepSeekHarness.Git.root_dir() do
       {:ok, out} -> {:ok, out}
       {:error, err} -> {:error, err}
     end

@@ -122,6 +122,8 @@ defmodule DeepSeekHarness.Hands.Executor do
     "git_status" => "󰘬",
     "git_diff" => "󰘬",
     "git_commit" => "󰘬",
+    "git_root" => "󰘬",
+    "git_toplevel" => "󰘬",
     "git_log" => "󰘬",
     "http" => "󰖟",
     "req" => "󰖟",
@@ -184,21 +186,28 @@ defmodule DeepSeekHarness.Hands.Executor do
   end
 
   defp format_arg_val(key, val) do
-    inspected = inspect(val)
-
-    if key in [
-         "changes",
-         "content",
-         "replacement",
-         "code",
-         "TargetContent",
-         "ReplacementContent",
-         "CodeContent"
-       ] or
-         String.contains?(inspected, "\n") or byte_size(inspected) > 60 do
-      make_payload_link(key, val)
+    if DeepSeekHarness.CLI.LineEditor.expand_tool_calls?() do
+      case val do
+        s when is_binary(s) -> inspect(s)
+        other -> inspect(other)
+      end
     else
-      inspected
+      inspected = inspect(val)
+
+      if key in [
+           "changes",
+           "content",
+           "replacement",
+           "code",
+           "TargetContent",
+           "ReplacementContent",
+           "CodeContent"
+         ] or
+           String.contains?(inspected, "\n") or byte_size(inspected) > 60 do
+        make_payload_link(key, val)
+      else
+        inspected
+      end
     end
   end
 

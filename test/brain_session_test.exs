@@ -72,6 +72,18 @@ defmodule DeepSeekHarness.BrainSessionTest do
     assert is_binary(summary)
   end
 
+  test "resets session state clearing messages, tokens, and checkpoints", %{pid: pid} do
+    {:ok, _} = Session.checkpoint(pid, "Checkpoint to clear")
+    {:ok, _} = Session.send_user_message(pid, "Test prompt")
+    info_before = Session.get_info(pid)
+    assert info_before.message_count > 1
+
+    assert :ok = Session.reset(pid)
+    info_after = Session.get_info(pid)
+    assert info_after.message_count == 1
+    assert info_after.snapshot_count == 0
+  end
+
   test "retrieves latest assistant response", %{pid: pid} do
     assert match?({:ok, _}, Session.send_user_message(pid, "Hello agent"))
     assert {:ok, response} = Session.get_latest_response(pid)

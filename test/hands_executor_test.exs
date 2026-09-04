@@ -44,4 +44,29 @@ defmodule DeepSeekHarness.HandsExecutorTest do
 
     assert Executor.format_tool_call("list_dir", %{}) == "list_dir()"
   end
+
+  test "toggles tool call argument expansion mode" do
+    Application.put_env(:deep_seek_harness, :expand_tool_calls, false)
+
+    collapsed =
+      Executor.format_tool_call("write_file", %{
+        "path" => "test.txt",
+        "content" => String.duplicate("a", 100)
+      })
+
+    assert String.contains?(collapsed, "…") or String.contains?(collapsed, "payload")
+
+    Application.put_env(:deep_seek_harness, :expand_tool_calls, true)
+
+    expanded =
+      Executor.format_tool_call("write_file", %{
+        "path" => "test.txt",
+        "content" => String.duplicate("a", 100)
+      })
+
+    refute String.contains?(expanded, "payload")
+    assert String.contains?(expanded, String.duplicate("a", 100))
+
+    Application.put_env(:deep_seek_harness, :expand_tool_calls, false)
+  end
 end

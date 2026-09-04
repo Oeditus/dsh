@@ -570,4 +570,53 @@ defmodule DeepSeekHarness.LineEditorTest do
       assert LineEditor.compute_cursor_positioning(0, 0, 1, 80) == {"\r", 0}
     end
   end
+
+  describe "cursor placement safety and wide character / pasted text navigation" do
+    test "layout_cursor/4 clamps out-of-bounds cursor_offset to the end of input" do
+      # 5 'x' chars, start_col = 10 -> offset 999 should place cursor at col 15 (10 + 5)
+      assert LineEditor.layout_cursor(10, "hello", 999, 80) == {0, 15}
+    end
+
+    test "navigates wide characters correctly with move_left and move_right" do
+      state = %{LineEditor.new_state("prompt> ") | buffer: String.graphemes("你好"), cursor: 0}
+
+      # Cursor at 0: prefix_width 0 -> col 8
+      assert LineEditor.layout_cursor(8, "你好", state.cursor, 80) == {0, 8}
+
+      # Right once -> cursor 1 (after "你") -> prefix_width 2 -> col 10
+      state1 = LineEditor.move_right(state)
+      assert state1.cursor == 1
+      assert LineEditor.layout_cursor(8, "你好", state1.cursor, 80) == {0, 10}
+
+      # Right again -> cursor 2 (after "好") -> prefix_width 4 -> col 12
+      state2 = LineEditor.move_right(state1)
+      assert state2.cursor == 2
+      assert LineEditor.layout_cursor(8, "你好", state2.cursor, 80) == {0, 12}
+
+      # Left -> cursor 1
+      state_back = LineEditor.move_left(state2)
+      assert state_back.cursor == 1
+      assert LineEditor.layout_cursor(8, "你好", state_back.cursor, 80) == {0, 10}
+    end
+
+    test "inserting multi-character pasted text updates cursor to the end of inserted text" do
+      state = LineEditor.new_state("prompt> ")
+      new_state = LineEditor.insert_char(state, "hello")
+
+      assert Enum.join(new_state.buffer) == "hello"
+      assert new_state.cursor == 5
+
+      assert LineEditor.layout_cursor(8, Enum.join(new_state.buffer), new_state.cursor, 80) ==
+               {0, 13}
+    end
+
+    test "clamps cursor bounds when state.cursor is out of bounds" do
+      state = %{LineEditor.new_state("prompt> ") | buffer: String.graphemes("abc"), cursor: 10}
+      moved = LineEditor.move_left(state)
+      assert moved.cursor == 2
+
+      state_right = LineEditor.move_right(state)
+      assert state_right.cursor == 3
+    end
+  end
 end

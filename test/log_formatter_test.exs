@@ -160,6 +160,19 @@ defmodule DeepSeekHarness.CLI.LogFormatterTest do
       assert line2 =~ "…"
       assert LineEditor.display_width(line2) <= expected_budget()
     end
+
+    test "bypasses line truncation when expand_tool_calls? is toggled ON via Ctrl+O" do
+      long_command = String.duplicate("z", 300)
+      event = %{level: :info, msg: ~s|bash(command: "#{long_command}")|}
+
+      Application.put_env(:deep_seek_harness, :expand_tool_calls, true)
+      formatted = LogFormatter.format(event, %{})
+
+      assert formatted =~ long_command
+      refute formatted =~ "…"
+
+      Application.put_env(:deep_seek_harness, :expand_tool_calls, false)
+    end
   end
 
   defp expected_budget do
