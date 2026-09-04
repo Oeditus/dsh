@@ -49,6 +49,18 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   def ask_single_question(question, options, is_multi \\ false, show_numbers \\ true, opts \\ []) do
     options = if is_list(options) and options != [], do: options, else: ["Yes", "No"]
 
+    has_recommended? =
+      Enum.any?(options, fn opt ->
+        String.contains?(String.downcase(to_string(opt)), "recommended")
+      end)
+
+    options =
+      if has_recommended? do
+        options
+      else
+        List.update_at(options, 0, fn opt -> "#{opt} (Recommended)" end)
+      end
+
     if god_mode?() do
       selected_opt =
         Enum.find(options, Enum.at(options, 0), fn opt ->
@@ -260,6 +272,10 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         idx = char_code - ?1
         tui_loop(select_index(state, idx))
 
+      :ctrl_o ->
+        DeepSeekHarness.CLI.LineEditor.toggle_expand_tool_calls(state)
+        tui_loop(state)
+
       :enter ->
         handle_confirm(state)
 
@@ -447,10 +463,23 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
             end
 
           styled_sub_line =
-            if is_current do
-              "#{Formatter.green()}#{Formatter.bold()}#{sub_line}#{Formatter.reset()}"
+            if String.contains?(sub_line, "(Recommended)") do
+              [head, tail] = String.split(sub_line, "(Recommended)", parts: 2)
+
+              rec_tag =
+                "#{Formatter.reset()}#{Formatter.gray()}(Recommended)#{Formatter.reset()}"
+
+              if is_current do
+                "#{Formatter.green()}#{Formatter.bold()}#{head}#{rec_tag}#{Formatter.green()}#{Formatter.bold()}#{tail}#{Formatter.reset()}"
+              else
+                "#{Formatter.dim()}#{head}#{rec_tag}#{Formatter.dim()}#{tail}#{Formatter.reset()}"
+              end
             else
-              "#{Formatter.dim()}#{sub_line}#{Formatter.reset()}"
+              if is_current do
+                "#{Formatter.green()}#{Formatter.bold()}#{sub_line}#{Formatter.reset()}"
+              else
+                "#{Formatter.dim()}#{sub_line}#{Formatter.reset()}"
+              end
             end
 
           len = display_width(sub_line)
@@ -512,7 +541,19 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     |> Enum.with_index()
     |> Enum.each(fn {opt, idx} ->
       tag = if idx == custom_idx, do: "󰏫  #{opt}", else: opt
-      IO.write(:user, "  #{idx + 1}. #{tag}\r\n")
+
+      styled_tag =
+        if String.contains?(tag, "(Recommended)") do
+          String.replace(
+            tag,
+            "(Recommended)",
+            Formatter.gray() <> "(Recommended)" <> Formatter.reset()
+          )
+        else
+          tag
+        end
+
+      IO.write(:user, "  #{idx + 1}. #{styled_tag}\r\n")
     end)
 
     input =
@@ -544,22 +585,14 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   defp read_key do
     case IO.getn(:user, "", 1) do
       "\e" ->
-        # An arrow key arrives as a 3-byte CSI sequence (\e[A .. \e[D).
-        # Instead of requesting a hard-coded "exactly 2 more bytes" (which
-        # can miss the remainder when the terminal delivers the escape byte
-        # and the rest of the sequence with a small gap -- most likely on
-        # the very first keystroke right after raw mode is entered, making
-        # the first ArrowDown a silent no-op), read available bytes one at
-        # a time and stop as soon as a terminating char is seen. This
-        # mirrors `DeepSeekHarness.CLI.LineEditor.read_available_escape_bytes/2`.
-        seq = read_available_escape_bytes("", 4)
+        seq = read_available_escape_bytes("", 6)
 
-        case seq do
-          "[A" -> :up
-          "[B" -> :down
-          "[C" -> :right
-          "[D" -> :left
-          _ -> :escape
+        cond do
+          String.contains?(seq, "[A") or String.contains?(seq, "OA") -> :up
+          String.contains?(seq, "[B") or String.contains?(seq, "OB") -> :down
+          String.contains?(seq, "[C") or String.contains?(seq, "OC") -> :right
+          String.contains?(seq, "[D") or String.contains?(seq, "OD") -> :left
+          true -> :escape
         end
 
       "\n" ->
@@ -570,6 +603,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
       " " ->
         :space
+
+      "\x0f" ->
+        :ctrl_o
 
       "\x03" ->
         :ctrl_c
@@ -589,15 +625,13 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   end
 
   # Reads up to `count` bytes following an escape byte, stopping early as
-  # soon as a CSI terminator (A/B/C/D) is seen. Handles terminals that
-  # deliver the escape sequence across separate reads, so the first arrow
-  # keypress after entering raw mode is recognized instead of being dropped.
+  # soon as a CSI/SS3 terminator (A/B/C/D/H/F/~) is seen.
   defp read_available_escape_bytes(acc, count) when count > 0 do
     case read_char() do
       char when is_binary(char) and char != "" ->
         new_acc = acc <> char
 
-        if char in ["A", "B", "C", "D"] do
+        if char in ["A", "B", "C", "D", "H", "F", "~"] do
           new_acc
         else
           read_available_escape_bytes(new_acc, count - 1)

@@ -160,6 +160,11 @@ defmodule DeepSeekHarness.Brain.Session do
     GenServer.call(pid, {:export_session, format}, :infinity)
   end
 
+  @doc "Returns full list of conversation messages in session."
+  def get_messages(pid) do
+    GenServer.call(pid, :get_messages, :infinity)
+  end
+
   # Server Callbacks
 
   @impl true
@@ -359,6 +364,11 @@ defmodule DeepSeekHarness.Brain.Session do
       {:error, err} ->
         {:reply, {:error, err}, state}
     end
+  end
+
+  @impl true
+  def handle_call(:get_messages, _from, state) do
+    {:reply, {:ok, state.messages}, state}
   end
 
   @impl true

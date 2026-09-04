@@ -173,7 +173,7 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
 
     test "ask_single_question automatically selects first/recommended option in God mode" do
       res = QuestionPrompt.ask_single_question("Which option?", ["Option A", "Option B"])
-      assert res == %{selected: ["Option A"]}
+      assert res == %{selected: ["Option A (Recommended)"]}
 
       res_rec =
         QuestionPrompt.ask_single_question("Which framework?", [
@@ -194,7 +194,12 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
       assert {:ok, json} = DefaultTools.ask_question(args)
       assert {:ok, decoded} = Jason.decode(json)
       assert decoded["status"] == "answered"
-      assert decoded["selected_options"] == ["Yes"]
+      assert decoded["selected_options"] == ["Yes (Recommended)"]
+    end
+
+    test "ask_single_question automatically marks option 0 with (Recommended) when none provided" do
+      res = QuestionPrompt.ask_single_question("Select database?", ["PostgreSQL", "MySQL"])
+      assert res == %{selected: ["PostgreSQL (Recommended)"]}
     end
   end
 end

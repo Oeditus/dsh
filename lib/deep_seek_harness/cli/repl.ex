@@ -291,6 +291,45 @@ defmodule DeepSeekHarness.CLI.Repl do
     handle_input("/linter", session_pid, session_id)
   end
 
+  def handle_input("/review conversation " <> target, session_pid, session_id) do
+    handle_review_conversation(target, session_pid, session_id)
+  end
+
+  def handle_input("/review conversation", session_pid, session_id) do
+    handle_review_conversation(nil, session_pid, session_id)
+  end
+
+  def handle_input("/review_conversation " <> target, session_pid, session_id) do
+    handle_review_conversation(target, session_pid, session_id)
+  end
+
+  def handle_input("/review_conversation", session_pid, session_id) do
+    handle_review_conversation(nil, session_pid, session_id)
+  end
+
+  def handle_input("/review-conversation " <> target, session_pid, session_id) do
+    handle_review_conversation(target, session_pid, session_id)
+  end
+
+  def handle_input("/review-conversation", session_pid, session_id) do
+    handle_review_conversation(nil, session_pid, session_id)
+  end
+
+  def handle_input("/conversation " <> target, session_pid, session_id) do
+    target = String.trim(target)
+
+    if String.starts_with?(target, "review") do
+      id = target |> String.replace_prefix("review", "") |> String.trim()
+      handle_review_conversation(id, session_pid, session_id)
+    else
+      handle_review_conversation(target, session_pid, session_id)
+    end
+  end
+
+  def handle_input("/conversation", session_pid, session_id) do
+    handle_review_conversation(nil, session_pid, session_id)
+  end
+
   def handle_input("/review " <> args, session_pid, _session_id) do
     parts = String.split(args, " ", trim: true)
 
@@ -1013,6 +1052,14 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/session review " <> target_id, session_pid, session_id) do
+    handle_review_conversation(target_id, session_pid, session_id)
+  end
+
+  def handle_input("/session review", session_pid, session_id) do
+    handle_review_conversation(nil, session_pid, session_id)
+  end
+
   def handle_input("/session list", _session_pid, _session_id) do
     metas = DeepSeekHarness.Brain.SessionStore.list_session_metadata()
 
@@ -1689,6 +1736,124 @@ defmodule DeepSeekHarness.CLI.Repl do
             console_loop(session_pid, session_id, updated_history)
         end
     end
+  end
+
+  def handle_review_conversation(target_id, session_pid, current_session_id) do
+    clean_id =
+      case target_id do
+        nil ->
+          current_session_id
+
+        str when is_binary(str) ->
+          s = String.trim(str)
+          if s == "" or s == "current", do: current_session_id, else: s
+      end
+
+    {messages, meta} =
+      if clean_id == current_session_id do
+        case Session.get_messages(session_pid) do
+          {:ok, msgs} ->
+            stats = Session.get_stats(session_pid)
+            {msgs, stats}
+
+          _ ->
+            load_session_from_store(clean_id)
+        end
+      else
+        load_session_from_store(clean_id)
+      end
+
+    case messages do
+      msgs when is_list(msgs) and msgs != [] ->
+        rendered = render_conversation_review(clean_id, msgs, meta)
+        IO.puts("\n" <> Formatter.format_markdown(rendered) <> "\n")
+
+      _ ->
+        IO.puts(
+          Formatter.format_error(
+            "Could not review conversation '#{clean_id}': conversation not found or empty."
+          )
+        )
+    end
+
+    :continue
+  end
+
+  defp load_session_from_store(session_id) do
+    case DeepSeekHarness.Brain.SessionStore.load_session(session_id) do
+      {:ok, data} ->
+        msgs = Map.get(data, "messages", [])
+        {msgs, data}
+
+      _ ->
+        {[], %{}}
+    end
+  end
+
+  defp render_conversation_review(session_id, messages, meta) do
+    model = Map.get(meta, :model) || Map.get(meta, "model") || "unknown"
+    msg_count = length(messages)
+    step_count = Map.get(meta, :step_count) || Map.get(meta, "step_count") || 0
+
+    header = """
+    ### 󰋗 Conversation Review: `#{session_id}`
+    - **Model**: `#{model}`
+    - **Messages**: `#{msg_count}`
+    - **Step Count**: `#{step_count}`
+    """
+
+    body =
+      messages
+      |> Enum.reject(fn m -> Map.get(m, "role") == "system" or Map.get(m, :role) == "system" end)
+      |> Enum.with_index(1)
+      |> Enum.map_join("\n\n---\n\n", fn {msg, idx} ->
+        role = Map.get(msg, "role") || Map.get(msg, :role) || "unknown"
+        content = Map.get(msg, "content") || Map.get(msg, :content) || ""
+        tool_calls = Map.get(msg, "tool_calls") || Map.get(msg, :tool_calls)
+
+        content_str =
+          cond do
+            is_binary(content) ->
+              content
+
+            is_list(content) ->
+              Enum.map_join(content, "\n", fn
+                %{"text" => t} -> t
+                %{text: t} -> t
+                other -> inspect(other)
+              end)
+
+            true ->
+              inspect(content)
+          end
+
+        role_header =
+          case role do
+            "user" -> "#### Turn ##{idx} — 👤 User"
+            "assistant" -> "#### Turn ##{idx} — 󰚩 Assistant"
+            "tool" -> "#### Turn ##{idx} — 🛠 Tool Result"
+            other -> "#### Turn ##{idx} — #{other}"
+          end
+
+        tc_block =
+          if is_list(tool_calls) and tool_calls != [] do
+            tc_items =
+              Enum.map_join(tool_calls, "\n", fn tc ->
+                fn_map = Map.get(tc, "function", tc)
+                name = Map.get(fn_map, "name", "tool")
+                args = Map.get(fn_map, "arguments", "{}")
+                "- `#{name}(#{args})`"
+              end)
+
+            "\n\n**Tool Calls Executed:**\n" <> tc_items
+          else
+            ""
+          end
+
+        "#{role_header}\n#{content_str}#{tc_block}"
+      end)
+
+    header <> "\n\n" <> body
   end
 
   defp build_console_prompt do

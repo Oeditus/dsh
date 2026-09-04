@@ -4,7 +4,7 @@ set -e
 echo "📦 Bundling DeepSeek Harness release tarball for GitHub Releases..."
 MIX_ENV=prod mix release --overwrite
 
-REL_DIR="_build/prod/rel/deep_seek_harness"
+REL_DIR="_build/prod/rel/dsh"
 ARCH=$(uname -m)
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 TARBALL="dsh-${OS}-${ARCH}.tar.gz"

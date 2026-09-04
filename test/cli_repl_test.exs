@@ -114,4 +114,13 @@ defmodule DeepSeekHarness.CLIReplTest do
     assert DeepSeekHarness.Config.god_mode?() == false
     assert :continue = Repl.handle_input("/god foo", pid, id)
   end
+
+  test "handles review conversation commands", %{session_pid: pid, session_id: id} do
+    assert :continue = Repl.handle_input("/review_conversation", pid, id)
+    assert :continue = Repl.handle_input("/review-conversation", pid, id)
+    assert :continue = Repl.handle_input("/conversation", pid, id)
+    assert :continue = Repl.handle_input("/review conversation", pid, id)
+    assert :continue = Repl.handle_input("/session review", pid, id)
+    assert :continue = Repl.handle_input("/review_conversation " <> id, pid, id)
+  end
 end

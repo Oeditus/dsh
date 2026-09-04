@@ -34,6 +34,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/commit",
     "/compact",
     "/config",
+    "/conversation",
     "/cost",
     "/cr",
     "/diff",
@@ -53,6 +54,8 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     "/reset",
     "/resume",
     "/review",
+    "/review-conversation",
+    "/review_conversation",
     "/rules",
     "/session",
     "/skill",
@@ -957,7 +960,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end
 
     context = Map.get(state, :context, %{})
-    %{state | context: Map.put(context, :expand_tool_calls, new_val)}
+    Map.put(state, :context, Map.put(context, :expand_tool_calls, new_val))
   end
 
   defp persist_compact_status_bar(value) do

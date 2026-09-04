@@ -27,6 +27,7 @@ defmodule DeepSeekHarness.CLI.Interrupt do
   alias DeepSeekHarness.CLI.Spinner
 
   @ctrl_q "\x11"
+  @ctrl_o "\x0f"
   @paused_poll_interval_ms 120
 
   @doc """
@@ -107,9 +108,18 @@ defmodule DeepSeekHarness.CLI.Interrupt do
       set_raw_mode()
 
       case read_char() do
-        @ctrl_q -> Session.cancel_current_turn(session_pid)
-        :eof -> :ok
-        _other -> watch_for_interrupt(session_pid)
+        @ctrl_q ->
+          Session.cancel_current_turn(session_pid)
+
+        @ctrl_o ->
+          DeepSeekHarness.CLI.LineEditor.toggle_expand_tool_calls(%{})
+          watch_for_interrupt(session_pid)
+
+        :eof ->
+          :ok
+
+        _other ->
+          watch_for_interrupt(session_pid)
       end
     end
   end
