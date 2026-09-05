@@ -254,14 +254,14 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
   def analyze_image(path, content, label) do
     filename = Path.basename(path)
 
+    # credo:disable-for-lines:8
     analysis_map =
-      if Code.ensure_loaded?(Ragex.Image) and apply(Ragex.Image, :available?, []) do
-        case apply(Ragex.Image, :info, [path]) do
-          {:ok, info} -> info
-          _ -> %{}
-        end
+      with true <- Code.ensure_loaded?(Ragex.Image),
+           true <- apply(Ragex.Image, :available?, []),
+           {:ok, info} <- apply(Ragex.Image, :info, [path]) do
+        info
       else
-        %{}
+        _ -> %{}
       end
 
     width = Map.get(analysis_map, :width)

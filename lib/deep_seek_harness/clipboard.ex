@@ -81,12 +81,12 @@ defmodule DeepSeekHarness.Clipboard do
   # --- Private Helpers ---
 
   defp fetch_wl_paste_image(exec) do
-    case System.cmd(exec, ["-t", "image/png"], [:binary]) do
+    case System.cmd(exec, ["-t", "image/png"]) do
       {bytes, 0} when byte_size(bytes) > 0 ->
         {:ok, "image/png", bytes}
 
       _ ->
-        case System.cmd(exec, ["-t", "image/jpeg"], [:binary]) do
+        case System.cmd(exec, ["-t", "image/jpeg"]) do
           {bytes, 0} when byte_size(bytes) > 0 -> {:ok, "image/jpeg", bytes}
           _ -> {:error, "No image found on clipboard."}
         end
@@ -96,12 +96,12 @@ defmodule DeepSeekHarness.Clipboard do
   end
 
   defp fetch_xclip_image(exec) do
-    case System.cmd(exec, ["-selection", "clipboard", "-t", "image/png", "-o"], [:binary]) do
+    case System.cmd(exec, ["-selection", "clipboard", "-t", "image/png", "-o"]) do
       {bytes, 0} when byte_size(bytes) > 0 ->
         {:ok, "image/png", bytes}
 
       _ ->
-        case System.cmd(exec, ["-selection", "clipboard", "-t", "image/jpeg", "-o"], [:binary]) do
+        case System.cmd(exec, ["-selection", "clipboard", "-t", "image/jpeg", "-o"]) do
           {bytes, 0} when byte_size(bytes) > 0 -> {:ok, "image/jpeg", bytes}
           _ -> {:error, "No image found on clipboard."}
         end
@@ -111,7 +111,7 @@ defmodule DeepSeekHarness.Clipboard do
   end
 
   defp fetch_pngpaste_image(exec) do
-    case System.cmd(exec, ["-"], [:binary]) do
+    case System.cmd(exec, ["-"]) do
       {bytes, 0} when byte_size(bytes) > 0 -> {:ok, "image/png", bytes}
       _ -> {:error, "No image found on clipboard."}
     end
@@ -123,7 +123,7 @@ defmodule DeepSeekHarness.Clipboard do
     script =
       "try\n  set imgData to the clipboard as «class PNGf»\n  return imgData\non error\n  return \"\"\nend try"
 
-    case System.cmd(exec, ["-e", script], [:binary]) do
+    case System.cmd(exec, ["-e", script]) do
       {bytes, 0} when byte_size(bytes) > 0 -> {:ok, "image/png", bytes}
       _ -> {:error, "No image found on clipboard."}
     end
@@ -135,7 +135,7 @@ defmodule DeepSeekHarness.Clipboard do
     cmd =
       "[Reflection.Assembly]::LoadWithPartialName('System.Drawing'); [System.Windows.Forms.Clipboard]::GetImage()"
 
-    case System.cmd(exec, ["-command", cmd], [:binary]) do
+    case System.cmd(exec, ["-command", cmd]) do
       {bytes, 0} when byte_size(bytes) > 0 -> {:ok, "image/png", bytes}
       _ -> {:error, "No image found on clipboard."}
     end
