@@ -15,9 +15,14 @@ config :ragex,
   dllb_mode: :per_project,
   start_stdio_server: false
 
-# Configure EXLA to disable log sink when NIF is uncompiled/unavailable
-config :exla, start_log_sink: false
-config :nx, :default_backend, Nx.BinaryBackend
+# Configure EXLA to disable log sink when NIF is uncompiled/unavailable.
+# Skipped entirely under the `escript` Mix env, which deliberately excludes
+# exla/nx/bumblebee/image from the dependency tree (see mix.exs) so the
+# standalone `dsh` escript doesn't try to load an unloadable NIF.
+if config_env() != :escript do
+  config :exla, start_log_sink: false
+  config :nx, :default_backend, Nx.BinaryBackend
+end
 
 if config_env() == :test do
   config :deep_seek_harness, auto_start_ragex: false
