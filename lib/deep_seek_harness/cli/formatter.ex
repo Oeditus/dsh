@@ -156,6 +156,8 @@ defmodule DeepSeekHarness.CLI.Formatter do
     Marcli.render(text)
   rescue
     _ -> text
+  catch
+    _kind, _reason -> text
   end
 
   def format_markdown(text), do: inspect(text)

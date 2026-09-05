@@ -88,7 +88,7 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       %{
         name: "bash",
         description:
-          "Execute a shell bash command and return standard output / error. NOTE: Use dedicated tools or Ragex MCP tools (ragex_grep, ragex_symbol, ragex_view, read_file, etc.) for code searching, symbol finding, or file viewing instead of raw bash shell commands.",
+          "Execute a shell bash command and return standard output / error. NOTE: Use dedicated tools or Ragex MCP tools (ragex_grep, ragex_symbol, ragex_view, read_file, mcp_ragex_image_*, etc.) for code searching, symbol finding, image processing, or file viewing instead of raw bash shell commands.",
         parameters: %{
           type: "object",
           properties: %{

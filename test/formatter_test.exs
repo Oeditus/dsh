@@ -62,6 +62,14 @@ defmodule DeepSeekHarness.FormatterTest do
     assert is_binary(rendered)
   end
 
+  test "safely falls back to unformatted text when markdown parser raises Erlang error or case clause" do
+    # Input with nested quotes/blockquotes that triggers Md.Parser case_clause
+    malformed_md = "> 0.13\"}\n{:mdex, \"> 0.1\"},\nkatex, \"\n{:mdex"
+    rendered = Formatter.format_markdown(malformed_md)
+    assert is_binary(rendered)
+    assert String.contains?(rendered, "0.13")
+  end
+
   test "attempts copying text to system clipboard" do
     res = Formatter.copy_to_clipboard("test_clipboard_content")
     assert res == :ok or match?({:error, _}, res)
