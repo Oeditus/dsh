@@ -111,14 +111,29 @@ jobs:
 
       - name: Verify tag matches mix.exs version
         run: |
-          tag_version="${GITHUB_REF_NAME#v}"
-          mix_version="$(mix run --no-start -e 'IO.puts(Mix.Project.config()[:version])')"
-          echo "Tag version:   ${tag_version}"
-          echo "mix.exs version: ${mix_version}"
-          if [ "${tag_version}" != "${mix_version}" ]; then
-            echo "::error::Tag v${tag_version} does not match mix.exs version ${mix_version}. Bump mix.exs before tagging."
-            exit 1
-          fi
+          mix eval '
+            tag = System.get_env("GITHUB_REF_NAME", "")
+            clean_tag = String.trim_leading(tag, "v")
+            mix_version = to_string(Mix.Project.config()[:version])
+            clean_mix = String.trim_leading(mix_version, "v")
+
+            with {:ok, tag_ver} <- Version.parse(clean_tag),
+                 {:ok, mix_ver} <- Version.parse(clean_mix) do
+              IO.puts("Tag version:     #{tag} (SemVer: #{tag_ver})")
+              IO.puts("mix.exs version: #{mix_version} (SemVer: #{mix_ver})")
+
+              if Version.compare(tag_ver, mix_ver) == :eq do
+                IO.puts("✓ Tag #{tag} matches mix.exs version #{mix_version}")
+              else
+                IO.puts("::error::Tag #{tag} does not match mix.exs version #{mix_version}. Bump mix.exs before tagging.")
+                System.halt(1)
+              end
+            else
+              :error ->
+                IO.puts("::error::Failed to parse SemVer: tag=#{inspect(tag)} mix.exs=#{inspect(mix_version)}")
+                System.halt(1)
+              end
+          '
 
       - name: Build dsh escript
         run: |
