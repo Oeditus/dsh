@@ -410,8 +410,20 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/cb", session_pid, session_id),
     do: handle_copy_clipboard(session_pid, session_id)
 
+  def handle_input("/clipboard image", session_pid, session_id),
+    do: handle_paste_clipboard_image(session_pid, session_id)
+
+  def handle_input("/clipboard paste", session_pid, session_id),
+    do: handle_paste_clipboard_image(session_pid, session_id)
+
   def handle_input("/clipboard", session_pid, session_id),
     do: handle_copy_clipboard(session_pid, session_id)
+
+  def handle_input("/paste image", session_pid, session_id),
+    do: handle_paste_clipboard_image(session_pid, session_id)
+
+  def handle_input("/paste", session_pid, session_id),
+    do: handle_paste_clipboard_image(session_pid, session_id)
 
   def handle_input("/cost", session_pid, _session_id) do
     stats = Session.get_token_stats(session_pid)
@@ -1903,5 +1915,35 @@ defmodule DeepSeekHarness.CLI.Repl do
     end
   rescue
     e -> IO.puts(Formatter.format_error("Command failed: #{Exception.message(e)}"))
+  end
+
+  defp handle_paste_clipboard_image(session_pid, session_id) do
+    case DeepSeekHarness.Clipboard.fetch_image() do
+      {:ok, mime, bytes} ->
+        ext =
+          case mime do
+            "image/jpeg" -> ".jpg"
+            "image/webp" -> ".webp"
+            "image/gif" -> ".gif"
+            _ -> ".png"
+          end
+
+        dir = Path.join(File.cwd!(), ".dsh/sessions/assets")
+        File.mkdir_p!(dir)
+
+        timestamp = System.system_time(:millisecond)
+        filename = "clipboard_#{timestamp}#{ext}"
+        filepath = Path.join(dir, filename)
+        File.write!(filepath, bytes)
+
+        ref_path = Path.join(".dsh/sessions/assets", filename)
+        prompt = "Analyze pasted clipboard image: @#{ref_path}"
+        IO.puts(Formatter.format_info("Pasted clipboard image saved to '#{ref_path}'"))
+        handle_input(prompt, session_pid, session_id)
+
+      {:error, reason} ->
+        IO.puts(Formatter.format_error("Failed to read image from clipboard: #{reason}"))
+        :continue
+    end
   end
 end

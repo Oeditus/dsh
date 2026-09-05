@@ -54,6 +54,47 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
     assert "test_sess_1" in sessions
   end
 
+  test "saves session with images as a .lmmlz zipped container and loads it back", %{
+    tmp_dir: tmp_dir
+  } do
+    png_bytes = <<137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82>>
+
+    session_state = %{
+      session_id: "test_sess_zipped",
+      model: "deepseek-v4-flash-vision-exp",
+      permission_mode: :ask_confirm,
+      step_count: 2,
+      total_prompt_tokens: 50,
+      total_completion_tokens: 25,
+      messages: [
+        %{"role" => "user", "content" => "Describe @screenshot.png"}
+      ],
+      snapshots: [],
+      images: %{"screenshot.png" => png_bytes}
+    }
+
+    assert {:ok, file_path} = SessionStore.save_session(session_state, tmp_dir)
+    assert File.exists?(file_path)
+    assert String.ends_with?(file_path, ".lmmlz")
+
+    # Ensures legacy .lmml file is not present when zipped
+    refute File.exists?(Path.join(tmp_dir, ".dsh/sessions/test_sess_zipped.lmml"))
+
+    assert {:ok, loaded} = SessionStore.load_session("test_sess_zipped", tmp_dir)
+    assert loaded["session_id"] == "test_sess_zipped"
+    assert loaded["images"]["screenshot.png"] == png_bytes
+
+    sessions = SessionStore.list_sessions(tmp_dir)
+    assert "test_sess_zipped" in sessions
+
+    assert [meta] = SessionStore.list_session_metadata(tmp_dir)
+    assert meta.session_id == "test_sess_zipped"
+
+    # Delete session removes .lmmlz container
+    assert {:ok, _} = SessionStore.delete_session("test_sess_zipped", tmp_dir)
+    refute File.exists?(file_path)
+  end
+
   test "round-trips structured messages losslessly through lmml", %{tmp_dir: tmp_dir} do
     messages = [
       %{"role" => "system", "content" => "You are an expert."},

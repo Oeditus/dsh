@@ -53,16 +53,31 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
       {expanded_text, attachments} =
         Enum.reduce(matches, {text, []}, fn [full_match, target], {acc_text, acc_attachments} ->
           case resolve_reference(target, cwd, opts) do
+            {:ok, {:image, mime, data_uri, bytes, analysis_text, filename}, label} ->
+              clean_text =
+                String.replace(acc_text, full_match, "[Image: #{label}]\n#{analysis_text}")
+
+              img_attachment = %{
+                type: "image",
+                label: label,
+                filename: filename,
+                mime: mime,
+                bytes: bytes,
+                data_uri: data_uri,
+                analysis_text: analysis_text
+              }
+
+              {clean_text, [img_attachment | acc_attachments]}
+
             {:ok, {:image, mime, data_uri}, label} ->
-              # Image references are NOT inlined as text: the base64 payload is
-              # carried as a structured attachment so the session can build the
-              # vision API's `content` array (image_url + text parts).
               clean_text = String.replace(acc_text, full_match, "[Image: #{label}]")
 
               img_attachment = %{
                 type: "image",
                 label: label,
+                filename: Path.basename(label),
                 mime: mime,
+                bytes: nil,
                 data_uri: data_uri
               }
 
@@ -180,14 +195,15 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
       case File.read(path) do
         {:ok, content} when is_binary(content) ->
           if image?(path) do
-            # Images are handled by the vision model, not inlined as text.
             if byte_size(content) > @max_image_bytes do
               {:error,
                "Image '#{label}' is #{byte_size(content)} bytes, exceeding the " <>
                  "#{@max_image_bytes} byte limit for vision attachment."}
             else
               mime = image_mime(path)
-              {:ok, {:image, mime, "data:#{mime};base64," <> Base.encode64(content)}, label}
+              data_uri = "data:#{mime};base64," <> Base.encode64(content)
+              {analysis_text, filename} = analyze_image(path, content, label)
+              {:ok, {:image, mime, data_uri, content, analysis_text, filename}, label}
             end
           else
             # Truncate extremely large text files if > 500KB to prevent OOM
@@ -247,4 +263,66 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
         {:error, "Failed to fetch URL #{url}: #{inspect(reason)}"}
     end
   end
+
+  @doc "Analyzes an image file via Ragex.Image (if available) and returns an analysis summary text block and basename."
+  def analyze_image(path, content, label) do
+    filename = Path.basename(path)
+
+    analysis_map =
+      if Code.ensure_loaded?(Ragex.Image) and apply(Ragex.Image, :available?, []) do
+        case apply(Ragex.Image, :info, [path]) do
+          {:ok, info} -> info
+          _ -> %{}
+        end
+      else
+        %{}
+      end
+
+    width = Map.get(analysis_map, :width)
+    height = Map.get(analysis_map, :height)
+
+    format =
+      Map.get(analysis_map, :format) ||
+        path |> Path.extname() |> String.trim_leading(".") |> String.downcase()
+
+    aspect = Map.get(analysis_map, :aspect)
+    colorspace = Map.get(analysis_map, :colorspace)
+    file_size = Map.get(analysis_map, :file_size_bytes) || byte_size(content)
+    dominant = Map.get(analysis_map, :dominant_color)
+    exif = Map.get(analysis_map, :exif)
+
+    size_str = format_bytes(file_size)
+    dim_str = if width && height, do: "#{width}x#{height}", else: "unknown dimensions"
+
+    aspect_str =
+      cond do
+        is_number(aspect) -> ", aspect ratio: #{Float.round(aspect * 1.0, 2)}"
+        is_atom(aspect) and not is_nil(aspect) -> ", aspect ratio: #{aspect}"
+        is_binary(aspect) -> ", aspect ratio: #{aspect}"
+        true -> ""
+      end
+
+    color_str = if colorspace, do: ", colorspace: #{colorspace}", else: ""
+    dom_str = if dominant, do: ", dominant color: #{inspect(dominant)}", else: ""
+
+    exif_str =
+      if is_map(exif) and map_size(exif) > 0, do: ", EXIF tags: #{map_size(exif)}", else: ""
+
+    summary =
+      "=== Ragex Image Analysis (#{label}) ===\n" <>
+        "Format: #{format} | Resolution: #{dim_str}#{aspect_str} | Size: #{size_str}#{color_str}#{dom_str}#{exif_str}\n" <>
+        "========================================="
+
+    {summary, filename}
+  end
+
+  defp format_bytes(bytes) when is_integer(bytes) do
+    cond do
+      bytes >= 1_000_000 -> "#{Float.round(bytes / 1_000_000, 1)} MB"
+      bytes >= 1_000 -> "#{Float.round(bytes / 1_000, 1)} KB"
+      true -> "#{bytes} B"
+    end
+  end
+
+  defp format_bytes(_), do: "unknown"
 end

@@ -128,10 +128,14 @@ defmodule DeepSeekHarness.ContextExpanderTest do
     # The base64 payload must NOT be inlined into the prompt text
     refute String.contains?(expanded, "iVBORw0KG")
     assert String.contains?(expanded, "[Image: #{tmp_path}]")
+    assert String.contains?(expanded, "Ragex Image Analysis")
+    assert String.contains?(expanded, "Format: png")
 
     [img] = Enum.filter(attachments, &(is_map(&1) and &1.type == "image"))
     assert img.label == tmp_path
     assert img.mime == "image/png"
+    assert img.filename == Path.basename(tmp_path)
+    assert img.bytes == png
     assert String.starts_with?(img.data_uri, "data:image/png;base64,")
 
     File.rm(tmp_path)

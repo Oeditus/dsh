@@ -231,7 +231,8 @@ defmodule DeepSeekHarness.Brain.Session do
       # or `nil` when idle. Lets `cancel_current_turn/1` (Ctrl+Q) abort the
       # turn and reply to its still-waiting caller without this GenServer
       # ever blocking its own mailbox for the turn's duration.
-      active_turn: nil
+      active_turn: nil,
+      images: %{}
     }
 
     # Attempt to restore session state if persisted
@@ -239,7 +240,12 @@ defmodule DeepSeekHarness.Brain.Session do
       case SessionStore.load_session(session_id, state.cwd) do
         {:ok, saved_data} ->
           Logger.info("[Brain.Session] Restored persisted session state for '#{session_id}'")
-          %{state | messages: saved_data["messages"] || initial_messages}
+
+          %{
+            state
+            | messages: saved_data["messages"] || initial_messages,
+              images: saved_data["images"] || saved_data[:images] || %{}
+          }
 
         _ ->
           state
@@ -292,7 +298,22 @@ defmodule DeepSeekHarness.Brain.Session do
         %{"role" => "user", "content" => final_user_text}
       end
 
-    state = %{state | messages: state.messages ++ [user_msg], status: :thinking}
+    new_images =
+      Enum.reduce(attachments, Map.get(state, :images, %{}), fn
+        %{type: "image", filename: name, bytes: bytes}, acc
+        when is_binary(name) and is_binary(bytes) ->
+          Map.put(acc, name, bytes)
+
+        _, acc ->
+          acc
+      end)
+
+    state = %{
+      state
+      | messages: state.messages ++ [user_msg],
+        images: new_images,
+        status: :thinking
+    }
 
     # A fresh user turn starts with no approved plan; the plan gate may arm
     # once this turn's tool calls look non-trivial.

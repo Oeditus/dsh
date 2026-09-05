@@ -561,6 +561,59 @@ defmodule DeepSeekHarness.CLI.LineEditor do
     end)
   end
 
+  @doc "Handles explicit clipboard paste (Ctrl+V / Ctrl+Shift+V), prioritizing image data on the OS clipboard."
+  def handle_clipboard_paste(%{search_mode: true} = state), do: state
+
+  def handle_clipboard_paste(state) do
+    case DeepSeekHarness.Clipboard.fetch_image() do
+      {:ok, mime, bytes} ->
+        paste_image_bytes(state, mime, bytes)
+
+      _ ->
+        case DeepSeekHarness.Clipboard.fetch_text() do
+          {:ok, text} -> handle_paste(state, text)
+          _ -> state
+        end
+    end
+  end
+
+  @doc "Handles bracketed paste, inserting clipboard image if present, or falling back to text paste."
+  def handle_paste_or_clipboard_image(%{search_mode: true} = state, text),
+    do: handle_paste(state, text)
+
+  def handle_paste_or_clipboard_image(state, text) do
+    case DeepSeekHarness.Clipboard.fetch_image() do
+      {:ok, mime, bytes} ->
+        paste_image_bytes(state, mime, bytes)
+
+      _ ->
+        handle_paste(state, text)
+    end
+  end
+
+  @doc "Saves raw image bytes from clipboard to .dsh/sessions/assets and inserts reference into prompt buffer."
+  def paste_image_bytes(state, mime, bytes) when is_binary(bytes) do
+    ext =
+      case mime do
+        "image/jpeg" -> ".jpg"
+        "image/webp" -> ".webp"
+        "image/gif" -> ".gif"
+        _ -> ".png"
+      end
+
+    cwd = "."
+    dir = Path.join(cwd, ".dsh/sessions/assets")
+    File.mkdir_p!(dir)
+
+    timestamp = System.system_time(:millisecond)
+    filename = "clipboard_#{timestamp}#{ext}"
+    filepath = Path.join(dir, filename)
+    File.write!(filepath, bytes)
+
+    ref_text = "@" <> Path.join(".dsh/sessions/assets", filename)
+    insert_char(state, ref_text)
+  end
+
   @doc """
   Navigates history up (older) or down (newer), preserving uncommitted
   input when entering navigation and restoring it when returning to -1.
@@ -783,10 +836,11 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       :ctrl_b -> raw_loop(edit_unless_searching(state, &toggle_status_bar_mode/1))
       :ctrl_o -> raw_loop(edit_unless_searching(state, &toggle_expand_tool_calls/1))
       :ctrl_r -> raw_loop(handle_ctrl_r(state))
+      :ctrl_v -> raw_loop(handle_clipboard_paste(state))
       :newline -> raw_loop(edit_unless_searching(state, &insert_newline/1))
       :backspace -> raw_loop(handle_backspace(state))
       :delete -> raw_loop(edit_unless_searching(state, &delete_forward/1))
-      {:paste, text} -> raw_loop(handle_paste(state, text))
+      {:paste, text} -> raw_loop(handle_paste_or_clipboard_image(state, text))
       {:char, 64} -> raw_loop(file_picker_modal(state))
       {:char, char_code} -> raw_loop(handle_char(state, <<char_code::utf8>>))
       _ -> raw_loop(state)
@@ -1725,6 +1779,7 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   defp match_key("\x10"), do: :ctrl_p
   defp match_key("\x12"), do: :ctrl_r
   defp match_key("\x15"), do: :ctrl_u
+  defp match_key("\x16"), do: :ctrl_v
   defp match_key("\x17"), do: :ctrl_w
   defp match_key("\x7f"), do: :backspace
   defp match_key("\x08"), do: :backspace

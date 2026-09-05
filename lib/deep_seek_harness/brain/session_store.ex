@@ -22,20 +22,42 @@ defmodule DeepSeekHarness.Brain.SessionStore do
 
   alias DeepSeekHarness.Brain.SessionLmml
 
-  @doc "Saves session state and snapshots to disk as an `.lmml` narrative."
+  @doc "Saves session state and snapshots to disk as an `.lmml` narrative or `.lmmlz` zipped container."
   def save_session(session_state, cwd \\ ".") do
     session_id = session_state.session_id
     dir = session_dir(cwd)
-    file_path = Path.join(dir, "#{session_id}.lmml")
+    images = Map.get(session_state, :images) || Map.get(session_state, "images") || %{}
 
-    with :ok <- File.mkdir_p(dir),
-         {:ok, narrative} <- SessionLmml.encode(session_state, session_id),
-         :ok <- File.write(file_path, narrative) do
-      {:ok, file_path}
+    if is_map(images) and map_size(images) > 0 do
+      lmmlz_path = Path.join(dir, "#{session_id}.lmmlz")
+      lmml_path = Path.join(dir, "#{session_id}.lmml")
+
+      with :ok <- File.mkdir_p(dir),
+           {:ok, narrative} <- SessionLmml.encode(session_state, session_id),
+           {:ok, bundle} <- Lmml.Bundle.new_zip("#{session_id}.lmml", narrative, images),
+           :ok <- Lmml.Bundle.write!(bundle, lmmlz_path) do
+        if File.exists?(lmml_path), do: File.rm(lmml_path)
+        {:ok, lmmlz_path}
+      else
+        err ->
+          Logger.warning(
+            "[SessionStore] Failed to save zipped session '#{session_id}': #{inspect(err)}"
+          )
+
+          {:error, err}
+      end
     else
-      err ->
-        Logger.warning("[SessionStore] Failed to save session '#{session_id}': #{inspect(err)}")
-        {:error, err}
+      file_path = Path.join(dir, "#{session_id}.lmml")
+
+      with :ok <- File.mkdir_p(dir),
+           {:ok, narrative} <- SessionLmml.encode(session_state, session_id),
+           :ok <- File.write(file_path, narrative) do
+        {:ok, file_path}
+      else
+        err ->
+          Logger.warning("[SessionStore] Failed to save session '#{session_id}': #{inspect(err)}")
+          {:error, err}
+      end
     end
   end
 
@@ -82,15 +104,19 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   @doc """
   Loads a persisted session from disk.
 
-  Prefers the `.lmml` narrative (the default markup); if no `.lmml` file
-  exists but a legacy `<session_id>.json` does, it is read and its content
-  is returned as-is (so older conversations remain resumable).
+  Prefers the `.lmmlz` zipped-container narrative (if images were stored),
+  then bare `.lmml` narrative; if no `.lmml` file exists but a legacy
+  `<session_id>.json` does, it is read and returned.
   """
   def load_session(session_id, cwd \\ ".") do
+    lmmlz_path = Path.join(session_dir(cwd), "#{session_id}.lmmlz")
     lmml_path = Path.join(session_dir(cwd), "#{session_id}.lmml")
     json_path = Path.join(session_dir(cwd), "#{session_id}.json")
 
     cond do
+      File.exists?(lmmlz_path) ->
+        load_lmmlz_session(lmmlz_path)
+
       File.exists?(lmml_path) ->
         load_lmml_session(lmml_path)
 
@@ -99,6 +125,23 @@ defmodule DeepSeekHarness.Brain.SessionStore do
 
       true ->
         {:error, "Session file for '#{session_id}' does not exist in #{session_dir(cwd)}."}
+    end
+  end
+
+  defp load_lmmlz_session(lmmlz_path) do
+    case Lmml.Bundle.open(lmmlz_path) do
+      {:ok, %Lmml.Bundle{} = bundle} ->
+        case SessionLmml.decode(bundle) do
+          {:ok, data} ->
+            entries = Map.new(bundle.entries, fn {k, v} -> {k, v} end)
+            {:ok, Map.put(data, "images", entries)}
+
+          err ->
+            {:error, "Failed to decode zipped session file '#{lmmlz_path}': #{inspect(err)}"}
+        end
+
+      err ->
+        {:error, "Failed to open zipped session file '#{lmmlz_path}': #{inspect(err)}"}
     end
   end
 
@@ -234,7 +277,7 @@ defmodule DeepSeekHarness.Brain.SessionStore do
     |> IO.iodata_to_binary()
   end
 
-  @doc "Lists all saved session IDs (`.lmml` and legacy `.json`)."
+  @doc "Lists all saved session IDs (`.lmmlz`, `.lmml`, and legacy `.json`)."
   def list_sessions(cwd \\ ".") do
     dir = session_dir(cwd)
 
@@ -243,13 +286,16 @@ defmodule DeepSeekHarness.Brain.SessionStore do
         {:ok, files} ->
           files
           |> Enum.filter(fn f ->
-            String.ends_with?(f, ".lmml") or String.ends_with?(f, ".json")
+            String.ends_with?(f, ".lmmlz") or String.ends_with?(f, ".lmml") or
+              String.ends_with?(f, ".json")
           end)
           |> Enum.map(fn f ->
             f
+            |> String.replace_suffix(".lmmlz", "")
             |> String.replace_suffix(".lmml", "")
             |> String.replace_suffix(".json", "")
           end)
+          |> Enum.uniq()
 
         _ ->
           []
@@ -262,35 +308,25 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   @doc """
   Deletes a persisted session state file from disk.
 
-  Removes both the `.lmml` narrative (the default markup) and any legacy
-  `.json` file for the session. Returns `{:ok, path}` on success, or
-  `{:error, reason}` when no session file exists or a removal fails.
+  Removes both `.lmmlz` / `.lmml` narrative and any legacy `.json` file for the
+  session. Returns `{:ok, path}` on success, or `{:error, reason}` when no
+  session file exists or a removal fails.
   """
   def delete_session(session_id, cwd \\ ".") do
     dir = session_dir(cwd)
+    lmmlz_path = Path.join(dir, "#{session_id}.lmmlz")
     lmml_path = Path.join(dir, "#{session_id}.lmml")
     json_path = Path.join(dir, "#{session_id}.json")
 
-    case File.rm(lmml_path) do
-      :ok ->
-        # Best-effort removal of a legacy `.json` sibling if present.
-        if File.exists?(json_path), do: File.rm(json_path)
-        {:ok, lmml_path}
+    rm_lmmlz = File.rm(lmmlz_path)
+    rm_lmml = File.rm(lmml_path)
+    rm_json = File.rm(json_path)
 
-      {:error, :enoent} ->
-        case File.rm(json_path) do
-          :ok ->
-            {:ok, json_path}
-
-          {:error, :enoent} ->
-            {:error, "Session '#{session_id}' has no persisted state to delete."}
-
-          {:error, reason} ->
-            {:error, "Failed to delete session file: #{inspect(reason)}"}
-        end
-
-      {:error, reason} ->
-        {:error, "Failed to delete session file: #{inspect(reason)}"}
+    cond do
+      rm_lmmlz == :ok -> {:ok, lmmlz_path}
+      rm_lmml == :ok -> {:ok, lmml_path}
+      rm_json == :ok -> {:ok, json_path}
+      true -> {:error, "Session '#{session_id}' has no persisted state to delete."}
     end
   end
 
@@ -309,11 +345,13 @@ defmodule DeepSeekHarness.Brain.SessionStore do
         {:ok, files} ->
           files
           |> Enum.filter(fn f ->
-            String.ends_with?(f, ".lmml") or String.ends_with?(f, ".json")
+            String.ends_with?(f, ".lmmlz") or String.ends_with?(f, ".lmml") or
+              String.ends_with?(f, ".json")
           end)
           |> Enum.map(&Path.join(dir, &1))
           |> Enum.map(&read_session_metadata/1)
           |> Enum.reject(&is_nil/1)
+          |> Enum.uniq_by(& &1[:session_id])
           |> Enum.sort_by(& &1[:updated_at], {:desc, NaiveDateTime})
 
         _ ->
@@ -330,10 +368,12 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   """
   def load_session_metadata(session_id, cwd \\ ".") do
     dir = session_dir(cwd)
+    lmmlz_path = Path.join(dir, "#{session_id}.lmmlz")
     lmml_path = Path.join(dir, "#{session_id}.lmml")
     json_path = Path.join(dir, "#{session_id}.json")
 
     cond do
+      File.exists?(lmmlz_path) -> read_session_metadata(lmmlz_path)
       File.exists?(lmml_path) -> read_session_metadata(lmml_path)
       File.exists?(json_path) -> read_session_metadata(json_path)
       true -> nil
@@ -341,12 +381,22 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   end
 
   defp read_session_metadata(file_path) do
-    case File.read(file_path) do
-      {:ok, content} ->
-        parse_metadata_content(file_path, content)
+    if String.ends_with?(file_path, ".lmmlz") do
+      case Lmml.Bundle.open(file_path) do
+        {:ok, bundle} ->
+          case SessionLmml.decode(bundle) do
+            {:ok, data} -> build_metadata(data)
+            _ -> nil
+          end
 
-      _ ->
-        nil
+        _ ->
+          nil
+      end
+    else
+      case File.read(file_path) do
+        {:ok, content} -> parse_metadata_content(file_path, content)
+        _ -> nil
+      end
     end
   end
 
