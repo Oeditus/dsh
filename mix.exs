@@ -4,7 +4,7 @@ defmodule DeepSeekHarness.MixProject do
   def project do
     [
       app: :deep_seek_harness,
-      version: "0.5.2",
+      version: "0.5.3",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
