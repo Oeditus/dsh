@@ -69,20 +69,6 @@ defmodule DeepSeekHarness.CLI.ContextExpander do
 
               {clean_text, [img_attachment | acc_attachments]}
 
-            {:ok, {:image, mime, data_uri}, label} ->
-              clean_text = String.replace(acc_text, full_match, "[Image: #{label}]")
-
-              img_attachment = %{
-                type: "image",
-                label: label,
-                filename: Path.basename(label),
-                mime: mime,
-                bytes: nil,
-                data_uri: data_uri
-              }
-
-              {clean_text, [img_attachment | acc_attachments]}
-
             {:ok, content, label} when is_binary(content) ->
               block =
                 "\n\n=== Attached File/URI (#{label}) ===\n#{content}\n=======================\n"

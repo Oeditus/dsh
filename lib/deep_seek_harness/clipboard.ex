@@ -4,7 +4,6 @@ defmodule DeepSeekHarness.Clipboard do
   supporting both image binary payloads and plain text text selections across
   Linux (Wayland/X11), macOS, and Windows.
   """
-  require Logger
 
   @doc """
   Attempts to read image data (PNG or JPEG) from the OS clipboard.
