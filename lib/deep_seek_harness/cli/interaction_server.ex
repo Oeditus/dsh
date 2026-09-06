@@ -109,16 +109,12 @@ defmodule DeepSeekHarness.CLI.InteractionServer do
   end
 
   defp find_subagent_label(caller_pid) do
-    case Registry.lookup(DeepSeekHarness.PackageRegistry, "running_package") do
-      entries when is_list(entries) ->
-        case Enum.find(entries, fn {pid, pkg} -> pid == caller_pid and pkg[:kind] == :subagent end) do
-          {_pid, %{label: label}} ->
-            label
-
-          _ ->
-            fallback_first_subagent()
-        end
-
+    with entries when is_list(entries) <-
+           Registry.lookup(DeepSeekHarness.PackageRegistry, "running_package"),
+         {_pid, %{label: label}} <-
+           Enum.find(entries, fn {pid, pkg} -> pid == caller_pid and pkg[:kind] == :subagent end) do
+      label
+    else
       _ ->
         fallback_first_subagent()
     end

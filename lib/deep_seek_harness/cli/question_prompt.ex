@@ -419,8 +419,6 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   @doc "Calculates terminal display width in columns, handling wide symbols and stripping ANSI escapes."
   def display_width(str) when is_binary(str), do: Formatter.display_width(str)
 
-  defp header_title(progress, subagent \\ nil)
-
   defp header_title({idx, total}, subagent)
        when is_integer(idx) and is_integer(total) and total > 1 do
     sub_prefix = if is_binary(subagent) and subagent != "", do: "[#{subagent}] ", else: ""
