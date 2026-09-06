@@ -669,33 +669,48 @@ defmodule DeepSeekHarness.CLI.LineEditor do
 
   def toggle_reverse_search(%{search_mode: true} = state), do: state
 
+  @ragex_subcommands ~w(/ragex audit /ragex export /ragex help /ragex quality /ragex reindex /ragex stats /ragex url)
+  @export_subcommands ~w(/export json /export lmml /export lmmlz /export markdown)
+
   @doc """
-  Auto-completes a slash-command prefix.
+  Tab-completes slash commands and subcommands given input.
 
   Returns `{:ok, completed}` when the prefix uniquely resolves or extends to
   a longer common prefix, `{:ambiguous, matches}` when multiple candidates
   share no longer common prefix, and `:none` when nothing matches.
   """
   def tab_complete(input) when is_binary(input) do
-    if String.starts_with?(input, "/") do
-      case Enum.filter(@slash_commands, &String.starts_with?(&1, input)) do
-        [] ->
-          :none
+    cond do
+      String.starts_with?(input, "/ragex ") ->
+        complete_candidates(input, @ragex_subcommands)
 
-        [single] ->
-          {:ok, single}
+      String.starts_with?(input, "/export ") ->
+        complete_candidates(input, @export_subcommands)
 
-        multiple ->
-          prefix = common_prefix(multiple)
+      String.starts_with?(input, "/") ->
+        complete_candidates(input, @slash_commands)
 
-          if String.length(prefix) > String.length(input) do
-            {:ok, prefix}
-          else
-            {:ambiguous, multiple}
-          end
-      end
-    else
-      :none
+      true ->
+        :none
+    end
+  end
+
+  defp complete_candidates(input, candidates) do
+    case Enum.filter(candidates, &String.starts_with?(&1, input)) do
+      [] ->
+        :none
+
+      [single] ->
+        {:ok, single}
+
+      multiple ->
+        prefix = common_prefix(multiple)
+
+        if String.length(prefix) > String.length(input) do
+          {:ok, prefix}
+        else
+          {:ambiguous, multiple}
+        end
     end
   end
 

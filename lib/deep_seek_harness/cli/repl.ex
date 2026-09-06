@@ -518,6 +518,8 @@ defmodule DeepSeekHarness.CLI.Repl do
     fmt =
       case String.trim(format) do
         "json" -> :json
+        "lmml" -> :lmml
+        "lmmlz" -> :lmmlz
         _ -> :markdown
       end
 
@@ -1285,6 +1287,74 @@ defmodule DeepSeekHarness.CLI.Repl do
         IO.puts(Formatter.format_error(err))
     end
 
+    :continue
+  end
+
+  def handle_input("/ragex url " <> url_str, _session_pid, _session_id) do
+    target_url = String.trim(url_str)
+
+    IO.puts(
+      Formatter.format_info("Analyzing URL with Ragex URL Analyzer Engine: '#{target_url}'…")
+    )
+
+    case MCPServerManager.execute_ragex_tool("analyze_url", %{"url" => target_url}) do
+      {:ok, out} ->
+        IO.puts(
+          "\n" <> Formatter.format_markdown("### Ragex URL Analysis Report\n\n#{out}") <> "\n"
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/ragex audit", _session_pid, _session_id) do
+    IO.puts(Formatter.format_info("Running Ragex Security Audit against codebase…"))
+
+    case MCPServerManager.execute_ragex_tool("security_audit", %{}) do
+      {:ok, out} ->
+        IO.puts(
+          "\n" <> Formatter.format_markdown("### Ragex Security Audit Report\n\n#{out}") <> "\n"
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/ragex quality", _session_pid, _session_id) do
+    IO.puts(Formatter.format_info("Running Ragex Code Quality Analysis against codebase…"))
+
+    case MCPServerManager.execute_ragex_tool("quality_report", %{}) do
+      {:ok, out} ->
+        IO.puts(
+          "\n" <> Formatter.format_markdown("### Ragex Code Quality Report\n\n#{out}") <> "\n"
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/ragex help", _session_pid, _session_id) do
+    md = """
+    ### Ragex 0.30 Code Intelligence Commands
+    - `/ragex` — Mount Ragex MCP server for local workspace
+    - `/ragex stats` — View Knowledge Graph statistics (nodes, edges, top PageRank modules)
+    - `/ragex url <url>` — Analyze external repository (GitHub/GitLab), web page, or API spec
+    - `/ragex audit` — Run automated Security Audit scanning
+    - `/ragex quality` — Run Code Quality and complexity report
+    - `/ragex reindex` — Re-index workspace codebase into Knowledge Graph
+    - `/ragex export [mermaid|dot|d3]` — Export Knowledge Graph visual structure
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
     :continue
   end
 

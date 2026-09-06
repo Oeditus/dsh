@@ -16,6 +16,14 @@ defmodule DeepSeekHarness.PlanGateTest do
       assert PlanGate.modifier_tool?(:edit_file, %{}) == true
     end
 
+    test "returns true for Ragex file modifying and refactoring tools" do
+      for tool <-
+            ~w(mcp_ragex_edit_file mcp_ragex_edit_files mcp_ragex_refactor_code mcp_ragex_advanced_refactor mcp_ragex_rollback_edit) do
+        assert PlanGate.modifier_tool?(tool, %{}) == true
+        assert PlanGate.modifier_tool?(tool) == true
+      end
+    end
+
     test "returns false for read-only tools" do
       for tool <- ~w(read_file read_files list_dir glob_search) do
         assert PlanGate.modifier_tool?(tool, %{}) == false

@@ -145,6 +145,46 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
 
   def decode(_), do: {:error, "Cannot decode: expected a narrative binary or Lmml.Bundle."}
 
+  @doc """
+  Validates a `.lmml` narrative binary or `Lmml.Bundle` using `Lmml.validate/1`.
+  Returns `:ok` or `{:error, issues}` detailing any reference, zip entry, or embed name anomalies.
+  """
+  @spec validate(Bundle.t() | binary()) :: :ok | {:error, list()}
+  def validate(%Bundle{} = bundle), do: Lmml.validate(bundle)
+
+  def validate(narrative) when is_binary(narrative) do
+    case Bundle.new_text("session.lmml", narrative) do
+      {:ok, bundle} -> Lmml.validate(bundle)
+      {:error, reason} -> {:error, [reason]}
+    end
+  end
+
+  def validate(_), do: {:error, ["Invalid input for LMML validation"]}
+
+  @doc """
+  Converts a `.lmml` narrative or bundle to clean, human-readable Markdown
+  using `Lmml.to_md/2` (replacing embed syntax with readable placeholders).
+  """
+  @spec to_markdown(Bundle.t() | binary(), keyword()) :: {:ok, binary()} | {:error, term()}
+  def to_markdown(target, opts \\ [])
+
+  def to_markdown(%Bundle{} = bundle, opts) do
+    {:ok, Lmml.to_md(bundle, opts)}
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  def to_markdown(narrative, opts) when is_binary(narrative) do
+    case Bundle.new_text("session.lmml", narrative) do
+      {:ok, bundle} -> {:ok, Lmml.to_md(bundle, opts)}
+      {:error, reason} -> {:error, reason}
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  def to_markdown(_target, _opts), do: {:error, "Invalid input for LMML to_markdown"}
+
   # ---------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------
@@ -177,7 +217,7 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
   defp serialize_snapshots(_), do: []
 
   defp decode_manifest(%Bundle{} = bundle) do
-    case Manifest.load(bundle) do
+    case Lmml.manifest(bundle) do
       {:ok, nil} ->
         {:ok, default_manifest()}
 
@@ -217,7 +257,7 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
 
   defp decode_messages(%Bundle{} = bundle) do
     bundle
-    |> Bundle.embeds()
+    |> Lmml.embeds()
     |> Enum.filter(&embed_message?/1)
     |> Enum.sort_by(&embed_index/1)
     |> Enum.reduce_while({:ok, []}, fn embed, {:ok, acc} ->

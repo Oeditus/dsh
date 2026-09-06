@@ -9,7 +9,11 @@ defmodule DeepSeekHarness.PlanGate do
   selection to a decision atom.
   """
 
-  @file_modifiers ~w(write_file replace_file edit_file git_commit)
+  @file_modifiers ~w(
+    write_file replace_file edit_file git_commit
+    mcp_ragex_edit_file mcp_ragex_edit_files mcp_ragex_refactor_code mcp_ragex_advanced_refactor mcp_ragex_rollback_edit
+    ragex_edit_file ragex_edit_files ragex_refactor_code ragex_advanced_refactor ragex_rollback_edit
+  )
 
   # Marker substrings (lowercased) that make a bash command "write-ish/destructive".
   @bash_write_markers [
@@ -41,8 +45,9 @@ defmodule DeepSeekHarness.PlanGate do
   Returns true when a tool call is considered file-modifying (write-ish/destructive).
 
   `tool_name` may be a binary or atom. `args` is a string-keyed map (may be empty).
-  A call counts if its name is `write_file`, `replace_file`, `edit_file`, or
-  `git_commit`; or if its name is `bash` and its `"command"` looks write-ish.
+  A call counts if its name is `write_file`, `replace_file`, `edit_file`, `git_commit`,
+  or any Ragex file editing / refactoring tool (`mcp_ragex_edit_file`, `mcp_ragex_refactor_code`, etc.);
+  or if its name is `bash` and its `"command"` looks write-ish.
   """
   def modifier_tool?(tool_name, args \\ %{}) do
     name = normalize_name(tool_name)

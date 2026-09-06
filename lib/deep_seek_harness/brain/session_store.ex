@@ -129,7 +129,7 @@ defmodule DeepSeekHarness.Brain.SessionStore do
   end
 
   defp load_lmmlz_session(lmmlz_path) do
-    case Lmml.Bundle.open(lmmlz_path) do
+    case Lmml.open(lmmlz_path) do
       {:ok, %Lmml.Bundle{} = bundle} ->
         case SessionLmml.decode(bundle) do
           {:ok, data} ->

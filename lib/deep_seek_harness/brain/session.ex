@@ -687,45 +687,103 @@ defmodule DeepSeekHarness.Brain.Session do
     File.mkdir_p!(export_dir)
 
     timestamp = DateTime.utc_now() |> Calendar.strftime("%Y%m%d_%H%M%S")
-    ext = if format in [:json, "json"], do: "json", else: "md"
+
+    fmt_atom =
+      case format do
+        f when f in [:json, "json"] -> :json
+        f when f in [:lmml, "lmml"] -> :lmml
+        f when f in [:lmmlz, "lmmlz"] -> :lmmlz
+        _ -> :markdown
+      end
+
+    ext = to_string(fmt_atom)
+    ext = if ext == "markdown", do: "md", else: ext
     filename = "session_#{state.session_id}_#{timestamp}.#{ext}"
     export_path = Path.join(export_dir, filename)
 
+    case export_session_content(fmt_atom, state, export_path) do
+      {:ok, path} -> {:reply, {:ok, path}, state}
+      {:error, err} -> {:reply, {:error, "Failed to write export file: #{inspect(err)}"}, state}
+    end
+  end
+
+  defp export_session_content(:json, state, export_path) do
     content =
-      if ext == "json" do
-        Jason.encode!(
-          %{
-            "session_id" => state.session_id,
-            "model" => state.model,
-            "exported_at" => DateTime.to_iso8601(DateTime.utc_now()),
-            "total_tokens" => state.total_prompt_tokens + state.total_completion_tokens,
-            "messages" => state.messages
-          },
-          pretty: true
-        )
-      else
-        formatted_messages =
-          Enum.map_join(state.messages, "\n\n", fn m ->
-            role = String.upcase(m["role"] || "unknown")
-            text = message_content_text(m["content"])
-            "### #{role}\n#{text}"
-          end)
-
-        """
-        # Session Export: #{state.session_id}
-        - **Model**: `#{state.model}`
-        - **Exported At**: `#{DateTime.to_iso8601(DateTime.utc_now())}`
-        - **Total Tokens**: `#{state.total_prompt_tokens + state.total_completion_tokens}`
-
-        ---
-
-        #{formatted_messages}
-        """
-      end
+      Jason.encode!(
+        %{
+          "session_id" => state.session_id,
+          "model" => state.model,
+          "exported_at" => DateTime.to_iso8601(DateTime.utc_now()),
+          "total_tokens" => state.total_prompt_tokens + state.total_completion_tokens,
+          "messages" => state.messages
+        },
+        pretty: true
+      )
 
     case File.write(export_path, content) do
-      :ok -> {:reply, {:ok, export_path}, state}
-      {:error, err} -> {:reply, {:error, "Failed to write export file: #{inspect(err)}"}, state}
+      :ok -> {:ok, export_path}
+      err -> err
+    end
+  end
+
+  defp export_session_content(:lmml, state, export_path) do
+    with {:ok, narrative} <- DeepSeekHarness.Brain.SessionLmml.encode(state, state.session_id),
+         :ok <- File.write(export_path, narrative) do
+      {:ok, export_path}
+    end
+  end
+
+  defp export_session_content(:lmmlz, state, export_path) do
+    images = Map.get(state, :images) || Map.get(state, "images") || %{}
+
+    with {:ok, narrative} <- DeepSeekHarness.Brain.SessionLmml.encode(state, state.session_id),
+         {:ok, bundle} <- Lmml.Bundle.new_zip("#{state.session_id}.lmml", narrative, images),
+         :ok <- Lmml.Bundle.write!(bundle, export_path) do
+      {:ok, export_path}
+    end
+  end
+
+  defp export_session_content(:markdown, state, export_path) do
+    case DeepSeekHarness.Brain.SessionLmml.encode(state, state.session_id) do
+      {:ok, narrative} ->
+        case DeepSeekHarness.Brain.SessionLmml.to_markdown(narrative) do
+          {:ok, md_content} ->
+            case File.write(export_path, md_content) do
+              :ok -> {:ok, export_path}
+              err -> err
+            end
+
+          _ ->
+            fallback_markdown_export(state, export_path)
+        end
+
+      _ ->
+        fallback_markdown_export(state, export_path)
+    end
+  end
+
+  defp fallback_markdown_export(state, export_path) do
+    formatted_messages =
+      Enum.map_join(state.messages, "\n\n", fn m ->
+        role = String.upcase(m["role"] || "unknown")
+        text = message_content_text(m["content"])
+        "### #{role}\n#{text}"
+      end)
+
+    content = """
+    # Session Export: #{state.session_id}
+    - **Model**: `#{state.model}`
+    - **Exported At**: `#{DateTime.to_iso8601(DateTime.utc_now())}`
+    - **Total Tokens**: `#{state.total_prompt_tokens + state.total_completion_tokens}`
+
+    ---
+
+    #{formatted_messages}
+    """
+
+    case File.write(export_path, content) do
+      :ok -> {:ok, export_path}
+      err -> err
     end
   end
 

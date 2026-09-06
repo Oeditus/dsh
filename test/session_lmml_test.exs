@@ -245,4 +245,29 @@ defmodule DeepSeekHarness.Brain.SessionLmmlTest do
       assert decoded["messages"] == [%{"role" => "user", "content" => "from bundle"}]
     end
   end
+
+  describe "validate/1" do
+    test "validates valid session narrative" do
+      session_state = %{
+        session_id: "val",
+        messages: [%{"role" => "user", "content" => "test"}]
+      }
+
+      {:ok, narrative} = SessionLmml.encode(session_state, "val")
+      assert :ok = SessionLmml.validate(narrative)
+    end
+  end
+
+  describe "to_markdown/1" do
+    test "converts session narrative to clean markdown" do
+      session_state = %{
+        session_id: "md_test",
+        messages: [%{"role" => "user", "content" => "hello world"}]
+      }
+
+      {:ok, narrative} = SessionLmml.encode(session_state, "md_test")
+      assert {:ok, md} = SessionLmml.to_markdown(narrative)
+      assert String.contains?(md, "hello world")
+    end
+  end
 end
