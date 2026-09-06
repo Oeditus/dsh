@@ -16,7 +16,28 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   knows how many are left to answer -- otherwise it's easy to lose track
   of how many separate questions the AI is waiting on.
   """
-  def ask(questions) when is_list(questions) do
+  def ask(questions, opts \\ [])
+
+  def ask(questions, opts) when is_list(questions) do
+    case Process.whereis(DeepSeekHarness.CLI.InteractionServer) do
+      nil ->
+        do_ask(questions, opts)
+
+      pid ->
+        if self() == pid do
+          do_ask(questions, opts)
+        else
+          DeepSeekHarness.CLI.InteractionServer.ask(questions, opts)
+        end
+    end
+  end
+
+  def ask(_, _opts), do: "No questions provided."
+
+  @doc "Internal execution of ask/2."
+  def do_ask(questions, opts \\ [])
+
+  def do_ask(questions, opts) when is_list(questions) do
     total = length(questions)
 
     answers =
@@ -27,15 +48,16 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         options = Map.get(q, "options") || Map.get(q, :options, [])
         is_multi = Map.get(q, "is_multi_select") || Map.get(q, :is_multi_select, false)
         progress = if total > 1, do: {idx, total}, else: nil
+        single_opts = Keyword.merge(opts, progress: progress)
 
-        ans = ask_single_question(question_text, options, is_multi, true, progress: progress)
+        ans = do_ask_single_question(question_text, options, is_multi, true, single_opts)
         format_answer(question_text, ans)
       end)
 
     Enum.join(answers, "\n\n")
   end
 
-  def ask(_), do: "No questions provided."
+  def do_ask(_, _opts), do: "No questions provided."
 
   @doc "Delegates God mode check to DeepSeekHarness.Config."
   def god_mode?, do: DeepSeekHarness.Config.god_mode?()
@@ -43,10 +65,36 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   @doc """
   Asks a single question and returns choice result map.
 
-  `opts` currently supports `:progress`, an optional `{index, total}` tuple
-  (1-indexed) shown in the modal header when `total > 1`.
+  Routes through DeepSeekHarness.CLI.InteractionServer when active.
   """
   def ask_single_question(question, options, is_multi \\ false, show_numbers \\ true, opts \\ []) do
+    case Process.whereis(DeepSeekHarness.CLI.InteractionServer) do
+      nil ->
+        do_ask_single_question(question, options, is_multi, show_numbers, opts)
+
+      pid ->
+        if self() == pid do
+          do_ask_single_question(question, options, is_multi, show_numbers, opts)
+        else
+          DeepSeekHarness.CLI.InteractionServer.ask_single_question(
+            question,
+            options,
+            is_multi,
+            show_numbers,
+            opts
+          )
+        end
+    end
+  end
+
+  @doc "Internal execution of ask_single_question/5."
+  def do_ask_single_question(
+        question,
+        options,
+        is_multi \\ false,
+        show_numbers \\ true,
+        opts \\ []
+      ) do
     options = if is_list(options) and options != [], do: options, else: ["Yes", "No"]
 
     has_recommended? =
@@ -74,11 +122,12 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       all_options = options ++ ["Write custom response…"]
       custom_idx = length(all_options) - 1
       progress = Keyword.get(opts, :progress)
+      subagent = Keyword.get(opts, :subagent)
 
       if tty?() do
-        prompt_tty(question, all_options, is_multi, custom_idx, show_numbers, progress)
+        prompt_tty(question, all_options, is_multi, custom_idx, show_numbers, progress, subagent)
       else
-        prompt_non_tty(question, all_options, is_multi, custom_idx, progress)
+        prompt_non_tty(question, all_options, is_multi, custom_idx, progress, subagent)
       end
     end
   end
@@ -110,7 +159,15 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # Pure state management (unit-testable)
   # ---------------------------------------------------------------------
 
-  def new_state(question, options, is_multi, custom_idx, show_numbers \\ true, progress \\ nil) do
+  def new_state(
+        question,
+        options,
+        is_multi,
+        custom_idx,
+        show_numbers \\ true,
+        progress \\ nil,
+        subagent \\ nil
+      ) do
     %{
       question: question,
       options: options,
@@ -118,6 +175,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       custom_idx: custom_idx,
       show_numbers: show_numbers,
       progress: progress,
+      subagent: subagent,
       cursor: 0,
       selected: MapSet.new(),
       rendered_lines: 0
@@ -207,9 +265,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     end
   end
 
-  defp prompt_tty(question, options, is_multi, custom_idx, show_numbers, progress) do
+  defp prompt_tty(question, options, is_multi, custom_idx, show_numbers, progress, subagent) do
     set_raw_mode()
-    state = new_state(question, options, is_multi, custom_idx, show_numbers, progress)
+    state = new_state(question, options, is_multi, custom_idx, show_numbers, progress, subagent)
 
     res =
       try do
@@ -217,11 +275,11 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       catch
         :exit, _ ->
           restore_tty_mode()
-          prompt_non_tty(question, options, is_multi, custom_idx, progress)
+          prompt_non_tty(question, options, is_multi, custom_idx, progress, subagent)
 
         :error, _ ->
           restore_tty_mode()
-          prompt_non_tty(question, options, is_multi, custom_idx, progress)
+          prompt_non_tty(question, options, is_multi, custom_idx, progress, subagent)
       after
         # Guarantees the modal is unregistered as the terminal's foreground
         # surface however `tui_loop/1` exits (normal confirm/cancel, the
@@ -361,11 +419,18 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   @doc "Calculates terminal display width in columns, handling wide symbols and stripping ANSI escapes."
   def display_width(str) when is_binary(str), do: Formatter.display_width(str)
 
-  defp header_title({idx, total}) when is_integer(idx) and is_integer(total) and total > 1 do
-    " 󰋗 Question #{idx}/#{total} from AI "
+  defp header_title(progress, subagent \\ nil)
+
+  defp header_title({idx, total}, subagent)
+       when is_integer(idx) and is_integer(total) and total > 1 do
+    sub_prefix = if is_binary(subagent) and subagent != "", do: "[#{subagent}] ", else: ""
+    " 󰋗 #{sub_prefix}Question #{idx}/#{total} from AI "
   end
 
-  defp header_title(_), do: " 󰋗 Question from AI "
+  defp header_title(_, subagent) do
+    sub_prefix = if is_binary(subagent) and subagent != "", do: "[#{subagent}] ", else: ""
+    " 󰋗 #{sub_prefix}Question from AI "
+  end
 
   @doc """
   Renders the question modal box.
@@ -385,7 +450,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       IO.write(:user, "\r\e[#{state.rendered_lines}A\e[0J")
     end
 
-    header_title = header_title(Map.get(state, :progress))
+    header_title = header_title(Map.get(state, :progress), Map.get(state, :subagent))
     header_len = display_width(header_title)
 
     header_padding =
@@ -520,14 +585,16 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # Non-TTY Fallback Prompt
   # ---------------------------------------------------------------------
 
-  defp prompt_non_tty(question, options, _is_multi, custom_idx, progress) do
+  defp prompt_non_tty(question, options, _is_multi, custom_idx, progress, subagent \\ nil) do
+    sub_prefix = if is_binary(subagent) and subagent != "", do: "[#{subagent}] ", else: ""
+
     label =
       case progress do
         {idx, total} when is_integer(idx) and is_integer(total) and total > 1 ->
-          "Question #{idx}/#{total} from AI"
+          "#{sub_prefix}Question #{idx}/#{total} from AI"
 
         _ ->
-          "Question from AI"
+          "#{sub_prefix}Question from AI"
       end
 
     IO.write(

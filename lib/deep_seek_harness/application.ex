@@ -17,6 +17,8 @@ defmodule DeepSeekHarness.Application do
       # Coordinates Logger output with whichever CLI surface (idle prompt,
       # question modal) currently owns the terminal
       DeepSeekHarness.CLI.TerminalOwner,
+      # Synchronizes all user interactions and questions (interruptions) across main agents & subagents
+      DeepSeekHarness.CLI.InteractionServer,
       # Dynamic plugin hot-reloader & tool registry
       DeepSeekHarness.Plugin.Loader,
       # MCP Server Manager
