@@ -12,8 +12,9 @@ defmodule DeepSeekHarness.RulesTest do
 
   test "initializes default rules if rules.json is missing", %{tmp_dir: tmp_dir} do
     rules = Rules.load_rules(tmp_dir)
-    assert length(rules) == 3
+    assert length(rules) == 4
     assert Enum.any?(rules, fn r -> r["scope"] == "all" and r["text"] =~ "typographic" end)
+    assert Enum.any?(rules, fn r -> r["scope"] == "all" and r["text"] =~ "Ragex MCP tools" end)
     assert Enum.any?(rules, fn r -> r["scope"] == "cr" and r["text"] =~ "table cells" end)
   end
 

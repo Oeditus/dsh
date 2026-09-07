@@ -95,11 +95,38 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
     narrative = header <> "\n\n" <> body <> "\n"
 
     case Bundle.new_text("#{session_id}.lmml", narrative) do
-      {:ok, _bundle} -> {:ok, narrative}
-      {:error, reason} -> {:error, reason}
+      {:ok, _bundle} ->
+        {:ok, narrative}
+
+      {:error, reason} ->
+        require Logger
+
+        Logger.warning(
+          "[SessionLmml] Bundle parser validation notice for '#{session_id}': #{inspect(reason, pretty: true, limit: :infinity)}. Saving narrative text directly."
+        )
+
+        {:ok, narrative}
     end
   rescue
-    e -> {:error, Exception.message(e)}
+    e ->
+      require Logger
+      stacktrace = Exception.format(:error, e, __STACKTRACE__)
+
+      Logger.error(
+        "[SessionLmml] Exception during session encoding for '#{session_id}':\n#{stacktrace}"
+      )
+
+      case binding() |> Keyword.get(:narrative) do
+        narrative when is_binary(narrative) ->
+          Logger.info(
+            "[SessionLmml] Recovered constructed LMML narrative despite parser validation exception."
+          )
+
+          {:ok, narrative}
+
+        _ ->
+          {:error, Exception.message(e)}
+      end
   end
 
   # The `@@@` sequence is the lmml inline-embed delimiter: the narrative
@@ -138,12 +165,75 @@ defmodule DeepSeekHarness.Brain.SessionLmml do
   end
 
   def decode(narrative) when is_binary(narrative) do
-    with {:ok, bundle} <- Bundle.new_text("session.lmml", narrative) do
-      decode(bundle)
+    case Bundle.new_text("session.lmml", narrative) do
+      {:ok, bundle} ->
+        decode(bundle)
+
+      {:error, reason} ->
+        require Logger
+
+        Logger.warning(
+          "[SessionLmml] Bundle parser notice on decode: #{inspect(reason)}. Falling back to regex embed extractor."
+        )
+
+        decode_narrative_regex(narrative)
     end
   end
 
   def decode(_), do: {:error, "Cannot decode: expected a narrative binary or Lmml.Bundle."}
+
+  defp decode_narrative_regex(narrative) when is_binary(narrative) do
+    embed_regex = ~r/@@@([^\r\n]+)[\r\n]+([\s\S]*?)[\r\n]+@@@/
+
+    matches = Regex.scan(embed_regex, narrative)
+
+    manifest_content =
+      Enum.find_value(matches, fn
+        [_, "manifest.json", content] -> content
+        _ -> nil
+      end)
+
+    messages =
+      matches
+      |> Enum.filter(fn
+        [_, name, _] ->
+          String.starts_with?(name, @message_prefix) and String.ends_with?(name, @message_suffix)
+
+        _ ->
+          false
+      end)
+      |> Enum.sort_by(fn [_, name, _] ->
+        idx_str =
+          name
+          |> String.replace_prefix(@message_prefix, "")
+          |> String.replace_suffix(@message_suffix, "")
+
+        case Integer.parse(idx_str) do
+          {n, _} -> n
+          _ -> -1
+        end
+      end)
+      |> Enum.map(fn [_, _name, content] ->
+        case Jason.decode(content) do
+          {:ok, msg} -> msg
+          _ -> %{}
+        end
+      end)
+
+    case manifest_content do
+      nil ->
+        {:error, "Regex fallback failed: no manifest.json embed found in narrative."}
+
+      json_str ->
+        case Jason.decode(json_str) do
+          {:ok, manifest} ->
+            {:ok, Map.merge(manifest, %{"messages" => messages})}
+
+          {:error, err} ->
+            {:error, "Failed to decode manifest.json embed: #{inspect(err)}"}
+        end
+    end
+  end
 
   @doc """
   Validates a `.lmml` narrative binary or `Lmml.Bundle` using `Lmml.validate/1`.

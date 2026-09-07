@@ -88,7 +88,7 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       %{
         name: "bash",
         description:
-          "Execute a shell bash command and return standard output / error. NOTE: Use dedicated tools or Ragex MCP tools (ragex_grep, ragex_symbol, ragex_view, read_file, mcp_ragex_image_*, etc.) for code searching, symbol finding, image processing, or file viewing instead of raw bash shell commands.",
+          "Execute a shell bash command and return standard output / error. STRICT RESTRICTION: Do NOT use bash with grep, sed, find, cat, head, tail, or xargs for code searching, symbol finding, AST querying, directory exploration, or reading file content. You MUST use Ragex MCP tools (mcp_ragex_grep, mcp_ragex_search_code, mcp_ragex_symbol_definition, mcp_ragex_symbol_references, mcp_ragex_metaast_search, mcp_ragex_structure, mcp_ragex_view) or read_file/read_files instead. Use bash ONLY for build/test execution, git commands, running local binaries, or system operations where no dedicated or Ragex tool exists.",
         parameters: %{
           type: "object",
           properties: %{

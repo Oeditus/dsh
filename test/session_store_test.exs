@@ -358,4 +358,37 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
     assert String.ends_with?(meta.title, "...")
     assert String.length(meta.title) == 60
   end
+
+  test "writes detailed .lmml_error.log report next to session file on LMML persistence failure",
+       %{
+         tmp_dir: tmp_dir
+       } do
+    session_state = %{
+      session_id: "err_test_sess",
+      model: "deepseek-chat",
+      messages: [%{"role" => "user", "content" => "Crash test"}],
+      snapshots: []
+    }
+
+    # Simulate an LMML encode failure by passing an invalid data shape or handling error
+    dir = SessionStore.session_dir(tmp_dir)
+    File.mkdir_p!(dir)
+
+    primary_error = {:error, "Simulated Md.Parser match error"}
+
+    # Call fallback_save directly
+    assert {:ok, json_path} =
+             SessionStore.fallback_save(session_state, dir, "err_test_sess", primary_error)
+
+    assert File.exists?(json_path)
+
+    log_path = Path.join(dir, "err_test_sess.lmml_error.log")
+    assert File.exists?(log_path)
+
+    log_content = File.read!(log_path)
+    assert log_content =~ "DSH LMML Persistence Error Report"
+    assert log_content =~ "Simulated Md.Parser match error"
+    assert log_content =~ "err_test_sess"
+    assert log_content =~ "SUCCESS (JSON Fallback Saved)"
+  end
 end

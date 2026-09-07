@@ -333,7 +333,9 @@ Manage most of these live from the REPL with `/config style <name>`, `/config pr
 
 ## Documentation
 
-For full command reference, keyboard shortcuts, rule scoping tactics, and advanced BEAM distribution workflows, see [`docs/cheat_sheet.md`](docs/cheat_sheet.md). For the customizable multi-step Workflow Engine (`/workflow`), see [`docs/WORKFLOW_ENGINE.md`](docs/WORKFLOW_ENGINE.md).
+- [`docs/GETTING_STARTED_GUIDE.md`](docs/GETTING_STARTED_GUIDE.md) — Comprehensive Onboarding & Customization Guide (Practices, Workflows, Plugins, Rules, Skills & Ragex).
+- [`docs/WORKFLOW_ENGINE.md`](docs/WORKFLOW_ENGINE.md) — Multi-step Workflow Engine Reference (`/workflow`).
+- [`docs/cheat_sheet.md`](docs/cheat_sheet.md) — Full Slash Command & Shortcuts Cheatsheet.
 
 <p align="center">
   <img src="stuff/img/logos-128x128.png" width="48" alt="DeepSeek Harness" />

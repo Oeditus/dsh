@@ -40,11 +40,11 @@ defmodule DeepSeekHarness.Brain.SessionStore do
         {:ok, lmmlz_path}
       else
         err ->
-          Logger.warning(
-            "[SessionStore] Failed to save zipped session '#{session_id}': #{inspect(err)}"
+          Logger.error(
+            "[SessionStore] Failed to save zipped session '#{session_id}': #{format_error(err)}"
           )
 
-          {:error, err}
+          fallback_save(session_state, dir, session_id, err)
       end
     else
       file_path = Path.join(dir, "#{session_id}.lmml")
@@ -55,10 +55,155 @@ defmodule DeepSeekHarness.Brain.SessionStore do
         {:ok, file_path}
       else
         err ->
-          Logger.warning("[SessionStore] Failed to save session '#{session_id}': #{inspect(err)}")
-          {:error, err}
+          Logger.error(
+            "[SessionStore] Failed to save session '#{session_id}': #{format_error(err)}"
+          )
+
+          fallback_save(session_state, dir, session_id, err)
       end
     end
+  end
+
+  defp format_error(%_struct{} = exception) when is_exception(exception) do
+    Exception.format(:error, exception)
+  end
+
+  defp format_error(err) do
+    inspect(err, pretty: true, limit: :infinity)
+  end
+
+  @doc false
+  def fallback_save(session_state, dir, session_id, primary_error) do
+    json_path = Path.join(dir, "#{session_id}.json")
+
+    case Jason.encode(session_state, pretty: true) do
+      {:ok, json_data} ->
+        case File.write(json_path, json_data) do
+          :ok ->
+            Logger.info(
+              "[SessionStore] Successfully saved session '#{session_id}' to JSON fallback path '#{json_path}'."
+            )
+
+            write_lmml_error_log(
+              session_state,
+              dir,
+              session_id,
+              primary_error,
+              "SUCCESS (JSON Fallback Saved)",
+              json_path
+            )
+
+            {:ok, json_path}
+
+          write_err ->
+            Logger.error(
+              "[SessionStore] Critical: JSON fallback write failed for session '#{session_id}': #{format_error(write_err)}"
+            )
+
+            write_lmml_error_log(
+              session_state,
+              dir,
+              session_id,
+              primary_error,
+              "FAILED (JSON Write Error)",
+              format_error(write_err)
+            )
+
+            {:error, primary_error}
+        end
+
+      encode_err ->
+        Logger.error(
+          "[SessionStore] Critical: JSON encoding failed for session '#{session_id}': #{format_error(encode_err)}"
+        )
+
+        write_lmml_error_log(
+          session_state,
+          dir,
+          session_id,
+          primary_error,
+          "FAILED (JSON Encode Error)",
+          format_error(encode_err)
+        )
+
+        {:error, primary_error}
+    end
+  rescue
+    e ->
+      stacktrace = Exception.format(:error, e, __STACKTRACE__)
+
+      Logger.error(
+        "[SessionStore] Fallback save exception for session '#{session_id}': #{stacktrace}"
+      )
+
+      write_lmml_error_log(
+        session_state,
+        dir,
+        session_id,
+        primary_error,
+        "FAILED (Fallback Exception)",
+        stacktrace
+      )
+
+      {:error, primary_error}
+  end
+
+  defp write_lmml_error_log(
+         session_state,
+         dir,
+         session_id,
+         primary_error,
+         fallback_status,
+         fallback_detail
+       ) do
+    log_path = Path.join(dir, "#{session_id}.lmml_error.log")
+    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
+    model = Map.get(session_state, :model) || Map.get(session_state, "model") || "unknown"
+    messages = Map.get(session_state, :messages) || Map.get(session_state, "messages") || []
+    snapshots = Map.get(session_state, :snapshots) || Map.get(session_state, "snapshots") || []
+
+    step_count =
+      Map.get(session_state, :step_count) || Map.get(session_state, "step_count") || 0
+
+    log_content = """
+    ================================================================================
+    DSH LMML Persistence Error Report
+    ================================================================================
+    Timestamp:        #{timestamp}
+    Session ID:       #{session_id}
+    Model:            #{model}
+    Target Directory: #{dir}
+    ================================================================================
+
+    === PRIMARY LMML ENCODING / WRITE FAILURE ===
+    #{format_error(primary_error)}
+
+    === FALLBACK PERSISTENCE ACTION ===
+    Status: #{fallback_status}
+    Detail: #{fallback_detail}
+
+    === SESSION METADATA AT FAILURE ===
+    Message Count:   #{length(messages)}
+    Snapshots Count: #{length(snapshots)}
+    Step Count:      #{step_count}
+
+    ================================================================================
+    """
+
+    case File.write(log_path, log_content) do
+      :ok ->
+        Logger.info("[SessionStore] Detailed LMML error report written to '#{log_path}'.")
+
+      err ->
+        Logger.error(
+          "[SessionStore] Failed to write LMML error log to '#{log_path}': #{format_error(err)}"
+        )
+    end
+  rescue
+    e ->
+      Logger.error(
+        "[SessionStore] Exception writing LMML error log: #{Exception.format(:error, e, __STACKTRACE__)}"
+      )
   end
 
   @doc "Appends a full untruncated step log to local transcript files (.dsh/sessions/<id>/transcript_full.jsonl and transcript_compact.jsonl)."

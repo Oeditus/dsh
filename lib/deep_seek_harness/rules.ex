@@ -20,6 +20,13 @@ defmodule DeepSeekHarness.Rules do
     },
     %{
       "id" => 3,
+      "scope" => "all",
+      "text" =>
+        "ALWAYS prefer Ragex MCP tools (mcp_ragex_grep, mcp_ragex_symbol_definition, mcp_ragex_symbol_references, mcp_ragex_metaast_search, mcp_ragex_structure, mcp_ragex_view) over raw bash shell commands (grep, sed, find, cat, head) for code exploration, symbol finding, and code analysis",
+      "enabled" => true
+    },
+    %{
+      "id" => 4,
       "scope" => "cr",
       "text" => "format table cells multiline to fit in 80 symbols width",
       "enabled" => true

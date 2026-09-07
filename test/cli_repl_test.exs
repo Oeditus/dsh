@@ -7,9 +7,14 @@ defmodule DeepSeekHarness.CLIReplTest do
   setup do
     session_id = "repl_test_#{System.unique_integer([:positive])}"
     {:ok, session_pid} = SessionSupervisor.start_session(session_id: session_id)
+    prior_god = Application.get_env(:deep_seek_harness, :god_mode)
 
     on_exit(fn ->
-      Application.delete_env(:deep_seek_harness, :god_mode)
+      if prior_god != nil do
+        Application.put_env(:deep_seek_harness, :god_mode, prior_god)
+      else
+        Application.delete_env(:deep_seek_harness, :god_mode)
+      end
 
       cfg_path = ".dsh/config.json"
 
