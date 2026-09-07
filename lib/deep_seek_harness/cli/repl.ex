@@ -18,6 +18,8 @@ defmodule DeepSeekHarness.CLI.Repl do
     MCPServerManager.await_ragex()
     IO.puts(Formatter.banner())
 
+    DeepSeekHarness.Practices.ensure_practices_for_workspace(".", opts)
+
     session_id =
       opts[:conversation] || opts[:resume] || opts[:session_id] ||
         DeepSeekHarness.CLI.Main.generate_uuid()
@@ -916,6 +918,101 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/practices add " <> rest, _session_pid, _session_id) do
+    langs = DeepSeekHarness.Practices.detect_languages()
+    lang = Enum.at(langs, 0) || "elixir"
+
+    case DeepSeekHarness.Practices.add_practice(lang, rest) do
+      {:ok, item} ->
+        IO.puts(
+          Formatter.format_success(
+            "Added practice for '#{lang}' globally (~/.dsh) & locally (.dsh):\n  \"#{item}\""
+          )
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/practices learn " <> args, _session_pid, _session_id),
+    do: handle_practices_learn(args)
+
+  def handle_input("/practices squeeze " <> args, _session_pid, _session_id),
+    do: handle_practices_learn(args)
+
+  def handle_input("/practices delete", _session_pid, _session_id),
+    do: handle_practices_delete()
+
+  def handle_input("/practices rm", _session_pid, _session_id),
+    do: handle_practices_delete()
+
+  def handle_input("/practices edit", _session_pid, _session_id) do
+    langs = DeepSeekHarness.Practices.detect_languages()
+    lang = Enum.at(langs, 0) || "elixir"
+    path = DeepSeekHarness.Practices.local_practice_path(lang)
+    g_path = DeepSeekHarness.Practices.global_practice_path(lang)
+
+    IO.puts(
+      Formatter.format_info(
+        "Practice files:\n  - Local: #{path}\n  - Global: #{g_path}"
+      )
+    )
+
+    editor = System.get_env("EDITOR") || "nano"
+
+    if System.find_executable(editor) do
+      System.cmd(editor, [path])
+    else
+      IO.puts(Formatter.format_error("No $EDITOR executable found. Please edit #{path} directly."))
+    end
+
+    :continue
+  end
+
+  def handle_input("/practices", _session_pid, _session_id) do
+    langs = DeepSeekHarness.Practices.detect_languages()
+
+    if Enum.empty?(langs) do
+      IO.puts(Formatter.format_info("No specific programming language detected in workspace root."))
+    else
+      Enum.each(langs, fn lang ->
+        p = DeepSeekHarness.Practices.load_practices(lang)
+        g_path = DeepSeekHarness.Practices.global_practice_path(lang)
+        l_path = DeepSeekHarness.Practices.local_practice_path(lang)
+
+        items_str =
+          if Enum.empty?(p.items) do
+            "*No practices defined yet.*"
+          else
+            p.items
+            |> Enum.with_index(1)
+            |> Enum.map_join("\n", fn {item, idx} -> "#{idx}. #{item}" end)
+          end
+
+        md = """
+        ### Good Practices for #{String.capitalize(lang)} (.lmml format)
+        - **Global (~/.dsh):** `#{g_path}`
+        - **Local (.dsh):** `#{l_path}`
+
+        #{items_str}
+
+        **Commands:**
+        - `/practices add <text>` — Add a new practice
+        - `/practices delete` or `/practices rm` — Delete practice items
+        - `/practices learn <paths...>` — Squeeze practices from exemplary project directories
+        - `/practices edit` — Open practice file in $EDITOR
+        """
+
+        IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+      end)
+    end
+
+    :continue
+  end
+
   def handle_input("/plan on", _session_pid, _session_id) do
     cfg = DeepSeekHarness.Config.load_config()
     updated = Map.put(cfg, "plan_gate_enabled", true)
@@ -1762,6 +1859,74 @@ defmodule DeepSeekHarness.CLI.Repl do
 
         _ ->
           IO.puts(Formatter.format_info("No rules deleted."))
+      end
+    end
+
+    :continue
+  end
+
+  defp handle_practices_learn(args) do
+    paths = String.split(args, ~r/[,;\s]+/, trim: true)
+
+    if paths == [] do
+      IO.puts(
+        Formatter.format_error(
+          "Usage: /practices learn <path_to_exemplary_project1> [path2...]"
+        )
+      )
+    else
+      langs = DeepSeekHarness.Practices.detect_languages()
+      lang = Enum.at(langs, 0) || "elixir"
+      DeepSeekHarness.Practices.squeeze_practices(lang, paths)
+
+      IO.puts(
+        Formatter.format_success(
+          "Squeezed good practices for '#{lang}' from exemplary project(s)!"
+        )
+      )
+    end
+
+    :continue
+  end
+
+  defp handle_practices_delete do
+    langs = DeepSeekHarness.Practices.detect_languages()
+    lang = Enum.at(langs, 0) || "elixir"
+    p = DeepSeekHarness.Practices.load_practices(lang)
+
+    if Enum.empty?(p.items) do
+      IO.puts(Formatter.format_info("No practice items available to delete for '#{lang}'."))
+    else
+      options =
+        p.items
+        |> Enum.with_index(1)
+        |> Enum.map(fn {item, idx} -> "#{idx}. #{item}" end)
+
+      ans =
+        DeepSeekHarness.CLI.Spinner.with_paused(fn ->
+          DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
+            "Select practice items to delete for '#{lang}':",
+            options,
+            true,
+            true
+          )
+        end)
+
+      selected = Map.get(ans, :selected, [])
+
+      if selected != [] do
+        indices =
+          Enum.map(selected, fn s ->
+            case Regex.run(~r/^\d+/, s) do
+              [num] -> String.to_integer(num)
+              _ -> s
+            end
+          end)
+
+        DeepSeekHarness.Practices.delete_practices(lang, indices)
+        IO.puts(Formatter.format_success("Deleted selected practice items for '#{lang}'."))
+      else
+        IO.puts(Formatter.format_info("No practice items deleted."))
       end
     end
 

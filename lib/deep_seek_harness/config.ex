@@ -92,14 +92,24 @@ defmodule DeepSeekHarness.Config do
       Path.join(cwd, "AGYRULES")
     ]
 
-    rule_files
-    |> Enum.filter(&File.exists?/1)
-    |> Enum.map_join("\n", fn path ->
-      case File.read(path) do
-        {:ok, content} -> "=== Project Rule (#{Path.basename(path)}) ===\n#{content}\n"
-        _ -> ""
-      end
-    end)
+    file_rules =
+      rule_files
+      |> Enum.filter(&File.exists?/1)
+      |> Enum.map_join("\n", fn path ->
+        case File.read(path) do
+          {:ok, content} -> "=== Project Rule (#{Path.basename(path)}) ===\n#{content}\n"
+          _ -> ""
+        end
+      end)
+
+    practices = DeepSeekHarness.Practices.build_preamble(cwd)
+
+    case {file_rules, practices} do
+      {"", ""} -> ""
+      {r, ""} -> r
+      {"", p} -> p
+      {r, p} -> r <> "\n" <> p
+    end
   end
 
   def save_global_config(new_config) do

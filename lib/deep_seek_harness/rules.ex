@@ -160,15 +160,25 @@ defmodule DeepSeekHarness.Rules do
           (Map.get(r, "scope") == "all" or Map.get(r, "scope") == ctx)
       end)
 
-    if Enum.empty?(applicable) do
-      ""
-    else
-      rule_lines =
-        Enum.map_join(applicable, "\n", fn r ->
-          "- #{Map.get(r, "text")}"
-        end)
+    rules_text =
+      if Enum.empty?(applicable) do
+        ""
+      else
+        rule_lines =
+          Enum.map_join(applicable, "\n", fn r ->
+            "- #{Map.get(r, "text")}"
+          end)
 
-      "=== Prompt & Execution Rules ===\n\n#{rule_lines}\n\n===============================\n\n"
+        "=== Prompt & Execution Rules ===\n\n#{rule_lines}\n\n===============================\n\n"
+      end
+
+    practices_text = DeepSeekHarness.Practices.build_preamble(cwd)
+
+    case {rules_text, practices_text} do
+      {"", ""} -> ""
+      {r, ""} -> r
+      {"", p} -> p
+      {r, p} -> r <> "\n" <> p
     end
   end
 
