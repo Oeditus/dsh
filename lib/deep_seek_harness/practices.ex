@@ -150,7 +150,8 @@ defmodule DeepSeekHarness.Practices do
   end
 
   defp hidden_or_build_dir?(name) do
-    String.starts_with?(name, ".") or name in ["_build", "deps", "node_modules", "target", "vendor", "dist", "build"]
+    String.starts_with?(name, ".") or
+      name in ["_build", "deps", "node_modules", "target", "vendor", "dist", "build"]
   end
 
   defp has_extension_in_dir?(dir_path, ext) do
@@ -249,7 +250,7 @@ defmodule DeepSeekHarness.Practices do
     {narrative, manifest} =
       case Lmml.new_text(filename, content) do
         {:ok, bundle} ->
-          narr = Lmml.narrative(bundle) || content
+          narr = Lmml.narrative(bundle)
 
           man =
             case Lmml.manifest(bundle) do
@@ -423,7 +424,8 @@ defmodule DeepSeekHarness.Practices do
         default_practices_for(lang_slug)
       end
 
-    save_practices(lang_slug, items, [sources: project_paths], cwd)
+    save_opts = Keyword.merge(opts, sources: project_paths)
+    save_practices(lang_slug, items, save_opts, cwd)
   end
 
   def default_practices_for(language) do
@@ -489,12 +491,12 @@ defmodule DeepSeekHarness.Practices do
               files
               |> Enum.reject(&hidden_or_build_dir?/1)
               |> Enum.map(&Path.join(d, &1))
-              |> Enum.filter(&File.regular?/1)
               |> Enum.filter(fn f ->
-                Enum.any?(indicators, fn ind ->
-                  ext = String.replace(ind, "*", "")
-                  String.ends_with?(f, ext) or String.ends_with?(f, ind)
-                end)
+                File.regular?(f) and
+                  Enum.any?(indicators, fn ind ->
+                    ext = String.replace(ind, "*", "")
+                    String.ends_with?(f, ext) or String.ends_with?(f, ind)
+                  end)
               end)
 
             _ ->
@@ -553,11 +555,7 @@ defmodule DeepSeekHarness.Practices do
         if paths != [] do
           squeeze_practices(lang, paths, cwd: cwd)
         else
-          IO.puts(
-            Formatter.format_info(
-              "Generating baseline good practices for '#{lang}'…"
-            )
-          )
+          IO.puts(Formatter.format_info("Generating baseline good practices for '#{lang}'…"))
 
           save_practices(lang, default_practices_for(lang), [sources: ["default_baseline"]], cwd)
         end
@@ -611,24 +609,26 @@ defmodule DeepSeekHarness.Practices do
   end
 
   @doc "Adds a new practice item for a language and saves globally & locally."
-  def add_practice(language, practice_text, cwd \\ ".") do
+  def add_practice(language, practice_text, cwd \\ ".", opts \\ []) do
     lang_slug = sanitize_language(language)
     text = String.trim(practice_text)
 
     if text == "" do
       {:error, "Practice text cannot be empty."}
     else
-      current = load_practices(lang_slug, cwd)
+      current = load_practices(lang_slug, cwd, opts)
       updated_items = Enum.uniq(current.items ++ [text])
-      save_practices(lang_slug, updated_items, [sources: current.sources], cwd)
+      save_opts = Keyword.merge(opts, sources: current.sources)
+      save_practices(lang_slug, updated_items, save_opts, cwd)
       {:ok, text}
     end
   end
 
   @doc "Deletes practice items at given 1-based indices or exact matching text."
-  def delete_practices(language, indices_or_texts, cwd \\ ".") when is_list(indices_or_texts) do
+  def delete_practices(language, indices_or_texts, cwd \\ ".", opts \\ [])
+      when is_list(indices_or_texts) do
     lang_slug = sanitize_language(language)
-    current = load_practices(lang_slug, cwd)
+    current = load_practices(lang_slug, cwd, opts)
 
     to_remove =
       Enum.reduce(indices_or_texts, MapSet.new(), fn item, acc ->
@@ -655,7 +655,8 @@ defmodule DeepSeekHarness.Practices do
       end)
       |> Enum.map(fn {text, _idx} -> text end)
 
-    save_practices(lang_slug, updated_items, [sources: current.sources], cwd)
+    save_opts = Keyword.merge(opts, sources: current.sources)
+    save_practices(lang_slug, updated_items, save_opts, cwd)
     {:ok, updated_items}
   end
 end

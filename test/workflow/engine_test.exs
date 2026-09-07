@@ -59,8 +59,14 @@ defmodule DeepSeekHarness.Workflow.EngineTest do
       # outside this specific capture, previously hung for the full 60s
       # test timeout when the suite's own stdin was still open.
       capture_io(:user, "2\n", fn ->
-        result = Engine.run("just-branch-2", cwd: cwd, seed_prompt: "x")
-        send(test_pid, {:workflow_result, result})
+        Application.put_env(:deep_seek_harness, :god_mode, false)
+
+        try do
+          result = Engine.run("just-branch-2", cwd: cwd, seed_prompt: "x")
+          send(test_pid, {:workflow_result, result})
+        after
+          Application.put_env(:deep_seek_harness, :god_mode, true)
+        end
       end)
 
       assert_received {:workflow_result, {:halt, reason}}

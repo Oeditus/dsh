@@ -7,6 +7,30 @@ defmodule DeepSeekHarness.CLIReplTest do
   setup do
     session_id = "repl_test_#{System.unique_integer([:positive])}"
     {:ok, session_pid} = SessionSupervisor.start_session(session_id: session_id)
+
+    on_exit(fn ->
+      Application.delete_env(:deep_seek_harness, :god_mode)
+
+      cfg_path = ".dsh/config.json"
+
+      if File.exists?(cfg_path) do
+        case File.read(cfg_path) do
+          {:ok, content} ->
+            case Jason.decode(content) do
+              {:ok, map} ->
+                cleaned = Map.drop(map, ["god_mode"])
+                File.write!(cfg_path, Jason.encode!(cleaned, pretty: true))
+
+              _ ->
+                :ok
+            end
+
+          _ ->
+            :ok
+        end
+      end
+    end)
+
     {:ok, session_pid: session_pid, session_id: session_id}
   end
 
@@ -113,6 +137,7 @@ defmodule DeepSeekHarness.CLIReplTest do
     assert :continue = Repl.handle_input("/god off", pid, id)
     assert DeepSeekHarness.Config.god_mode?() == false
     assert :continue = Repl.handle_input("/god foo", pid, id)
+    assert :continue = Repl.handle_input("/god on", pid, id)
   end
 
   test "handles review conversation commands", %{session_pid: pid, session_id: id} do

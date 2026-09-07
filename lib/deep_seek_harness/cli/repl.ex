@@ -955,18 +955,16 @@ defmodule DeepSeekHarness.CLI.Repl do
     path = DeepSeekHarness.Practices.local_practice_path(lang)
     g_path = DeepSeekHarness.Practices.global_practice_path(lang)
 
-    IO.puts(
-      Formatter.format_info(
-        "Practice files:\n  - Local: #{path}\n  - Global: #{g_path}"
-      )
-    )
+    IO.puts(Formatter.format_info("Practice files:\n  - Local: #{path}\n  - Global: #{g_path}"))
 
     editor = System.get_env("EDITOR") || "nano"
 
     if System.find_executable(editor) do
       System.cmd(editor, [path])
     else
-      IO.puts(Formatter.format_error("No $EDITOR executable found. Please edit #{path} directly."))
+      IO.puts(
+        Formatter.format_error("No $EDITOR executable found. Please edit #{path} directly.")
+      )
     end
 
     :continue
@@ -976,7 +974,9 @@ defmodule DeepSeekHarness.CLI.Repl do
     langs = DeepSeekHarness.Practices.detect_languages()
 
     if Enum.empty?(langs) do
-      IO.puts(Formatter.format_info("No specific programming language detected in workspace root."))
+      IO.puts(
+        Formatter.format_info("No specific programming language detected in workspace root.")
+      )
     else
       Enum.each(langs, fn lang ->
         p = DeepSeekHarness.Practices.load_practices(lang)
@@ -1061,6 +1061,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     cfg = DeepSeekHarness.Config.load_config()
     updated = Map.put(cfg, "god_mode", true)
     DeepSeekHarness.Config.save_config(updated)
+    Application.put_env(:deep_seek_harness, :god_mode, true)
 
     IO.puts(
       Formatter.format_success(
@@ -1075,6 +1076,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     cfg = DeepSeekHarness.Config.load_config()
     updated = Map.put(cfg, "god_mode", false)
     DeepSeekHarness.Config.save_config(updated)
+    Application.put_env(:deep_seek_harness, :god_mode, false)
     IO.puts(Formatter.format_success("God mode DISABLED"))
     :continue
   end
@@ -1091,6 +1093,7 @@ defmodule DeepSeekHarness.CLI.Repl do
     new_mode = not current
     updated = Map.put(cfg, "god_mode", new_mode)
     DeepSeekHarness.Config.save_config(updated)
+    Application.put_env(:deep_seek_harness, :god_mode, new_mode)
 
     status_str =
       if new_mode, do: "ENABLED (all questions & confirmations auto-answered)", else: "DISABLED"
@@ -1870,9 +1873,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
     if paths == [] do
       IO.puts(
-        Formatter.format_error(
-          "Usage: /practices learn <path_to_exemplary_project1> [path2...]"
-        )
+        Formatter.format_error("Usage: /practices learn <path_to_exemplary_project1> [path2...]")
       )
     else
       langs = DeepSeekHarness.Practices.detect_languages()

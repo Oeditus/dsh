@@ -6,10 +6,15 @@ defmodule DeepSeekHarness.CLI.InteractionServerTest do
   alias DeepSeekHarness.TaskEngine.PackageTracker
 
   setup do
+    prior = Application.get_env(:deep_seek_harness, :god_mode)
     Application.put_env(:deep_seek_harness, :god_mode, true)
 
     on_exit(fn ->
-      Application.delete_env(:deep_seek_harness, :god_mode)
+      if prior == nil do
+        Application.delete_env(:deep_seek_harness, :god_mode)
+      else
+        Application.put_env(:deep_seek_harness, :god_mode, prior)
+      end
     end)
 
     :ok

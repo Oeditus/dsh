@@ -166,8 +166,17 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
 
   describe "God Mode auto-answering" do
     setup do
+      prior = Application.get_env(:deep_seek_harness, :god_mode)
       Application.put_env(:deep_seek_harness, :god_mode, true)
-      on_exit(fn -> Application.delete_env(:deep_seek_harness, :god_mode) end)
+
+      on_exit(fn ->
+        if prior == nil do
+          Application.delete_env(:deep_seek_harness, :god_mode)
+        else
+          Application.put_env(:deep_seek_harness, :god_mode, prior)
+        end
+      end)
+
       :ok
     end
 
