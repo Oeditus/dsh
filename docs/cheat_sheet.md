@@ -1,6 +1,6 @@
 # DeepSeek Harness (DSH) — Cheat Sheet & Tactics Guide
 
-A comprehensive quick-reference guide for **DeepSeek Harness (`dsh`)**, covering CLI flags, REPL slash commands, prompt syntax (`@`, `!`), rule engine scoping, branch code reviews, local transcripts, and execution tactics.
+A comprehensive quick-reference guide for **DeepSeek Harness (`dsh`)**, covering CLI flags, REPL slash commands, prompt syntax (`@`, `!`), rule engine scoping, branch code reviews, local transcripts, and execution tactics. For a complete walkthrough of onboarding and customization, see the **[Getting Started Guide](GETTING_STARTED_GUIDE.md)**.
 
 ---
 

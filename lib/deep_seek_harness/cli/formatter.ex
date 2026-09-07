@@ -108,6 +108,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}!command#{reset()}                 Execute shell command directly (e.g. !ls -la or !git status)
       #{cyan()}!!#{reset()}                      Flip into/out of pure console mode (plain shell passthrough, no AI/tooling)
       #{cyan()}/help#{reset()}                   Show this help menu
+      #{cyan()}/guide#{reset()} or #{cyan()}/docs#{reset()}        Display Getting Started & Customization Guide summary
       #{cyan()}/model [chat|reasoner]#{reset()}   Switch model (deepseek-chat V3 or deepseek-reasoner R1)
       #{cyan()}/mode [local|remote|docker]#{reset()}  Set Hands execution target
       #{cyan()}/plugins [reload]#{reset()}       List tools or hot-reload plugins live without dropping state
@@ -140,6 +141,44 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}Ctrl+B#{reset()}                  Toggle idle status bar mode (gauge ⇄ compact session line)
       #{cyan()}Ctrl+O#{reset()}                  Toggle tool call expansion mode (collapsed ⇄ expanded)
       #{cyan()}Ctrl+Q#{reset()}                  Interrupt the AI's current turn while it's responding (Ctrl+C kills the whole app instead)
+    """
+  end
+
+  def getting_started_guide do
+    """
+    #{bold()}DEEPSEEK HARNESS (DSH) — GETTING STARTED & CUSTOMIZATION GUIDE#{reset()}
+
+    #{cyan()}1. Core Architecture & Quickstart#{reset()}
+       • Decoupled Brain (GenServer) and Hands (Executor) on BEAM/OTP.
+       • REPL invocation: `dsh`, `dsh "prompt"`, `dsh -c <session_id>`.
+       • `@file`, `@url`, `@error` inline context expansion.
+       • Temporal snapshots & instant rollback with `/checkpoint` and `/undo`.
+
+    #{cyan()}2. Teaching DSH Language Practices (`.dsh/practices`)#{reset()}
+       • Project-local (`.dsh/practices/<lang>.lmml`) & global (`~/.dsh/practices/<lang>.lmml`).
+       • Learn idiomatic conventions from exemplary projects via `/practices teach <language>`.
+
+    #{cyan()}3. Driving Workflows (`/workflow`)#{reset()}
+       • Run multi-step engineering pipelines: `/workflow run elixir "task"`.
+       • Non-clashing parallel execution using isolated Git worktrees under `.dsh/workflows/`.
+
+    #{cyan()}4. Tuning Workflows for Your Team#{reset()}
+       • Scaffold new workflow definitions: `/workflow init my-team-flow --from elixir`.
+       • Edit step manifests in `.dsh/workflows/definitions/my-team-flow.json`.
+
+    #{cyan()}5. Custom Elixir Plugins (`Plugin.Behaviour`)#{reset()}
+       • Implement `DeepSeekHarness.Plugin.Behaviour` in `.exs`/`.ex` files.
+       • Hot-reload tools live using `/plugins reload` without clearing session memory.
+
+    #{cyan()}6. Rules, Skills & Ragex MCP#{reset()}
+       • Add scoped preambles with `/rules add <scope>:<rule>`.
+       • Custom skills in `.dsh/skills/<name>/SKILL.md`.
+       • Mount Ragex MCP (`/ragex`) for SCIP symbol navigation & AST search.
+
+    #{cyan()}7. Iterative Tuning Cycle#{reset()}
+       • Observe → Codify (`.dsh/practices`) → Automate (`.dsh/workflows`) → Replicate (Commit `.dsh/`).
+
+    #{yellow()}Full detailed guide: docs/GETTING_STARTED_GUIDE.md#{reset()}
     """
   end
 

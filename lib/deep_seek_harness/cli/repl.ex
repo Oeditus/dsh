@@ -165,6 +165,21 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/guide", _session_pid, _session_id) do
+    IO.puts(Formatter.getting_started_guide())
+    :continue
+  end
+
+  def handle_input("/docs", _session_pid, _session_id) do
+    IO.puts(Formatter.getting_started_guide())
+    :continue
+  end
+
+  def handle_input("/getting-started", _session_pid, _session_id) do
+    IO.puts(Formatter.getting_started_guide())
+    :continue
+  end
+
   def handle_input("/clear", _session_pid, _session_id) do
     IO.write("\e[H\e[2J")
     :continue

@@ -20,6 +20,7 @@ Derived from **José Valim's architectural framework** for process-isolated AI a
 - [Architectural Foundation](#architectural-foundation-josé-valims-vision--deepseek-model-integration)
 - [Key Features & Capabilities](#key-features--capabilities)
 - [Installation & Setup](#installation--setup)
+- [Getting Started & Customization Guide](#getting-started--customization-guide)
 - [REPL Slash Commands & Shortcuts](#repl-slash-commands--shortcuts)
 - [Configuration](#configuration)
 - [Documentation](#documentation)
@@ -243,6 +244,32 @@ When you run `/ragex` inside `dsh`, Ragex looks for the `dllb-server` executable
    /ragex
    ```
    You should see confirmation that Ragex and the `dllb` knowledge graph backend have been successfully initialized!
+
+---
+
+## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Getting Started & Customization Guide
+
+For complete, step-by-step instructions on onboarding, teaching DSH language idiomatics, driving multi-step workflows, writing custom plugins, setting scoped rules, and tuning the iterative feedback loop, refer to the full **[Getting Started & Customization Guide](docs/GETTING_STARTED_GUIDE.md)** (also accessible inside the REPL via `/guide` or `/docs`).
+
+### Onboarding & Customization Summary
+
+1. **[Core Architecture & Quickstart](docs/GETTING_STARTED_GUIDE.md#1-core-architecture--quickstart)**
+   - BEAM actor isolation (Brain GenServer decoupled from Hands executor).
+   - Basic CLI invocation (`dsh`, `dsh "prompt"`), inline `@file` / `@url` context references, and spatiotemporal `/checkpoint` & `/undo`.
+2. **[Teaching DSH New Language Idiomatics (`.dsh/practices`)](docs/GETTING_STARTED_GUIDE.md#2-teaching-dsh-new-language-idiomatics-dshpractices)**
+   - LMML practice manifests in `.dsh/practices/<language>.lmml`.
+   - Run `/practices teach <language>` to automatically inspect exemplary codebases and extract team-specific coding conventions.
+3. **[Starting & Driving Workflows (`/workflow`)](docs/GETTING_STARTED_GUIDE.md#3-starting--driving-workflows-workflow)**
+   - Run built-in engineering pipelines (`/workflow run elixir "<task>"`).
+   - Parallel subtasks execute in physically isolated Git worktrees under `.dsh/workflows/`.
+4. **[Tuning Workflows for Your Team's Needs](docs/GETTING_STARTED_GUIDE.md#4-tuning-workflows-for-your-teams-needs)**
+   - Scaffold custom JSON workflow definitions via `/workflow init my-team-flow --from elixir`.
+5. **[Writing Custom Elixir Plugins (`Plugin.Behaviour`)](docs/GETTING_STARTED_GUIDE.md#5-writing-custom-elixir-plugins-pluginbehaviour)**
+   - Expose domain-specific tools by implementing `DeepSeekHarness.Plugin.Behaviour` and hot-reloading live with `/plugins reload`.
+6. **[Managing Scoped Rules, Custom Skills & Ragex MCP](docs/GETTING_STARTED_GUIDE.md#6-managing-scoped-rules-custom-skills--ragex-mcp)**
+   - Set prompt preambles via `/rules add <scope>:<text>`, add modular skill packages in `.dsh/skills/`, and mount `/ragex` for SCIP/AST symbol graph search.
+7. **[The Iterative Feedback Loop: Fitting Expectations 100%](docs/GETTING_STARTED_GUIDE.md#7-the-iterative-feedback-loop-fitting-expectations-100)**
+   - 4-step tuning cycle: Observe → Codify (`.dsh/practices`) → Automate (`.dsh/workflows`) → Snapshot & Replicate (version control `.dsh/`).
 
 ---
 

@@ -37,10 +37,18 @@ defmodule DeepSeekHarness.FormatterTest do
   test "renders help menu with all slash commands" do
     menu = Formatter.help_menu()
     assert String.contains?(menu, "/help")
+    assert String.contains?(menu, "/guide")
     assert String.contains?(menu, "/mcp")
     assert String.contains?(menu, "/review")
     assert String.contains?(menu, "/skills")
     assert String.contains?(menu, "/compact")
+  end
+
+  test "renders getting started guide summary" do
+    guide = Formatter.getting_started_guide()
+    assert String.contains?(guide, "GETTING STARTED & CUSTOMIZATION GUIDE")
+    assert String.contains?(guide, "BEAM/OTP")
+    assert String.contains?(guide, "docs/GETTING_STARTED_GUIDE.md")
   end
 
   test "formats prompt string and status messages" do
