@@ -497,6 +497,64 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/spar adversarial " <> topic, session_pid, _session_id) do
+    t = String.trim(topic)
+    {:ok, sweep_fmt, prompt} = DeepSeekHarness.Sparring.prepare_sparring(t, mode: :adversarial)
+    IO.puts("\n" <> DeepSeekHarness.Sparring.format_spar_start(t, :adversarial, sweep_fmt) <> "\n")
+
+    case Session.send_user_message(session_pid, prompt) do
+      {:ok, response} ->
+        IO.puts(Formatter.format_agent_response(response.content))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/spar socratic " <> topic, session_pid, _session_id) do
+    t = String.trim(topic)
+    {:ok, sweep_fmt, prompt} = DeepSeekHarness.Sparring.prepare_sparring(t, mode: :socratic)
+    IO.puts("\n" <> DeepSeekHarness.Sparring.format_spar_start(t, :socratic, sweep_fmt) <> "\n")
+
+    case Session.send_user_message(session_pid, prompt) do
+      {:ok, response} ->
+        IO.puts(Formatter.format_agent_response(response.content))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/spar " <> topic, session_pid, session_id) do
+    t = String.trim(topic)
+
+    if String.starts_with?(t, "adversarial") or String.starts_with?(t, "socratic") do
+      handle_input("/spar " <> t, session_pid, session_id)
+    else
+      {:ok, sweep_fmt, prompt} = DeepSeekHarness.Sparring.prepare_sparring(t, mode: :socratic)
+      IO.puts("\n" <> DeepSeekHarness.Sparring.format_spar_start(t, :socratic, sweep_fmt) <> "\n")
+
+      case Session.send_user_message(session_pid, prompt) do
+        {:ok, response} ->
+          IO.puts(Formatter.format_agent_response(response.content))
+
+        {:error, err} ->
+          IO.puts(Formatter.format_error(err))
+      end
+
+      :continue
+    end
+  end
+
+  def handle_input("/spar", _session_pid, _session_id) do
+    IO.puts(Formatter.format_info("Usage: /spar [socratic|adversarial] <topic | slug> (e.g. /spar JWT Refresh Token)"))
+    :continue
+  end
+
   def handle_input("/linter " <> args, _session_pid, _session_id) do
     args = String.trim(args)
 

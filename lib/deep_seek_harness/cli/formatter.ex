@@ -126,6 +126,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/permissions [auto|ask]#{reset()} Set tool execution safety mode
       #{cyan()}/subagent <prompt>#{reset()}      Spawn a background subagent worker for sub-tasks
       #{cyan()}/workflow [cmd]#{reset()}         Run customizable multi-step workflows (list|run|status|resume|abort|init)
+      #{cyan()}/spar [soc|adv] <topic>#{reset()} Prompt Socratic or Adversarial sparring session with prior-art sweep
       #{cyan()}/sweep <tokens>#{reset()}         Run multi-corpus prior-art search across workflow, reference, lessons, and vault
       #{cyan()}/scrap [note|clear]#{reset()}     Capture or view transient scratch notes in project/scrap.md
       #{cyan()}/lessons [add <text>]#{reset()}   View or record operational lessons learned in project/lessons.md
