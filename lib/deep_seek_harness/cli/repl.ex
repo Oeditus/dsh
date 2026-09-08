@@ -349,6 +349,154 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/thought " <> input, _session_pid, _session_id) do
+    {title, summary} =
+      case String.split(input, "|", parts: 2) do
+        [t, s] -> {String.trim(t), String.trim(s)}
+        [t] -> {String.trim(t), "Raw thought captured via /thought command."}
+      end
+
+    {:ok, path, slug} = DeepSeekHarness.WorkflowIndex.create_thought(title, summary)
+    IO.puts(Formatter.format_success("Thought created: `#{slug}` -> #{path}"))
+
+    :continue
+  end
+
+  def handle_input("/thought", _session_pid, _session_id) do
+    IO.puts(Formatter.format_info("Usage: /thought <Title> [| Summary] (e.g. /thought JWT Refresh Token | Implement auto-refresh token flow)"))
+    :continue
+  end
+
+  def handle_input("/backlog", _session_pid, _session_id) do
+    items = DeepSeekHarness.WorkflowIndex.scan_items()
+
+    if Enum.empty?(items) do
+      IO.puts(Formatter.format_info("No pipeline items found. Create your first thought with `/thought <Title>`."))
+    else
+      {:ok, map_path, _deps_path} = DeepSeekHarness.WorkflowIndex.generate_indexes()
+      content = File.read!(map_path)
+      IO.puts("\n#{Formatter.bold()}=== Idea Pipeline Map (#{map_path}) ===#{Formatter.reset()}\n\n" <> content)
+    end
+
+    :continue
+  end
+
+  def handle_input("/promote " <> args, _session_pid, _session_id) do
+    parts = String.split(args, ~r/\s+/, trim: true)
+
+    case parts do
+      [slug | rest] ->
+        type = Enum.find(rest, &(&1 in ["code", "initiative"])) || "code"
+        priority = Enum.reject(rest, &(&1 in ["code", "initiative"])) |> Enum.join(" ")
+        priority = if priority == "", do: "Should Have", else: priority
+
+        case DeepSeekHarness.WorkflowIndex.promote_item(slug, "backlog", type: type, priority: priority) do
+          {:ok, path} ->
+            IO.puts(Formatter.format_success("Promoted `#{slug}` to backlog (#{priority}) -> #{path}"))
+
+          {:error, err} ->
+            IO.puts(Formatter.format_error(err))
+        end
+
+      _ ->
+        IO.puts(Formatter.format_info("Usage: /promote <slug> [code|initiative] [Must Have|Should Have|Nice to Have]"))
+    end
+
+    :continue
+  end
+
+  def handle_input("/promote", _session_pid, _session_id) do
+    IO.puts(Formatter.format_info("Usage: /promote <slug> [code|initiative] [Must Have|Should Have|Nice to Have]"))
+    :continue
+  end
+
+  def handle_input("/what-next", _session_pid, _session_id) do
+    items = DeepSeekHarness.WorkflowIndex.scan_items()
+    backlog = Enum.filter(items, &(&1.stage == "backlog"))
+    thoughts = Enum.filter(items, &(&1.stage == "thoughts"))
+
+    msg =
+      cond do
+        not Enum.empty?(backlog) ->
+          must_haves = Enum.filter(backlog, &(Map.get(&1.frontmatter, "priority") == "Must Have"))
+          top = if Enum.empty?(must_haves), do: hd(backlog), else: hd(must_haves)
+          "Top recommendation to work on next: `#{top.slug}` (#{Map.get(top.frontmatter, "priority", "backlog")})\nFile: #{top.path}"
+
+        not Enum.empty?(thoughts) ->
+          top = hd(thoughts)
+          "No backlog items found. Ready to refine thought `#{top.slug}`?\nFile: #{top.path}"
+
+        true ->
+          "No items in backlog or thoughts. Capture a new idea with `/thought <Title>`!"
+      end
+
+    IO.puts("\n" <> Formatter.format_info(msg) <> "\n")
+    :continue
+  end
+
+  def handle_input("/audit-thoughts", _session_pid, _session_id) do
+    case DeepSeekHarness.WorkflowIndex.check_items() do
+      {:ok, items} ->
+        IO.puts(Formatter.format_success("Audit passed! All #{length(items)} pipeline items have valid frontmatter & dependencies."))
+
+      {:error, errs} ->
+        err_text = Enum.map_join(errs, "\n", &"  - #{&1}")
+        IO.puts(Formatter.format_error("Audit found integrity issues:\n" <> err_text))
+    end
+
+    :continue
+  end
+
+  def handle_input("/process-scrap", _session_pid, _session_id) do
+    case DeepSeekHarness.Scrap.read_scrap() do
+      {:ok, content, path} ->
+        IO.puts(Formatter.format_info("Scrap Triage (#{path}):\n" <> content <> "\n\nUse `/thought <Title> | <Summary>` to turn scrap items into raw thoughts, or `/scrap clear` when done."))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/prune-lessons", _session_pid, _session_id) do
+    case DeepSeekHarness.Lessons.load_lessons() do
+      {:ok, content, path} ->
+        IO.puts(Formatter.format_info("Lessons Triage (#{path}):\n\n" <> content <> "\n\nSynthesize clusters of lessons into project/reference/ docs or module docstrings."))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+    end
+
+    :continue
+  end
+
+  def handle_input("/prune-completed", _session_pid, _session_id) do
+    items = DeepSeekHarness.WorkflowIndex.scan_items()
+    completed = Enum.filter(items, &(&1.stage == "completed"))
+
+    if Enum.empty?(completed) do
+      IO.puts(Formatter.format_info("No completed items in project/workflow/completed/."))
+    else
+      list = Enum.map_join(completed, "\n", &"  - #{&1.slug} (#{&1.path})")
+
+      checklist = """
+      === Prune Completed Checklist ===
+      1. Verify test coverage exists for each completed item.
+      2. Extract rationale into module docstrings or inline comments.
+      3. Move cross-cutting gotchas into project/lessons.md.
+      4. Move durable topical knowledge into project/reference/.
+
+      Completed items ready for pruning check:
+      #{list}
+      """
+
+      IO.puts(Formatter.format_info(checklist))
+    end
+
+    :continue
+  end
+
   def handle_input("/linter " <> args, _session_pid, _session_id) do
     args = String.trim(args)
 
