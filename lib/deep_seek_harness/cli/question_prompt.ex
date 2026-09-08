@@ -96,6 +96,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         opts \\ []
       ) do
     options = if is_list(options) and options != [], do: options, else: ["Yes", "No"]
+    filterable = Keyword.get(opts, :filterable, false)
 
     has_recommended? =
       Enum.any?(options, fn opt ->
@@ -103,10 +104,15 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       end)
 
     options =
-      if has_recommended? do
-        options
-      else
-        List.update_at(options, 0, fn opt -> "#{opt} (Recommended)" end)
+      cond do
+        filterable ->
+          options
+
+        has_recommended? ->
+          options
+
+        true ->
+          List.update_at(options, 0, fn opt -> "#{opt} (Recommended)" end)
       end
 
     if god_mode?() do
@@ -119,13 +125,13 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       write_god_mode_notice(question, selected_opt)
       %{selected: selected}
     else
-      all_options = options ++ ["Write custom response…"]
-      custom_idx = length(all_options) - 1
+      all_options = if filterable, do: options, else: options ++ ["Write custom response…"]
+      custom_idx = if filterable, do: -1, else: length(all_options) - 1
       progress = Keyword.get(opts, :progress)
       subagent = Keyword.get(opts, :subagent)
 
       if tty?() do
-        prompt_tty(question, all_options, is_multi, custom_idx, show_numbers, progress, subagent)
+        prompt_tty(question, all_options, is_multi, custom_idx, show_numbers, progress, subagent, opts)
       else
         prompt_non_tty(question, all_options, is_multi, custom_idx, progress, subagent)
       end
@@ -155,6 +161,64 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     _ -> :ok
   end
 
+  def filter_options(all_options, "") do
+    Enum.take(all_options, 30)
+  end
+
+  def filter_options(all_options, query) do
+    tokens =
+      query
+      |> String.downcase()
+      |> String.split(~r/\s+/, trim: true)
+
+    filtered =
+      Enum.filter(all_options, fn opt ->
+        opt_str = to_string(opt)
+        opt_down = String.downcase(opt_str)
+        Enum.all?(tokens, fn token -> String.contains?(opt_down, token) end)
+      end)
+
+    Enum.take(filtered, 30)
+  end
+
+  def handle_filter_char(state, char_code) when char_code >= 32 and char_code != 127 do
+    char_str = <<char_code::utf8>>
+    new_query = state.filter_query <> char_str
+    new_options = filter_options(state.all_options, new_query)
+
+    %{
+      state
+      | filter_query: new_query,
+        options: new_options,
+        cursor: 0
+    }
+  end
+
+  def handle_filter_char(state, _), do: state
+
+  def handle_filter_backspace(%{filter_query: ""} = _state) do
+    :cancel
+  end
+
+  def handle_filter_backspace(state) do
+    new_query =
+      if String.length(state.filter_query) > 1 do
+        String.slice(state.filter_query, 0, String.length(state.filter_query) - 1)
+      else
+        ""
+      end
+
+    new_options = filter_options(state.all_options, new_query)
+
+    {:ok,
+     %{
+       state
+       | filter_query: new_query,
+         options: new_options,
+         cursor: 0
+     }}
+  end
+
   # ---------------------------------------------------------------------
   # Pure state management (unit-testable)
   # ---------------------------------------------------------------------
@@ -166,26 +230,45 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         custom_idx,
         show_numbers \\ true,
         progress \\ nil,
-        subagent \\ nil
+        subagent \\ nil,
+        opts \\ []
       ) do
+    filterable = Keyword.get(opts, :filterable, false)
+    initial_filter = Keyword.get(opts, :initial_filter, "")
+    all_options = options
+
+    filtered_options =
+      if filterable do
+        filter_options(all_options, initial_filter)
+      else
+        options
+      end
+
     %{
       question: question,
-      options: options,
+      all_options: all_options,
+      options: filtered_options,
       is_multi: is_multi,
       custom_idx: custom_idx,
       show_numbers: show_numbers,
       progress: progress,
       subagent: subagent,
+      filterable: filterable,
+      filter_query: initial_filter,
       cursor: 0,
       selected: MapSet.new(),
       rendered_lines: 0
     }
   end
 
+  def move_up(%{options: []} = state), do: state
+
   def move_up(%{cursor: cursor, options: options} = state) do
     new_cursor = if cursor > 0, do: cursor - 1, else: length(options) - 1
     %{state | cursor: new_cursor}
   end
+
+  def move_down(%{options: []} = state), do: state
 
   def move_down(%{cursor: cursor, options: options} = state) do
     new_cursor = if cursor < length(options) - 1, do: cursor + 1, else: 0
@@ -265,9 +348,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     end
   end
 
-  defp prompt_tty(question, options, is_multi, custom_idx, show_numbers, progress, subagent) do
+  defp prompt_tty(question, options, is_multi, custom_idx, show_numbers, progress, subagent, opts) do
     set_raw_mode()
-    state = new_state(question, options, is_multi, custom_idx, show_numbers, progress, subagent)
+    state = new_state(question, options, is_multi, custom_idx, show_numbers, progress, subagent, opts)
 
     res =
       try do
@@ -324,11 +407,39 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         tui_loop(move_down(state))
 
       :space ->
-        tui_loop(toggle_selection(state))
+        if Map.get(state, :filterable, false) do
+          tui_loop(handle_filter_char(state, ?\s))
+        else
+          tui_loop(toggle_selection(state))
+        end
+
+      :backspace ->
+        if Map.get(state, :filterable, false) do
+          case handle_filter_backspace(state) do
+            {:ok, new_state} -> tui_loop(new_state)
+            :cancel -> %{cancelled: true, selected: []}
+          end
+        else
+          tui_loop(state)
+        end
+
+      :escape ->
+        %{cancelled: true, selected: []}
 
       {:char, char_code} when char_code >= ?1 and char_code <= ?9 ->
-        idx = char_code - ?1
-        tui_loop(select_index(state, idx))
+        if Map.get(state, :filterable, false) do
+          tui_loop(handle_filter_char(state, char_code))
+        else
+          idx = char_code - ?1
+          tui_loop(select_index(state, idx))
+        end
+
+      {:char, char_code} ->
+        if Map.get(state, :filterable, false) do
+          tui_loop(handle_filter_char(state, char_code))
+        else
+          tui_loop(state)
+        end
 
       :ctrl_o ->
         DeepSeekHarness.CLI.LineEditor.toggle_expand_tool_calls(state)
@@ -369,7 +480,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   defp redraw_for_log(state), do: render_modal(state, erase?: false)
 
   defp handle_confirm(state) do
-    if state.cursor == state.custom_idx do
+    if state.cursor == state.custom_idx and not Map.get(state, :filterable, false) do
       # User selected write-in custom response
       restore_tty_mode()
 
@@ -406,8 +517,16 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
         %{selected: chosen}
       else
-        chosen = Enum.at(state.options, state.cursor)
-        %{selected: [chosen]}
+        if state.options != [] and state.cursor >= 0 and state.cursor < length(state.options) do
+          chosen = Enum.at(state.options, state.cursor)
+          %{selected: [chosen]}
+        else
+          if Map.get(state, :filterable, false) and state.filter_query != "" do
+            %{custom: state.filter_query, selected: []}
+          else
+            %{selected: []}
+          end
+        end
       end
     end
   end
@@ -458,10 +577,15 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       "#{Formatter.cyan()}╭─#{Formatter.bold()}#{header_title}#{Formatter.reset()}#{Formatter.cyan()}#{header_padding}╮#{Formatter.reset()}"
 
     footer_text =
-      if state.is_multi do
-        "[↑/↓ or 1-#{length(state.options)}: Navigate | Space: Toggle | Enter: Confirm]"
-      else
-        "[↑/↓ or 1-#{length(state.options)}: Select | Enter: Confirm]"
+      cond do
+        Map.get(state, :filterable, false) ->
+          "[Type to filter | ↑/↓: Select | Enter: Confirm | Esc: Cancel]"
+
+        state.is_multi ->
+          "[↑/↓ or 1-#{length(state.options)}: Navigate | Space: Toggle | Enter: Confirm]"
+
+        true ->
+          "[↑/↓ or 1-#{length(state.options)}: Select | Enter: Confirm]"
       end
 
     footer_len = display_width(footer_text)
@@ -486,76 +610,102 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         "#{Formatter.cyan()}│#{Formatter.reset()}  #{Formatter.bold()}#{line}#{Formatter.reset()}#{pad}  #{Formatter.cyan()}│#{Formatter.reset()}"
       end)
 
+    search_lines =
+      if Map.get(state, :filterable, false) do
+        query_str = state.filter_query
+        len = display_width("  Search: " <> query_str <> "█")
+        pad = String.duplicate(" ", max(0, inner_width - 4 - len))
+
+        [
+          "#{Formatter.cyan()}│#{Formatter.reset()}  #{Formatter.yellow()}Search: #{Formatter.reset()}#{Formatter.bold()}#{query_str}#{Formatter.reset()}█#{pad}  #{Formatter.cyan()}│#{Formatter.reset()}"
+        ]
+      else
+        []
+      end
+
     opt_lines =
-      state.options
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {opt, idx} ->
-        is_current = idx == state.cursor
-        is_checked = MapSet.member?(state.selected, idx)
-        is_custom = idx == state.custom_idx
+      if Map.get(state, :filterable, false) and state.options == [] do
+        msg = "(No matching files found)"
+        len = display_width(msg)
+        pad = String.duplicate(" ", max(0, inner_width - 4 - len))
 
-        prefix =
-          cond do
-            state.is_multi and is_checked -> "[󰄬] "
-            state.is_multi -> "[ ] "
-            true -> ""
-          end
-
-        clean_opt = String.replace(opt, ~r/^\d+[\.\)\-]\s*/, "")
-
-        num_prefix = if Map.get(state, :show_numbers, true), do: "#{idx + 1}. ", else: ""
-
-        label =
-          if is_custom do
-            "#{prefix}#{num_prefix}󰏫 #{clean_opt}"
-          else
-            "#{prefix}#{num_prefix}#{clean_opt}"
-          end
-
-        max_text_width = inner_width - 4
-        wrapped_lines = wrap_text(label, max_text_width)
-
-        wrapped_lines
+        [
+          "#{Formatter.cyan()}│#{Formatter.reset()}  #{Formatter.dim()}#{msg}#{Formatter.reset()}#{pad}  #{Formatter.cyan()}│#{Formatter.reset()}"
+        ]
+      else
+        state.options
         |> Enum.with_index()
-        |> Enum.map(fn {sub_line, sub_idx} ->
-          pointer =
-            if sub_idx == 0 and is_current do
-              "❯ "
-            else
-              "  "
+        |> Enum.flat_map(fn {opt, idx} ->
+          is_current = idx == state.cursor
+          is_checked = MapSet.member?(state.selected, idx)
+          is_custom = idx == state.custom_idx
+
+          prefix =
+            cond do
+              state.is_multi and is_checked -> "[󰄬] "
+              state.is_multi -> "[ ] "
+              true -> ""
             end
 
-          styled_sub_line =
-            if String.contains?(sub_line, "(Recommended)") do
-              [head, tail] = String.split(sub_line, "(Recommended)", parts: 2)
+          clean_opt = String.replace(to_string(opt), ~r/^\d+[\.\)\-]\s*/, "")
 
-              rec_tag =
-                "#{Formatter.reset()}#{Formatter.gray()}(Recommended)#{Formatter.reset()}"
+          num_prefix = if Map.get(state, :show_numbers, true), do: "#{idx + 1}. ", else: ""
 
-              if is_current do
-                "#{Formatter.green()}#{Formatter.bold()}#{head}#{rec_tag}#{Formatter.green()}#{Formatter.bold()}#{tail}#{Formatter.reset()}"
-              else
-                "#{Formatter.dim()}#{head}#{rec_tag}#{Formatter.dim()}#{tail}#{Formatter.reset()}"
-              end
+          label =
+            if is_custom do
+              "#{prefix}#{num_prefix}󰏫 #{clean_opt}"
             else
-              if is_current do
-                "#{Formatter.green()}#{Formatter.bold()}#{sub_line}#{Formatter.reset()}"
-              else
-                "#{Formatter.dim()}#{sub_line}#{Formatter.reset()}"
-              end
+              "#{prefix}#{num_prefix}#{clean_opt}"
             end
 
-          len = display_width(sub_line)
-          pad = String.duplicate(" ", max(0, max_text_width - len))
+          max_text_width = inner_width - 4
+          wrapped_lines = wrap_text(label, max_text_width)
 
-          "#{Formatter.cyan()}│#{Formatter.reset()} #{pointer}#{styled_sub_line}#{pad} #{Formatter.cyan()}│#{Formatter.reset()}"
+          wrapped_lines
+          |> Enum.with_index()
+          |> Enum.map(fn {sub_line, sub_idx} ->
+            pointer =
+              if sub_idx == 0 and is_current do
+                "❯ "
+              else
+                "  "
+              end
+
+            styled_sub_line =
+              if String.contains?(sub_line, "(Recommended)") do
+                [head, tail] = String.split(sub_line, "(Recommended)", parts: 2)
+
+                rec_tag =
+                  "#{Formatter.reset()}#{Formatter.gray()}(Recommended)#{Formatter.reset()}"
+
+                if is_current do
+                  "#{Formatter.green()}#{Formatter.bold()}#{head}#{rec_tag}#{Formatter.green()}#{Formatter.bold()}#{tail}#{Formatter.reset()}"
+                else
+                  "#{Formatter.dim()}#{head}#{rec_tag}#{Formatter.dim()}#{tail}#{Formatter.reset()}"
+                end
+              else
+                if is_current do
+                  "#{Formatter.green()}#{Formatter.bold()}#{sub_line}#{Formatter.reset()}"
+                else
+                  "#{Formatter.dim()}#{sub_line}#{Formatter.reset()}"
+                end
+              end
+
+            len = display_width(sub_line)
+            pad = String.duplicate(" ", max(0, max_text_width - len))
+
+            "#{Formatter.cyan()}│#{Formatter.reset()} #{pointer}#{styled_sub_line}#{pad} #{Formatter.cyan()}│#{Formatter.reset()}"
+          end)
         end)
-      end)
+      end
 
     lines =
       [header] ++
         [blank_line] ++
-        q_lines ++ [blank_line] ++ opt_lines ++ [blank_line] ++ [footer]
+        q_lines ++
+        [blank_line] ++
+        (if search_lines != [], do: search_lines ++ [blank_line], else: []) ++
+        opt_lines ++ [blank_line] ++ [footer]
 
     IO.write(:user, Enum.join(lines, "\r\n"))
     %{state | rendered_lines: length(lines) - 1}
@@ -608,9 +758,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       tag = if idx == custom_idx, do: "󰏫  #{opt}", else: opt
 
       styled_tag =
-        if String.contains?(tag, "(Recommended)") do
+        if String.contains?(to_string(tag), "(Recommended)") do
           String.replace(
-            tag,
+            to_string(tag),
             "(Recommended)",
             Formatter.gray() <> "(Recommended)" <> Formatter.reset()
           )
@@ -665,6 +815,12 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
       "\r" ->
         :enter
+
+      "\x08" ->
+        :backspace
+
+      "\x7f" ->
+        :backspace
 
       " " ->
         :space

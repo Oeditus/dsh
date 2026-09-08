@@ -1580,15 +1580,14 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   def file_picker_modal(state) do
-    config = Config.load_config()
+    cwd = Map.get(state, :cwd) || get_in(state, [:context, :cwd]) || get_in(state, [:context, "cwd"]) || File.cwd!()
+    config = Config.load_config(cwd)
 
     if Map.get(config, "enable_file_picker", true) do
-      files =
-        list_workspace_files()
-        |> Enum.take(30)
+      all_files = list_workspace_files()
 
       opts =
-        Enum.map(files, fn f ->
+        Enum.map(all_files, fn f ->
           icon = if File.dir?(f), do: "󰉋", else: "󰈔"
           "#{icon} #{f}"
         end)
@@ -1596,39 +1595,70 @@ defmodule DeepSeekHarness.CLI.LineEditor do
       if opts == [] do
         insert_char(state, "@")
       else
+        {left, right} = Enum.split(state.buffer, state.cursor)
+        left_str = Enum.join(left)
+
+        {initial_filter, strip_count} =
+          case Regex.run(~r/@([^\s@]*)$/, left_str) do
+            [full_match, prefix] -> {prefix, String.length(full_match)}
+            _ -> {"", 0}
+          end
+
         ans =
           DeepSeekHarness.CLI.Spinner.with_paused(fn ->
             DeepSeekHarness.CLI.QuestionPrompt.ask_single_question(
               "Select file context to attach:",
               opts,
               false,
-              false
+              false,
+              filterable: true,
+              initial_filter: initial_filter
             )
           end)
 
         case ans do
-          %{selected: [sel]} ->
+          %{selected: [sel]} when is_binary(sel) and sel != "" ->
             clean_path = sel |> String.split(" ", parts: 2) |> List.last()
-            inserted = "@" <> clean_path
-            chars = String.graphemes(inserted)
-            {left, right} = Enum.split(state.buffer, state.cursor)
+            replace_or_insert_file_ref(state, clean_path, strip_count, left, right)
 
-            %{
-              state
-              | buffer: left ++ chars ++ right,
-                cursor: state.cursor + length(chars),
-                first_render: true
-            }
+          %{custom: custom_val} when is_binary(custom_val) and custom_val != "" ->
+            replace_or_insert_file_ref(state, custom_val, strip_count, left, right)
 
           _ ->
-            st = insert_char(state, "@")
-            %{st | first_render: true}
+            if strip_count == 0 do
+              st = insert_char(state, "@")
+              %{st | first_render: true}
+            else
+              %{state | first_render: true}
+            end
         end
       end
     else
       st = insert_char(state, "@")
       %{st | first_render: true}
     end
+  end
+
+  defp replace_or_insert_file_ref(state, clean_path, strip_count, left, right) do
+    inserted = "@" <> clean_path
+    chars = String.graphemes(inserted)
+
+    left_trimmed =
+      if strip_count > 0 and length(left) >= strip_count do
+        Enum.slice(left, 0, length(left) - strip_count)
+      else
+        left
+      end
+
+    new_buffer = left_trimmed ++ chars ++ right
+    new_cursor = length(left_trimmed) + length(chars)
+
+    %{
+      state
+      | buffer: new_buffer,
+        cursor: new_cursor,
+        first_render: true
+    }
   end
 
   defp list_workspace_files do

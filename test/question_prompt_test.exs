@@ -211,4 +211,45 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
       assert res == %{selected: ["PostgreSQL (Recommended)"]}
     end
   end
+
+  describe "adaptive filter operations" do
+    test "filter_options filters list case-insensitively using tokens" do
+      opts = [
+        "󰈔 lib/deep_seek_harness/cli/line_editor.ex",
+        "󰈔 lib/deep_seek_harness/cli/question_prompt.ex",
+        "󰈔 test/line_editor_test.exs"
+      ]
+
+      assert QuestionPrompt.filter_options(opts, "") == opts
+      assert QuestionPrompt.filter_options(opts, "line") == [
+               "󰈔 lib/deep_seek_harness/cli/line_editor.ex",
+               "󰈔 test/line_editor_test.exs"
+             ]
+      assert QuestionPrompt.filter_options(opts, "cli line") == [
+               "󰈔 lib/deep_seek_harness/cli/line_editor.ex"
+             ]
+    end
+
+    test "handle_filter_char appends character and filters options" do
+      opts = ["lib/cli/main.ex", "test/cli_test.exs"]
+      state = QuestionPrompt.new_state("Pick file:", opts, false, -1, false, nil, nil, filterable: true)
+
+      state = QuestionPrompt.handle_filter_char(state, ?m)
+      assert state.filter_query == "m"
+      assert state.options == ["lib/cli/main.ex"]
+    end
+
+    test "handle_filter_backspace removes character or cancels when empty" do
+      opts = ["lib/cli/main.ex", "test/cli_test.exs"]
+      state = QuestionPrompt.new_state("Pick file:", opts, false, -1, false, nil, nil, filterable: true, initial_filter: "ma")
+
+      assert {:ok, state1} = QuestionPrompt.handle_filter_backspace(state)
+      assert state1.filter_query == "m"
+
+      assert {:ok, state2} = QuestionPrompt.handle_filter_backspace(state1)
+      assert state2.filter_query == ""
+
+      assert QuestionPrompt.handle_filter_backspace(state2) == :cancel
+    end
+  end
 end

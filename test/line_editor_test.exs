@@ -631,4 +631,18 @@ defmodule DeepSeekHarness.LineEditorTest do
       assert state_right.cursor == 3
     end
   end
+
+  describe "file picker modal integration" do
+    test "inserts @ when enable_file_picker is false" do
+      tmp_dir = Path.join(System.tmp_dir!(), "dsh_test_fp_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(tmp_dir, ".dsh"))
+      File.write!(Path.join(tmp_dir, ".dsh/config.json"), ~s({"enable_file_picker": false}))
+      on_exit(fn -> File.rm_rf(tmp_dir) end)
+
+      state = LineEditor.new_state("prompt> ", [], %{cwd: tmp_dir})
+      result = LineEditor.file_picker_modal(state)
+      assert Enum.join(result.buffer) == "@"
+      assert result.cursor == 1
+    end
+  end
 end
