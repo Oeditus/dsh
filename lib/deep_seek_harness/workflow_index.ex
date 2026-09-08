@@ -210,8 +210,7 @@ defmodule DeepSeekHarness.WorkflowIndex do
     """
 
     rows =
-      items
-      |> Enum.map(fn item ->
+      Enum.map_join(items, "\n", fn item ->
         stage = item.stage
         slug = item.slug
         type = Map.get(item.frontmatter, "type", "code")
@@ -225,7 +224,6 @@ defmodule DeepSeekHarness.WorkflowIndex do
 
         "| `#{stage}` | `#{slug}` | `#{type}` | `#{priority}` | #{single_line_summary} |"
       end)
-      |> Enum.join("\n")
 
     header <> rows <> "\n"
   end
@@ -239,8 +237,7 @@ defmodule DeepSeekHarness.WorkflowIndex do
     """
 
     rows =
-      items
-      |> Enum.map(fn item ->
+      Enum.map_join(items, "\n", fn item ->
         deps = Map.get(item.frontmatter, "depends_on", [])
         deps_list = if is_list(deps), do: deps, else: [deps]
 
@@ -262,7 +259,6 @@ defmodule DeepSeekHarness.WorkflowIndex do
 
         "| `#{item.slug}` | `#{item.stage}` | #{deps_str} | #{req_str} |"
       end)
-      |> Enum.join("\n")
 
     header <> rows <> "\n"
   end
@@ -369,7 +365,9 @@ defmodule DeepSeekHarness.WorkflowIndex do
 
         dest_path = Path.join(dest_dir, filename)
 
-        priority = Keyword.get(opts, :priority, Map.get(item.frontmatter, "priority", "Should Have"))
+        priority =
+          Keyword.get(opts, :priority, Map.get(item.frontmatter, "priority", "Should Have"))
+
         type = Keyword.get(opts, :type, Map.get(item.frontmatter, "type", "code"))
 
         # Update frontmatter with target requirements
@@ -399,7 +397,8 @@ defmodule DeepSeekHarness.WorkflowIndex do
 
     match =
       Enum.find(items, fn item ->
-        item.slug == query or String.contains?(query, item.slug) or String.contains?(item.slug, query)
+        item.slug == query or String.contains?(query, item.slug) or
+          String.contains?(item.slug, query)
       end)
 
     case match do
@@ -433,8 +432,7 @@ defmodule DeepSeekHarness.WorkflowIndex do
   end
 
   defp encode_yaml(map) do
-    map
-    |> Enum.map(fn {k, v} ->
+    Enum.map_join(map, fn {k, v} ->
       cond do
         is_list(v) ->
           list_str = Enum.map_join(v, ", ", &to_string/1)
@@ -448,6 +446,5 @@ defmodule DeepSeekHarness.WorkflowIndex do
           "#{k}: #{v}\n"
       end
     end)
-    |> Enum.join()
   end
 end

@@ -102,7 +102,7 @@ defmodule DeepSeekHarness.Sweep do
     body =
       corpora
       |> Enum.with_index(1)
-      |> Enum.map(fn {corpus, idx} ->
+      |> Enum.map_join("\n\n", fn {corpus, idx} ->
         path_str = corpus.path || "N/A"
 
         if corpus.searched? do
@@ -110,11 +110,9 @@ defmodule DeepSeekHarness.Sweep do
             if Enum.empty?(corpus.matches) do
               "  #{Formatter.dim()}No matches.#{Formatter.reset()}"
             else
-              corpus.matches
-              |> Enum.map(fn m ->
+              Enum.map_join(corpus.matches, "\n", fn m ->
                 "  #{Formatter.cyan()}#{m.file}:#{m.line_number}#{Formatter.reset()}: #{String.trim(m.line_content)}"
               end)
-              |> Enum.join("\n")
             end
 
           "#{Formatter.bold()}[#{idx}/#{length(corpora)}] #{corpus.name}#{Formatter.reset()} (#{path_str}) — #{Formatter.italic()}#{corpus.question}#{Formatter.reset()}\n#{matches_str}"
@@ -124,7 +122,6 @@ defmodule DeepSeekHarness.Sweep do
           "#{Formatter.bold()}[#{idx}/#{length(corpora)}] #{corpus.name}#{Formatter.reset()} — #{Formatter.italic()}#{corpus.question}#{Formatter.reset()}\n  #{Formatter.red()}!! NOT SEARCHED (#{err_msg})#{Formatter.reset()}"
         end
       end)
-      |> Enum.join("\n\n")
 
     header <> "\n" <> body
   end

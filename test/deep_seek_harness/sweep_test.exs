@@ -48,7 +48,11 @@ defmodule DeepSeekHarness.SweepTest do
 
     lessons_corpus = Enum.find(res.corpora, &(&1.name == "Lessons Learned"))
     assert lessons_corpus.searched?
-    assert Enum.any?(lessons_corpus.matches, &String.contains?(&1.line_content, "Token expiration"))
+
+    assert Enum.any?(
+             lessons_corpus.matches,
+             &String.contains?(&1.line_content, "Token expiration")
+           )
 
     vault_corpus = Enum.find(res.corpora, &(&1.name == "Knowledge Vault"))
     assert vault_corpus.searched?

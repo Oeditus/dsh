@@ -283,7 +283,9 @@ defmodule DeepSeekHarness.CLI.Repl do
     tokens = String.trim(args)
 
     if tokens == "" do
-      IO.puts(Formatter.format_info("Usage: /sweep <token1> [token2...] (e.g. /sweep auth jwt session)"))
+      IO.puts(
+        Formatter.format_info("Usage: /sweep <token1> [token2...] (e.g. /sweep auth jwt session)")
+      )
     else
       result = DeepSeekHarness.Sweep.run(tokens)
       IO.puts("\n" <> DeepSeekHarness.Sweep.format_result(result) <> "\n")
@@ -293,7 +295,10 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   def handle_input("/sweep", _session_pid, _session_id) do
-    IO.puts(Formatter.format_info("Usage: /sweep <token1> [token2...] (e.g. /sweep auth jwt session)"))
+    IO.puts(
+      Formatter.format_info("Usage: /sweep <token1> [token2...] (e.g. /sweep auth jwt session)")
+    )
+
     :continue
   end
 
@@ -311,6 +316,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/scrap " <> note, session_pid, session_id) do
     n = String.trim(note)
+
     if n == "" do
       handle_input("/scrap", session_pid, session_id)
     else
@@ -334,6 +340,7 @@ defmodule DeepSeekHarness.CLI.Repl do
 
   def handle_input("/lessons " <> lesson, session_pid, session_id) do
     l = String.trim(lesson)
+
     if l == "" do
       handle_input("/lessons", session_pid, session_id)
     else
@@ -363,7 +370,12 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   def handle_input("/thought", _session_pid, _session_id) do
-    IO.puts(Formatter.format_info("Usage: /thought <Title> [| Summary] (e.g. /thought JWT Refresh Token | Implement auto-refresh token flow)"))
+    IO.puts(
+      Formatter.format_info(
+        "Usage: /thought <Title> [| Summary] (e.g. /thought JWT Refresh Token | Implement auto-refresh token flow)"
+      )
+    )
+
     :continue
   end
 
@@ -371,11 +383,19 @@ defmodule DeepSeekHarness.CLI.Repl do
     items = DeepSeekHarness.WorkflowIndex.scan_items()
 
     if Enum.empty?(items) do
-      IO.puts(Formatter.format_info("No pipeline items found. Create your first thought with `/thought <Title>`."))
+      IO.puts(
+        Formatter.format_info(
+          "No pipeline items found. Create your first thought with `/thought <Title>`."
+        )
+      )
     else
       {:ok, map_path, _deps_path} = DeepSeekHarness.WorkflowIndex.generate_indexes()
       content = File.read!(map_path)
-      IO.puts("\n#{Formatter.bold()}=== Idea Pipeline Map (#{map_path}) ===#{Formatter.reset()}\n\n" <> content)
+
+      IO.puts(
+        "\n#{Formatter.bold()}=== Idea Pipeline Map (#{map_path}) ===#{Formatter.reset()}\n\n" <>
+          content
+      )
     end
 
     :continue
@@ -390,23 +410,37 @@ defmodule DeepSeekHarness.CLI.Repl do
         priority = Enum.reject(rest, &(&1 in ["code", "initiative"])) |> Enum.join(" ")
         priority = if priority == "", do: "Should Have", else: priority
 
-        case DeepSeekHarness.WorkflowIndex.promote_item(slug, "backlog", type: type, priority: priority) do
+        case DeepSeekHarness.WorkflowIndex.promote_item(slug, "backlog",
+               type: type,
+               priority: priority
+             ) do
           {:ok, path} ->
-            IO.puts(Formatter.format_success("Promoted `#{slug}` to backlog (#{priority}) -> #{path}"))
+            IO.puts(
+              Formatter.format_success("Promoted `#{slug}` to backlog (#{priority}) -> #{path}")
+            )
 
           {:error, err} ->
             IO.puts(Formatter.format_error(err))
         end
 
       _ ->
-        IO.puts(Formatter.format_info("Usage: /promote <slug> [code|initiative] [Must Have|Should Have|Nice to Have]"))
+        IO.puts(
+          Formatter.format_info(
+            "Usage: /promote <slug> [code|initiative] [Must Have|Should Have|Nice to Have]"
+          )
+        )
     end
 
     :continue
   end
 
   def handle_input("/promote", _session_pid, _session_id) do
-    IO.puts(Formatter.format_info("Usage: /promote <slug> [code|initiative] [Must Have|Should Have|Nice to Have]"))
+    IO.puts(
+      Formatter.format_info(
+        "Usage: /promote <slug> [code|initiative] [Must Have|Should Have|Nice to Have]"
+      )
+    )
+
     :continue
   end
 
@@ -420,6 +454,7 @@ defmodule DeepSeekHarness.CLI.Repl do
         not Enum.empty?(backlog) ->
           must_haves = Enum.filter(backlog, &(Map.get(&1.frontmatter, "priority") == "Must Have"))
           top = if Enum.empty?(must_haves), do: hd(backlog), else: hd(must_haves)
+
           "Top recommendation to work on next: `#{top.slug}` (#{Map.get(top.frontmatter, "priority", "backlog")})\nFile: #{top.path}"
 
         not Enum.empty?(thoughts) ->
@@ -437,7 +472,11 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/audit-thoughts", _session_pid, _session_id) do
     case DeepSeekHarness.WorkflowIndex.check_items() do
       {:ok, items} ->
-        IO.puts(Formatter.format_success("Audit passed! All #{length(items)} pipeline items have valid frontmatter & dependencies."))
+        IO.puts(
+          Formatter.format_success(
+            "Audit passed! All #{length(items)} pipeline items have valid frontmatter & dependencies."
+          )
+        )
 
       {:error, errs} ->
         err_text = Enum.map_join(errs, "\n", &"  - #{&1}")
@@ -450,7 +489,13 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/process-scrap", _session_pid, _session_id) do
     case DeepSeekHarness.Scrap.read_scrap() do
       {:ok, content, path} ->
-        IO.puts(Formatter.format_info("Scrap Triage (#{path}):\n" <> content <> "\n\nUse `/thought <Title> | <Summary>` to turn scrap items into raw thoughts, or `/scrap clear` when done."))
+        IO.puts(
+          Formatter.format_info(
+            "Scrap Triage (#{path}):\n" <>
+              content <>
+              "\n\nUse `/thought <Title> | <Summary>` to turn scrap items into raw thoughts, or `/scrap clear` when done."
+          )
+        )
 
       {:error, err} ->
         IO.puts(Formatter.format_error(err))
@@ -462,7 +507,13 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/prune-lessons", _session_pid, _session_id) do
     case DeepSeekHarness.Lessons.load_lessons() do
       {:ok, content, path} ->
-        IO.puts(Formatter.format_info("Lessons Triage (#{path}):\n\n" <> content <> "\n\nSynthesize clusters of lessons into project/reference/ docs or module docstrings."))
+        IO.puts(
+          Formatter.format_info(
+            "Lessons Triage (#{path}):\n\n" <>
+              content <>
+              "\n\nSynthesize clusters of lessons into project/reference/ docs or module docstrings."
+          )
+        )
 
       {:error, err} ->
         IO.puts(Formatter.format_error(err))
@@ -500,7 +551,10 @@ defmodule DeepSeekHarness.CLI.Repl do
   def handle_input("/spar adversarial " <> topic, session_pid, _session_id) do
     t = String.trim(topic)
     {:ok, sweep_fmt, prompt} = DeepSeekHarness.Sparring.prepare_sparring(t, mode: :adversarial)
-    IO.puts("\n" <> DeepSeekHarness.Sparring.format_spar_start(t, :adversarial, sweep_fmt) <> "\n")
+
+    IO.puts(
+      "\n" <> DeepSeekHarness.Sparring.format_spar_start(t, :adversarial, sweep_fmt) <> "\n"
+    )
 
     case Session.send_user_message(session_pid, prompt) do
       {:ok, response} ->
@@ -551,7 +605,12 @@ defmodule DeepSeekHarness.CLI.Repl do
   end
 
   def handle_input("/spar", _session_pid, _session_id) do
-    IO.puts(Formatter.format_info("Usage: /spar [socratic|adversarial] <topic | slug> (e.g. /spar JWT Refresh Token)"))
+    IO.puts(
+      Formatter.format_info(
+        "Usage: /spar [socratic|adversarial] <topic | slug> (e.g. /spar JWT Refresh Token)"
+      )
+    )
+
     :continue
   end
 

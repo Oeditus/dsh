@@ -52,7 +52,11 @@ defmodule DeepSeekHarness.WorkflowIndexTest do
     assert String.contains?(map_content, "cache_engine")
 
     {:ok, dest_path} =
-      WorkflowIndex.promote_item(slug, "backlog", priority: "Must Have", type: "code", cwd: tmp_dir)
+      WorkflowIndex.promote_item(slug, "backlog",
+        priority: "Must Have",
+        type: "code",
+        cwd: tmp_dir
+      )
 
     assert String.contains?(dest_path, "project/workflow/backlog")
 
@@ -69,6 +73,10 @@ defmodule DeepSeekHarness.WorkflowIndexTest do
     File.write!(bad_file, "---\ntype: code\n---\n# Invalid thought\nNo summary scalar")
 
     assert {:error, errs} = WorkflowIndex.check_items(tmp_dir)
-    assert Enum.any?(errs, &String.contains?(&1, "Missing required frontmatter scalar `summary:`"))
+
+    assert Enum.any?(
+             errs,
+             &String.contains?(&1, "Missing required frontmatter scalar `summary:`")
+           )
   end
 end

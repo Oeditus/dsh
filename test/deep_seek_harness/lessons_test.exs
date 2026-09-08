@@ -15,7 +15,9 @@ defmodule DeepSeekHarness.LessonsTest do
   end
 
   test "appends, loads, and formats lessons learned", %{tmp_dir: tmp_dir} do
-    {:ok, path} = Lessons.append_lesson("Always close ETS tables on process termination.", cwd: tmp_dir)
+    {:ok, path} =
+      Lessons.append_lesson("Always close ETS tables on process termination.", cwd: tmp_dir)
+
     assert String.ends_with?(path, "project/lessons.md")
 
     {:ok, content, _path} = Lessons.load_lessons(tmp_dir)

@@ -15,7 +15,11 @@ defmodule DeepSeekHarness.WorkflowPipelineIntegrationTest do
       )
 
     {:ok, _dest} =
-      WorkflowIndex.promote_item(slug, "backlog", priority: "Must Have", type: "code", cwd: tmp_dir)
+      WorkflowIndex.promote_item(slug, "backlog",
+        priority: "Must Have",
+        type: "code",
+        cwd: tmp_dir
+      )
 
     on_exit(fn ->
       File.rm_rf!(tmp_dir)
@@ -24,7 +28,10 @@ defmodule DeepSeekHarness.WorkflowPipelineIntegrationTest do
     {:ok, tmp_dir: tmp_dir, slug: slug}
   end
 
-  test "finds backlog item and activates it for workflow execution", %{tmp_dir: tmp_dir, slug: slug} do
+  test "finds backlog item and activates it for workflow execution", %{
+    tmp_dir: tmp_dir,
+    slug: slug
+  } do
     {:ok, item} = WorkflowIndex.find_and_activate("session_compaction", tmp_dir)
     assert item.stage == "active"
     assert item.slug == slug
@@ -35,7 +42,10 @@ defmodule DeepSeekHarness.WorkflowPipelineIntegrationTest do
     assert active_item.stage == "active"
   end
 
-  test "closes out active item to completed/ and records close-out lesson", %{tmp_dir: tmp_dir, slug: slug} do
+  test "closes out active item to completed/ and records close-out lesson", %{
+    tmp_dir: tmp_dir,
+    slug: slug
+  } do
     {:ok, _active_item} = WorkflowIndex.find_and_activate(slug, tmp_dir)
 
     {:ok, comp_path} = WorkflowIndex.close_out_active(slug, cwd: tmp_dir)
