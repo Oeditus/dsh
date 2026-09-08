@@ -53,6 +53,8 @@ defmodule DeepSeekHarness.CLI.Spinner do
   running.
   """
   def pause do
+    DeepSeekHarness.CLI.Interrupt.pause()
+
     if active?() do
       try do
         GenServer.call(__MODULE__, :pause, 500)
@@ -66,6 +68,8 @@ defmodule DeepSeekHarness.CLI.Spinner do
 
   @doc "Resumes spinner redraws after a previous `pause/0`. Safe to call even if the spinner isn't running."
   def resume do
+    DeepSeekHarness.CLI.Interrupt.resume()
+
     if active?() do
       try do
         GenServer.call(__MODULE__, :resume, 500)

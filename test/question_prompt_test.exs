@@ -258,7 +258,8 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
       assert {:ok, state2} = QuestionPrompt.handle_filter_backspace(state1)
       assert state2.filter_query == ""
 
-      assert QuestionPrompt.handle_filter_backspace(state2) == :cancel
+      assert {:ok, state3} = QuestionPrompt.handle_filter_backspace(state2)
+      assert state3.filter_query == ""
     end
   end
 end

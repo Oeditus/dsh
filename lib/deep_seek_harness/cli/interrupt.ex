@@ -30,6 +30,71 @@ defmodule DeepSeekHarness.CLI.Interrupt do
   @ctrl_o "\x0f"
   @paused_poll_interval_ms 120
 
+  use Agent
+
+  @doc "Starts the (named, singleton) Interrupt agent."
+  def start_link(_opts \\ []) do
+    Agent.start_link(fn -> nil end, name: __MODULE__)
+  end
+
+  @doc """
+  Pauses the Ctrl+Q keystroke watcher if running, killing its process so it
+  releases any pending I/O read requests on stdin while a modal is open.
+  """
+  def pause do
+    ensure_started()
+
+    case Agent.get(__MODULE__, & &1) do
+      %{watcher: watcher, ref: ref, session_pid: session_pid} ->
+        stop_watcher(watcher, ref)
+        Agent.update(__MODULE__, fn _ -> %{session_pid: session_pid, paused: true} end)
+
+      _ ->
+        :ok
+    end
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
+  end
+
+  @doc """
+  Resumes the Ctrl+Q keystroke watcher if it was previously paused for a modal.
+  """
+  def resume do
+    ensure_started()
+
+    case Agent.get(__MODULE__, & &1) do
+      %{session_pid: session_pid, paused: true} ->
+        {watcher, watcher_ref} = spawn_monitor(fn -> watch_for_interrupt(session_pid) end)
+
+        Agent.update(__MODULE__, fn _ ->
+          %{watcher: watcher, ref: watcher_ref, session_pid: session_pid}
+        end)
+
+      _ ->
+        :ok
+    end
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
+  end
+
+  defp ensure_started do
+    case Process.whereis(__MODULE__) do
+      nil ->
+        case start_link() do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+          _ -> :ok
+        end
+
+      _ ->
+        :ok
+    end
+  end
+
   @doc """
   Runs `turn_fun` (a zero-arity function) to completion, or until the user
   presses Ctrl+Q while it's running -- in which case
@@ -50,6 +115,7 @@ defmodule DeepSeekHarness.CLI.Interrupt do
   end
 
   defp run_interruptible(session_pid, turn_fun) do
+    ensure_started()
     task = Task.async(turn_fun)
 
     # `spawn_monitor/1` (rather than `spawn/1` + a later `Process.monitor/1`)
@@ -58,19 +124,15 @@ defmodule DeepSeekHarness.CLI.Interrupt do
     # die before touching the terminal mode.
     {watcher, watcher_ref} = spawn_monitor(fn -> watch_for_interrupt(session_pid) end)
 
+    Agent.update(__MODULE__, fn _ ->
+      %{watcher: watcher, ref: watcher_ref, session_pid: session_pid}
+    end)
+
     try do
       Task.await(task, :infinity)
     after
-      # `Process.exit(watcher, :kill)` is *asynchronous* -- it sends the kill
-      # signal and returns immediately, but the watcher (which re-asserts raw
-      # terminal mode on every loop iteration) may still be alive for a brief
-      # window. If it called `set_raw_mode/0` after we restore cooked mode,
-      # the terminal would be left in raw mode and the next LineEditor render
-      # (and any typed input) would corrupt the screen -- the "empty screen
-      # / reset brings it back" symptom. So we block until the watcher is
-      # confirmed dead BEFORE restoring cooked mode, then flush so the
-      # response output is actually on the terminal before control returns.
-      stop_watcher(watcher, watcher_ref)
+      pause()
+      Agent.update(__MODULE__, fn _ -> nil end)
       restore_tty_mode()
       DeepSeekHarness.CLI.Formatter.flush()
     end

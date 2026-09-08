@@ -205,8 +205,8 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
   def handle_filter_char(state, _), do: state
 
-  def handle_filter_backspace(%{filter_query: ""} = _state) do
-    :cancel
+  def handle_filter_backspace(%{filter_query: ""} = state) do
+    {:ok, state}
   end
 
   def handle_filter_backspace(state) do
@@ -428,14 +428,14 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         if Map.get(state, :filterable, false) do
           case handle_filter_backspace(state) do
             {:ok, new_state} -> tui_loop(new_state)
-            :cancel -> %{cancelled: true, selected: []}
+            _ -> tui_loop(state)
           end
         else
           tui_loop(state)
         end
 
       :escape ->
-        %{cancelled: true, selected: []}
+        tui_loop(state)
 
       {:char, char_code} when char_code >= ?1 and char_code <= ?9 ->
         if Map.get(state, :filterable, false) do
@@ -457,7 +457,10 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         tui_loop(state)
 
       :enter ->
-        handle_confirm(state)
+        case handle_confirm(state) do
+          :reloop -> tui_loop(state)
+          result -> result
+        end
 
       :ctrl_c ->
         %{cancelled: true, selected: []}
@@ -535,7 +538,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
           if Map.get(state, :filterable, false) and state.filter_query != "" do
             %{custom: state.filter_query, selected: []}
           else
-            %{selected: []}
+            :reloop
           end
         end
       end
@@ -800,7 +803,18 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         end
 
       _ ->
-        %{selected: [], custom: input}
+        if input != "" do
+          %{selected: [], custom: input}
+        else
+          IO.write(
+            :user,
+            Formatter.yellow() <>
+              "Please select a valid option number (1-#{length(options)}) or enter a response.\r\n" <>
+              Formatter.reset()
+          )
+
+          prompt_non_tty(question, options, _is_multi, custom_idx, progress, subagent)
+        end
     end
   end
 
@@ -809,55 +823,69 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # ---------------------------------------------------------------------
 
   defp read_key do
-    case IO.getn(:user, "", 1) do
+    case get_raw_input_chunk() do
+      other -> match_key(other)
+    end
+  end
+
+  defp match_key("\e[A"), do: :up
+  defp match_key("\e[B"), do: :down
+  defp match_key("\e[C"), do: :right
+  defp match_key("\e[D"), do: :left
+  defp match_key("\eOA"), do: :up
+  defp match_key("\eOB"), do: :down
+  defp match_key("\eOC"), do: :right
+  defp match_key("\eOD"), do: :left
+  defp match_key("\r"), do: :enter
+  defp match_key("\n"), do: :enter
+  defp match_key("\r\n"), do: :enter
+  defp match_key("\t"), do: :tab
+  defp match_key(" "), do: :space
+  defp match_key("\x08"), do: :backspace
+  defp match_key("\x7f"), do: :backspace
+  defp match_key("\x0f"), do: :ctrl_o
+  defp match_key("\x03"), do: :ctrl_c
+  defp match_key("\e"), do: :escape
+
+  defp match_key(other) when is_binary(other) do
+    cond do
+      String.contains?(other, "[A") or String.contains?(other, "OA") ->
+        :up
+
+      String.contains?(other, "[B") or String.contains?(other, "OB") ->
+        :down
+
+      String.contains?(other, "[C") or String.contains?(other, "OC") ->
+        :right
+
+      String.contains?(other, "[D") or String.contains?(other, "OD") ->
+        :left
+
+      true ->
+        case String.to_charlist(other) do
+          [c | _] -> {:char, c}
+          _ -> :other
+        end
+    end
+  end
+
+  defp get_raw_input_chunk do
+    case read_char() do
       "\e" ->
         seq = read_available_escape_bytes("", 6)
-
-        cond do
-          String.contains?(seq, "[A") or String.contains?(seq, "OA") -> :up
-          String.contains?(seq, "[B") or String.contains?(seq, "OB") -> :down
-          String.contains?(seq, "[C") or String.contains?(seq, "OC") -> :right
-          String.contains?(seq, "[D") or String.contains?(seq, "OD") -> :left
-          true -> :escape
-        end
-
-      "\n" ->
-        :enter
-
-      "\r" ->
-        :enter
-
-      "\x08" ->
-        :backspace
-
-      "\x7f" ->
-        :backspace
-
-      " " ->
-        :space
-
-      "\x0f" ->
-        :ctrl_o
-
-      "\x03" ->
-        :ctrl_c
-
-      <<char_code::utf8>> ->
-        {:char, char_code}
+        "\e" <> seq
 
       :eof ->
         :eof
 
-      {:error, _} ->
-        :eof
+      char when is_binary(char) ->
+        char
 
       _ ->
-        :eof
+        ""
     end
   end
 
-  # Reads up to `count` bytes following an escape byte, stopping early as
-  # soon as a CSI/SS3 terminator (A/B/C/D/H/F/~) is seen.
   defp read_available_escape_bytes(acc, count) when count > 0 do
     case read_char() do
       char when is_binary(char) and char != "" ->
