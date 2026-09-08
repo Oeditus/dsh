@@ -23,7 +23,9 @@ defmodule DeepSeekHarness.TaskEngine.JobManagerTest do
   end
 
   test "bash tool executes asynchronously when async: true is passed" do
-    assert {:ok, msg} = DefaultTools.execute_bash(%{"command" => "echo 'async job test'", "async" => true})
+    assert {:ok, msg} =
+             DefaultTools.execute_bash(%{"command" => "echo 'async job test'", "async" => true})
+
     assert msg =~ "Started background job"
     assert msg =~ "job_"
 
@@ -50,7 +52,9 @@ defmodule DeepSeekHarness.TaskEngine.JobManagerTest do
     tmp_path = Path.join(System.tmp_dir!(), "line_test_#{System.unique_integer([:positive])}.txt")
     File.write!(tmp_path, "line 1\nline 2\nline 3\nline 4\nline 5\n")
 
-    assert {:ok, content} = DefaultTools.read_file(%{"path" => tmp_path, "start_line" => 2, "end_line" => 4})
+    assert {:ok, content} =
+             DefaultTools.read_file(%{"path" => tmp_path, "start_line" => 2, "end_line" => 4})
+
     assert content =~ "=== Lines 2-4 of"
     assert content =~ "2: line 2"
     assert content =~ "3: line 3"
@@ -65,7 +69,9 @@ defmodule DeepSeekHarness.TaskEngine.JobManagerTest do
     file_a = Path.join(tmp_dir, "a.txt")
     File.write!(file_a, "apple\nbanana\ncherry\n")
 
-    assert {:ok, result} = DefaultTools.grep_search_tool(%{"path" => tmp_dir, "query" => "banana"})
+    assert {:ok, result} =
+             DefaultTools.grep_search_tool(%{"path" => tmp_dir, "query" => "banana"})
+
     assert result =~ "banana"
     assert result =~ "a.txt:2:"
   end

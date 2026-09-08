@@ -103,7 +103,8 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
             command: %{type: "string", description: "The bash command string to execute."},
             async: %{
               type: "boolean",
-              description: "Set to true to run command asynchronously in the background (default: false)."
+              description:
+                "Set to true to run command asynchronously in the background (default: false)."
             }
           },
           required: ["command"]
@@ -469,14 +470,13 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
     if Map.get(args, "async", false) do
       cwd = Map.get(args, "_session_cwd", File.cwd!())
 
-      case DeepSeekHarness.TaskEngine.JobManager.start_job(cmd, cwd: cwd) do
-        {:ok, job_id, log_file} ->
-          {:ok,
-           "Started background job '#{job_id}' (log: #{log_file}). Use job_status(job_id: \"#{job_id}\") to monitor log output."}
+      # `start_job/2` either returns `{:ok, job_id, log_file}` or raises; any
+      # failure to spawn the job is turned into an error tuple by the
+      # function-level `rescue` below.
+      {:ok, job_id, log_file} = DeepSeekHarness.TaskEngine.JobManager.start_job(cmd, cwd: cwd)
 
-        {:error, err} ->
-          {:error, "Failed to start background job: #{inspect(err)}"}
-      end
+      {:ok,
+       "Started background job '#{job_id}' (log: #{log_file}). Use job_status(job_id: \"#{job_id}\") to monitor log output."}
     else
       {env, exec_cmd} = DeepSeekHarness.TaskEngine.JobManager.prepare_environment(cmd)
 

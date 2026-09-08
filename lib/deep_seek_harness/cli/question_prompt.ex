@@ -426,10 +426,8 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
       :backspace ->
         if Map.get(state, :filterable, false) do
-          case handle_filter_backspace(state) do
-            {:ok, new_state} -> tui_loop(new_state)
-            _ -> tui_loop(state)
-          end
+          {:ok, new_state} = handle_filter_backspace(state)
+          tui_loop(new_state)
         else
           tui_loop(state)
         end
@@ -747,7 +745,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
   # Non-TTY Fallback Prompt
   # ---------------------------------------------------------------------
 
-  defp prompt_non_tty(question, options, _is_multi, custom_idx, progress, subagent \\ nil) do
+  defp prompt_non_tty(question, options, is_multi, custom_idx, progress, subagent \\ nil) do
     sub_prefix = if is_binary(subagent) and subagent != "", do: "[#{subagent}] ", else: ""
 
     label =
@@ -813,7 +811,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
               Formatter.reset()
           )
 
-          prompt_non_tty(question, options, _is_multi, custom_idx, progress, subagent)
+          prompt_non_tty(question, options, is_multi, custom_idx, progress, subagent)
         end
     end
   end
@@ -824,6 +822,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
   defp read_key do
     case get_raw_input_chunk() do
+      :eof -> :eof
       other -> match_key(other)
     end
   end
@@ -869,6 +868,8 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
     end
   end
 
+  # `read_char/0` only ever yields `:eof` or a binary, so those two shapes
+  # exhaust the possible input here.
   defp get_raw_input_chunk do
     case read_char() do
       "\e" ->
@@ -880,9 +881,6 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
       char when is_binary(char) ->
         char
-
-      _ ->
-        ""
     end
   end
 
