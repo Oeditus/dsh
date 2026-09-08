@@ -358,9 +358,18 @@ defmodule DeepSeekHarness.WorkflowIndex do
       item ->
         base_dir = ensure_scaffold(cwd)
         dest_dir = Path.join(base_dir, target_stage)
-        dest_path = Path.join(dest_dir, item.filename)
 
-        priority = Keyword.get(opts, :priority, "Should Have")
+        filename =
+          if target_stage == "completed" do
+            today = Calendar.strftime(Date.utc_today(), "%Y%m%d")
+            "#{today}_#{item.slug}.md"
+          else
+            item.filename
+          end
+
+        dest_path = Path.join(dest_dir, filename)
+
+        priority = Keyword.get(opts, :priority, Map.get(item.frontmatter, "priority", "Should Have"))
         type = Keyword.get(opts, :type, Map.get(item.frontmatter, "type", "code"))
 
         # Update frontmatter with target requirements
@@ -378,6 +387,48 @@ defmodule DeepSeekHarness.WorkflowIndex do
         generate_indexes(cwd)
 
         {:ok, dest_path}
+    end
+  end
+
+  @doc """
+  Finds a backlog or active item matching `slug_or_prompt` and promotes it to `active/` if currently in `backlog/`.
+  """
+  def find_and_activate(slug_or_prompt, cwd \\ ".") do
+    items = scan_items(cwd)
+    query = String.downcase(slug_or_prompt)
+
+    match =
+      Enum.find(items, fn item ->
+        item.slug == query or String.contains?(query, item.slug) or String.contains?(item.slug, query)
+      end)
+
+    case match do
+      %{stage: "backlog"} = item ->
+        {:ok, active_path} = promote_item(item.slug, "active", cwd: cwd)
+        {:ok, %{item | stage: "active", path: active_path}}
+
+      %{stage: "active"} = item ->
+        {:ok, item}
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
+  Closes out an active item, moving it to `completed/` and appending a close-out lesson entry to `project/lessons.md`.
+  """
+  def close_out_active(slug, opts \\ []) do
+    cwd = Keyword.get(opts, :cwd, ".")
+
+    case promote_item(slug, "completed", cwd: cwd) do
+      {:ok, dest_path} ->
+        lesson = "Completed workflow task `#{slug}`: verified tests & acceptance criteria."
+        DeepSeekHarness.Lessons.append_lesson(lesson, cwd: cwd)
+        {:ok, dest_path}
+
+      err ->
+        err
     end
   end
 

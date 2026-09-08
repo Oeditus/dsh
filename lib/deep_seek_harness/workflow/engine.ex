@@ -51,7 +51,20 @@ defmodule DeepSeekHarness.Workflow.Engine do
       {:ok, _dir} = Store.init_run!(run_id, definition, cwd)
       Store.save_state!(run_id, %{"status" => "running"}, cwd)
 
-      context = %{run_id: run_id, cwd: cwd, workflow: definition, seed_prompt: seed_prompt}
+      pipeline_item =
+        case DeepSeekHarness.WorkflowIndex.find_and_activate(seed_prompt, cwd) do
+          {:ok, item} -> item
+          _ -> nil
+        end
+
+      context = %{
+        run_id: run_id,
+        cwd: cwd,
+        workflow: definition,
+        seed_prompt: seed_prompt,
+        pipeline_item: pipeline_item
+      }
+
       execute_from(context, definition.steps, 0)
     end
   end

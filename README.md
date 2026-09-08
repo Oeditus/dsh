@@ -111,6 +111,12 @@ DeepSeek Harness supports the full suite of official DeepSeek models, local open
 - Parallel subtasks each get their own isolated `git worktree` and branch, so concurrent agent processes can never clash on disk.
 - Ships with a built-in `elixir` workflow; scaffold your own with `/workflow init <name> [--from <template>]`. Full reference: [`docs/WORKFLOW_ENGINE.md`](docs/WORKFLOW_ENGINE.md).
 
+### 12. Idea Lifecycle Pipeline & Strategic Memory Engine (`/sweep`, `/spar`, `/thought`, `/backlog`)
+- Implements an idea-lifecycle pipeline (`thoughts/ → backlog/ → active/ → completed/`) with git-ignored derived maps (`_MAP.md`, `_DEPS.md`) parsed from YAML frontmatter metadata.
+- **Multi-Corpus Prior-Art Sweep (`/sweep <tokens>`)**: Searches active pipeline, reference docs, operational lessons, and local knowledge vault to prevent repeating past work.
+- **Socratic & Adversarial Sparring (`/spar [soc|adv] <topic>`)**: Pressure-tests new feature designs turn-by-turn with Socratic requirement probing and blunt Adversarial counter-arguments.
+- **Structured Memory Architecture**: Transient scratch notes (`/scrap`), operational lessons learned (`/lessons`), and automated close-out gates.
+
 ---
 
 <p align="center">

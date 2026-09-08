@@ -194,3 +194,14 @@ running -- `/workflow abort` only prevents a *future* resume.
   always returns `{:ok, output}` even when the underlying tool reports
   issues -- it's designed for interactive `/linter` display, not automated
   gating.
+
+---
+
+## Idea Lifecycle Pipeline Integration
+
+The Workflow Engine seamlessly integrates with the **Idea Lifecycle Pipeline**:
+
+1. **Idea Triage & Sparring:** Capture ideas with `/thought <Title>`, search prior art with `/sweep <tokens>`, and pressure-test designs using `/spar [soc|adv] <topic>`.
+2. **Backlog Promotion:** Refine raw thoughts into backlog items using `/promote <slug> [code|initiative] [Must Have|Should Have|Nice to Have]`.
+3. **Automated Activation:** When `/workflow run <definition> <slug_or_prompt>` is executed, DSH automatically matches the task against `project/workflow/backlog/`, promotes it to `project/workflow/active/`, and enriches the workflow context with frontmatter metadata & acceptance criteria.
+4. **Close-Out Verification Gate:** When the workflow finishes committing, DSH automatically moves the active item from `active/` to `completed/`, records a close-out lesson entry in `project/lessons.md`, and regenerates `_MAP.md` and `_DEPS.md` derived index maps.

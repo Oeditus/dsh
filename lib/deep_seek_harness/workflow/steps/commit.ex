@@ -40,6 +40,10 @@ defmodule DeepSeekHarness.Workflow.Steps.Commit do
               context.cwd
             )
 
+            if item = Map.get(context, :pipeline_item) do
+              DeepSeekHarness.WorkflowIndex.close_out_active(item.slug, cwd: context.cwd)
+            end
+
             {:ok, Map.put(context, :commit_message, message)}
 
           {:error, reason} ->
