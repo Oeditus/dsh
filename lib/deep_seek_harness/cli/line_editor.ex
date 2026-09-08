@@ -1580,7 +1580,10 @@ defmodule DeepSeekHarness.CLI.LineEditor do
   end
 
   def file_picker_modal(state) do
-    cwd = Map.get(state, :cwd) || get_in(state, [:context, :cwd]) || get_in(state, [:context, "cwd"]) || File.cwd!()
+    cwd =
+      Map.get(state, :cwd) || get_in(state, [:context, :cwd]) || get_in(state, [:context, "cwd"]) ||
+        File.cwd!()
+
     config = Config.load_config(cwd)
 
     if Map.get(config, "enable_file_picker", true) do

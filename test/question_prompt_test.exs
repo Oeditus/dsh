@@ -221,10 +221,12 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
       ]
 
       assert QuestionPrompt.filter_options(opts, "") == opts
+
       assert QuestionPrompt.filter_options(opts, "line") == [
                "󰈔 lib/deep_seek_harness/cli/line_editor.ex",
                "󰈔 test/line_editor_test.exs"
              ]
+
       assert QuestionPrompt.filter_options(opts, "cli line") == [
                "󰈔 lib/deep_seek_harness/cli/line_editor.ex"
              ]
@@ -232,7 +234,9 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
 
     test "handle_filter_char appends character and filters options" do
       opts = ["lib/cli/main.ex", "test/cli_test.exs"]
-      state = QuestionPrompt.new_state("Pick file:", opts, false, -1, false, nil, nil, filterable: true)
+
+      state =
+        QuestionPrompt.new_state("Pick file:", opts, false, -1, false, nil, nil, filterable: true)
 
       state = QuestionPrompt.handle_filter_char(state, ?m)
       assert state.filter_query == "m"
@@ -241,7 +245,12 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
 
     test "handle_filter_backspace removes character or cancels when empty" do
       opts = ["lib/cli/main.ex", "test/cli_test.exs"]
-      state = QuestionPrompt.new_state("Pick file:", opts, false, -1, false, nil, nil, filterable: true, initial_filter: "ma")
+
+      state =
+        QuestionPrompt.new_state("Pick file:", opts, false, -1, false, nil, nil,
+          filterable: true,
+          initial_filter: "ma"
+        )
 
       assert {:ok, state1} = QuestionPrompt.handle_filter_backspace(state)
       assert state1.filter_query == "m"

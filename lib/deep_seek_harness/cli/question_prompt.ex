@@ -131,7 +131,16 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
       subagent = Keyword.get(opts, :subagent)
 
       if tty?() do
-        prompt_tty(question, all_options, is_multi, custom_idx, show_numbers, progress, subagent, opts)
+        prompt_tty(
+          question,
+          all_options,
+          is_multi,
+          custom_idx,
+          show_numbers,
+          progress,
+          subagent,
+          opts
+        )
       else
         prompt_non_tty(question, all_options, is_multi, custom_idx, progress, subagent)
       end
@@ -350,7 +359,9 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
 
   defp prompt_tty(question, options, is_multi, custom_idx, show_numbers, progress, subagent, opts) do
     set_raw_mode()
-    state = new_state(question, options, is_multi, custom_idx, show_numbers, progress, subagent, opts)
+
+    state =
+      new_state(question, options, is_multi, custom_idx, show_numbers, progress, subagent, opts)
 
     res =
       try do
@@ -704,7 +715,7 @@ defmodule DeepSeekHarness.CLI.QuestionPrompt do
         [blank_line] ++
         q_lines ++
         [blank_line] ++
-        (if search_lines != [], do: search_lines ++ [blank_line], else: []) ++
+        if(search_lines != [], do: search_lines ++ [blank_line], else: []) ++
         opt_lines ++ [blank_line] ++ [footer]
 
     IO.write(:user, Enum.join(lines, "\r\n"))
