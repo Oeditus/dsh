@@ -14,6 +14,7 @@ defmodule DeepSeekHarness.CLI.Formatter do
   def red, do: IO.ANSI.red()
   def blue, do: IO.ANSI.blue()
   def gray, do: IO.ANSI.light_black()
+  def italic, do: IO.ANSI.italic()
   def blink, do: IO.ANSI.blink_slow()
 
   @doc """
@@ -125,6 +126,9 @@ defmodule DeepSeekHarness.CLI.Formatter do
       #{cyan()}/permissions [auto|ask]#{reset()} Set tool execution safety mode
       #{cyan()}/subagent <prompt>#{reset()}      Spawn a background subagent worker for sub-tasks
       #{cyan()}/workflow [cmd]#{reset()}         Run customizable multi-step workflows (list|run|status|resume|abort|init)
+      #{cyan()}/sweep <tokens>#{reset()}         Run multi-corpus prior-art search across workflow, reference, lessons, and vault
+      #{cyan()}/scrap [note|clear]#{reset()}     Capture or view transient scratch notes in project/scrap.md
+      #{cyan()}/lessons [add <text>]#{reset()}   View or record operational lessons learned in project/lessons.md
       #{cyan()}/checkpoint [label]#{reset()}     Create a temporal state snapshot
       #{cyan()}/undo#{reset()}                   Roll back state to previous checkpoint
       #{cyan()}/session#{reset()}                Display active session metadata & statistics

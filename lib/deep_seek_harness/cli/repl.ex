@@ -279,6 +279,76 @@ defmodule DeepSeekHarness.CLI.Repl do
     :continue
   end
 
+  def handle_input("/sweep " <> args, _session_pid, _session_id) do
+    tokens = String.trim(args)
+
+    if tokens == "" do
+      IO.puts(Formatter.format_info("Usage: /sweep <token1> [token2...] (e.g. /sweep auth jwt session)"))
+    else
+      result = DeepSeekHarness.Sweep.run(tokens)
+      IO.puts("\n" <> DeepSeekHarness.Sweep.format_result(result) <> "\n")
+    end
+
+    :continue
+  end
+
+  def handle_input("/sweep", _session_pid, _session_id) do
+    IO.puts(Formatter.format_info("Usage: /sweep <token1> [token2...] (e.g. /sweep auth jwt session)"))
+    :continue
+  end
+
+  def handle_input("/scrap clear", _session_pid, _session_id) do
+    DeepSeekHarness.Scrap.clear_scrap()
+    IO.puts(Formatter.format_success("Scrap notes cleared!"))
+    :continue
+  end
+
+  def handle_input("/scrap add " <> note, _session_pid, _session_id) do
+    {:ok, path} = DeepSeekHarness.Scrap.append_note(note)
+    IO.puts(Formatter.format_success("Scrap note saved to #{path}!"))
+    :continue
+  end
+
+  def handle_input("/scrap " <> note, session_pid, session_id) do
+    n = String.trim(note)
+    if n == "" do
+      handle_input("/scrap", session_pid, session_id)
+    else
+      {:ok, path} = DeepSeekHarness.Scrap.append_note(n)
+      IO.puts(Formatter.format_success("Scrap note saved to #{path}!"))
+      :continue
+    end
+  end
+
+  def handle_input("/scrap", _session_pid, _session_id) do
+    {:ok, content, path} = DeepSeekHarness.Scrap.read_scrap()
+    IO.puts("\n" <> DeepSeekHarness.Scrap.format_scrap(content, path) <> "\n")
+    :continue
+  end
+
+  def handle_input("/lessons add " <> lesson, _session_pid, _session_id) do
+    {:ok, path} = DeepSeekHarness.Lessons.append_lesson(lesson)
+    IO.puts(Formatter.format_success("Lesson saved to #{path}!"))
+    :continue
+  end
+
+  def handle_input("/lessons " <> lesson, session_pid, session_id) do
+    l = String.trim(lesson)
+    if l == "" do
+      handle_input("/lessons", session_pid, session_id)
+    else
+      {:ok, path} = DeepSeekHarness.Lessons.append_lesson(l)
+      IO.puts(Formatter.format_success("Lesson saved to #{path}!"))
+      :continue
+    end
+  end
+
+  def handle_input("/lessons", _session_pid, _session_id) do
+    {:ok, content, path} = DeepSeekHarness.Lessons.load_lessons()
+    IO.puts("\n" <> DeepSeekHarness.Lessons.format_lessons(content, path) <> "\n")
+    :continue
+  end
+
   def handle_input("/linter " <> args, _session_pid, _session_id) do
     args = String.trim(args)
 

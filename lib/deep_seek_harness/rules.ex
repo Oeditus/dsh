@@ -180,13 +180,10 @@ defmodule DeepSeekHarness.Rules do
       end
 
     practices_text = DeepSeekHarness.Practices.build_preamble(cwd)
+    lessons_text = DeepSeekHarness.Lessons.build_preamble(cwd)
 
-    case {rules_text, practices_text} do
-      {"", ""} -> ""
-      {r, ""} -> r
-      {"", p} -> p
-      {r, p} -> r <> "\n" <> p
-    end
+    parts = Enum.reject([rules_text, practices_text, lessons_text], &(&1 == ""))
+    Enum.join(parts, "\n\n")
   end
 
   defp to_integer(i) when is_integer(i), do: i
