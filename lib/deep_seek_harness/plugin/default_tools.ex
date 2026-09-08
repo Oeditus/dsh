@@ -16,11 +16,19 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       %{
         name: "read_file",
         description:
-          "Read the full text content of a SINGLE file given its path. When you need to inspect more than one file, prefer a single read_files call (batching every path together) instead of issuing multiple separate read_file calls one after another.",
+          "Read text content of a SINGLE file given its path. Optionally pass `start_line` and `end_line` (1-indexed integers) to read a specific line range, avoiding raw shell commands like head, tail, or sed.",
         parameters: %{
           type: "object",
           properties: %{
-            path: %{type: "string", description: "Relative or absolute path to the file."}
+            path: %{type: "string", description: "Relative or absolute path to the file."},
+            start_line: %{
+              type: "integer",
+              description: "Optional 1-indexed starting line number."
+            },
+            end_line: %{
+              type: "integer",
+              description: "Optional 1-indexed ending line number."
+            }
           },
           required: ["path"]
         },
@@ -88,15 +96,69 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
       %{
         name: "bash",
         description:
-          "Execute a shell bash command and return standard output / error. STRICT RESTRICTION: Do NOT use bash with grep, sed, find, cat, head, tail, or xargs for code searching, symbol finding, AST querying, directory exploration, or reading file content. You MUST use Ragex MCP tools (mcp_ragex_grep, mcp_ragex_search_code, mcp_ragex_symbol_definition, mcp_ragex_symbol_references, mcp_ragex_metaast_search, mcp_ragex_structure, mcp_ragex_view) or read_file/read_files instead. Use bash ONLY for build/test execution, git commands, running local binaries, or system operations where no dedicated or Ragex tool exists.",
+          "Execute a shell bash command and return standard output / error. User toolchain paths (~/.asdf/shims, ~/.cargo/bin, ERL_HOME) are automatically loaded. Pass `async: true` for long-running build/test tasks (`mix compile`, `mix test`, `cargo build`) to run them in the background without blocking. Returns a job ID immediately when `async: true`. Use `job_status` to inspect logs and `job_kill` to terminate. STRICT RESTRICTION: Do NOT use bash with grep, sed, find, cat, head, tail, or xargs for code searching, symbol finding, or reading file content -- use read_file (with start_line/end_line), read_files, or grep_search instead.",
         parameters: %{
           type: "object",
           properties: %{
-            command: %{type: "string", description: "The bash command string to execute."}
+            command: %{type: "string", description: "The bash command string to execute."},
+            async: %{
+              type: "boolean",
+              description: "Set to true to run command asynchronously in the background (default: false)."
+            }
           },
           required: ["command"]
         },
         execute: &execute_bash/1
+      },
+      %{
+        name: "job_status",
+        description:
+          "Check the status, exit code, and recent log output of a background job started via bash(async: true).",
+        parameters: %{
+          type: "object",
+          properties: %{
+            job_id: %{type: "string", description: "The background job ID (e.g. 'job_1')."},
+            tail: %{
+              type: "integer",
+              description: "Number of recent log lines to return (default: 30)."
+            }
+          },
+          required: ["job_id"]
+        },
+        execute: &job_status_tool/1
+      },
+      %{
+        name: "job_kill",
+        description: "Terminates a running background job started via bash(async: true).",
+        parameters: %{
+          type: "object",
+          properties: %{
+            job_id: %{type: "string", description: "The background job ID to terminate."}
+          },
+          required: ["job_id"]
+        },
+        execute: &job_kill_tool/1
+      },
+      %{
+        name: "grep_search",
+        description:
+          "Search for a pattern or substring across files in the workspace. Use this instead of running raw shell grep commands in bash.",
+        parameters: %{
+          type: "object",
+          properties: %{
+            path: %{
+              type: "string",
+              description: "Target directory or file path to search (default: '.')."
+            },
+            query: %{type: "string", description: "String or regex pattern to search for."},
+            path_pattern: %{
+              type: "string",
+              description: "Optional file glob pattern to filter search (e.g. '*.ex')."
+            }
+          },
+          required: ["query"]
+        },
+        execute: &grep_search_tool/1
       },
       %{
         name: "elixir_eval",
@@ -289,21 +351,36 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
     ]
   end
 
-  def read_file(%{"path" => path}) do
+  def read_file(%{"path" => path} = args) do
     case File.read(path) do
-      {:ok, content} -> {:ok, content}
-      {:error, reason} -> {:error, "Failed to read file '#{path}': #{inspect(reason)}"}
+      {:ok, content} ->
+        start_line = Map.get(args, "start_line")
+        end_line = Map.get(args, "end_line")
+
+        if start_line || end_line do
+          lines = String.split(content, ~r/\r?\n/)
+          total = length(lines)
+          s = (start_line || 1) |> max(1)
+          e = (end_line || total) |> min(total)
+
+          sliced =
+            lines
+            |> Enum.slice((s - 1)..(e - 1))
+            |> Enum.with_index(s)
+            |> Enum.map_join("\n", fn {line, num} -> "#{num}: #{line}" end)
+
+          {:ok, "=== Lines #{s}-#{e} of #{path} (total #{total} lines) ===\n" <> sliced}
+        else
+          {:ok, content}
+        end
+
+      {:error, reason} ->
+        {:error, "Failed to read file '#{path}': #{inspect(reason)}"}
     end
   end
 
   @doc """
   Reads several files concurrently in a single tool call.
-
-  Each file is read in its own `Task` (bounded concurrency) and the results
-  are collated back into the original order, so a slow file never blocks the
-  others. Every file's content is wrapped in a clear `=== File: <path> ===`
-  header (or an inline error if it could not be read), letting the model
-  attribute each block to the right path at a glance.
   """
   def read_files(%{"paths" => paths}) when is_list(paths) do
     paths
@@ -388,13 +465,106 @@ defmodule DeepSeekHarness.Plugin.DefaultTools do
     "#{type} #{f}"
   end
 
-  def execute_bash(%{"command" => cmd}) do
-    case System.cmd("sh", ["-c", cmd], stderr_to_stdout: true) do
-      {output, 0} -> {:ok, output}
-      {output, code} -> {:ok, "Command exited with status #{code}:\n#{output}"}
+  def execute_bash(%{"command" => cmd} = args) do
+    if Map.get(args, "async", false) do
+      cwd = Map.get(args, "_session_cwd", File.cwd!())
+
+      case DeepSeekHarness.TaskEngine.JobManager.start_job(cmd, cwd: cwd) do
+        {:ok, job_id, log_file} ->
+          {:ok,
+           "Started background job '#{job_id}' (log: #{log_file}). Use job_status(job_id: \"#{job_id}\") to monitor log output."}
+
+        {:error, err} ->
+          {:error, "Failed to start background job: #{inspect(err)}"}
+      end
+    else
+      {env, exec_cmd} = DeepSeekHarness.TaskEngine.JobManager.prepare_environment(cmd)
+
+      case System.cmd("sh", ["-c", exec_cmd], env: env, stderr_to_stdout: true) do
+        {output, 0} -> {:ok, output}
+        {output, code} -> {:ok, "Command exited with status #{code}:\n#{output}"}
+      end
     end
   rescue
     e -> {:error, "Execution exception: #{inspect(e)}"}
+  end
+
+  def job_status_tool(%{"job_id" => job_id} = args) do
+    tail = Map.get(args, "tail", 30)
+
+    case DeepSeekHarness.TaskEngine.JobManager.get_job_status(job_id, tail: tail) do
+      {:ok, out} -> {:ok, out}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  def job_status_tool(_args) do
+    {:error, "Invalid arguments for job_status. Expected 'job_id' string."}
+  end
+
+  def job_kill_tool(%{"job_id" => job_id}) do
+    case DeepSeekHarness.TaskEngine.JobManager.kill_job(job_id) do
+      {:ok, out} -> {:ok, out}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  def job_kill_tool(_args) do
+    {:error, "Invalid arguments for job_kill. Expected 'job_id' string."}
+  end
+
+  def grep_search_tool(%{"query" => query} = args) when is_binary(query) do
+    dir = Map.get(args, "path", ".")
+    path_pattern = Map.get(args, "path_pattern", "**/*")
+
+    target_pattern =
+      if File.dir?(dir) do
+        Path.join(dir, path_pattern)
+      else
+        dir
+      end
+
+    files =
+      if File.regular?(dir) do
+        [dir]
+      else
+        Path.wildcard(target_pattern)
+        |> Enum.filter(&File.regular?/1)
+      end
+
+    case Regex.compile(query, [:caseless]) do
+      {:ok, regex} ->
+        matches =
+          files
+          |> Enum.take(200)
+          |> Enum.flat_map(fn file ->
+            case File.read(file) do
+              {:ok, content} ->
+                content
+                |> String.split(~r/\r?\n/)
+                |> Enum.with_index(1)
+                |> Enum.filter(fn {line, _num} -> Regex.match?(regex, line) end)
+                |> Enum.map(fn {line, num} -> "#{file}:#{num}: #{String.trim(line)}" end)
+
+              _ ->
+                []
+            end
+          end)
+          |> Enum.take(100)
+
+        if matches == [] do
+          {:ok, "No matches found for '#{query}'."}
+        else
+          {:ok, "Found #{length(matches)} matches:\n" <> Enum.join(matches, "\n")}
+        end
+
+      {:error, reason} ->
+        {:error, "Invalid regex pattern '#{query}': #{inspect(reason)}"}
+    end
+  end
+
+  def grep_search_tool(_args) do
+    {:error, "Invalid arguments for grep_search. Expected 'query' string."}
   end
 
   def evaluate_elixir(%{"code" => code}) do
