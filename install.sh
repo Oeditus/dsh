@@ -16,7 +16,7 @@ if [ -d "$INSTALL_DIR" ]; then
     git -C "$INSTALL_DIR" pull --rebase
 else
     echo "📥 Cloning DeepSeek Harness repository..."
-    git clone https://github.com/Oeditus/ragex.git "$INSTALL_DIR"
+    git clone https://github.com/Oeditus/dsh.git "$INSTALL_DIR"
 fi
 
 cd "$INSTALL_DIR"
