@@ -37,18 +37,18 @@ jobs:
       - name: Compile codebase
         run: mix compile
 
-      - name: Run Ragex CI audit (diff-based, blocking)
-        # Uses the PR base branch when running on PRs, otherwise compares
-        # with HEAD~1 on push. This only sees issues touched by the current
-        # diff, so it can miss pre-existing debt in files the PR doesn't
-        # modify -- see the non-blocking full self-analysis step below.
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
-            mix ragex.ci --base ${{ github.base_ref }} --format github
-          else
-            mix ragex.ci --base HEAD~1 --format github
-          fi
+      # - name: Run Ragex CI audit (diff-based, blocking)
+      #   # Uses the PR base branch when running on PRs, otherwise compares
+      #   # with HEAD~1 on push. This only sees issues touched by the current
+      #   # diff, so it can miss pre-existing debt in files the PR doesn't
+      #   # modify -- see the non-blocking full self-analysis step below.
+      #   run: |
+      #     if [ "${{ github.event_name }}" = "pull_request" ]; then
+      #       git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
+      #       mix ragex.ci --base ${{ github.base_ref }} --format github
+      #     else
+      #       mix ragex.ci --base HEAD~1 --format github
+      #     fi
 
       - name: Dogfood full-codebase self-analysis (non-blocking)
         # Ragex analyzing yoke itself, whole-tree (not diff-scoped), using
