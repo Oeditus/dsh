@@ -1,6 +1,6 @@
-# DeepSeek Harness (DSH) Cheatsheet
+# Yoke (Yoke) Cheatsheet
 
-> Quick reference guide for **DeepSeek Harness (`dsh`)**, formatted in the standard HexDocs cheatsheet layout.
+> Quick reference guide for **Yoke (`yoke`)**, formatted in the standard HexDocs cheatsheet layout.
 
 ---
 
@@ -10,24 +10,24 @@
 
 ```bash
 # Start interactive REPL in current directory
-dsh
+yoke
 
 # Resume a specific session by UUID
-dsh -c df97eb34-cb33-4f21-bada-2e9c3cf75d46
-dsh --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
+yoke -c df97eb34-cb33-4f21-bada-2e9c3cf75d46
+yoke --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
 
 # Execute a one-shot prompt
-dsh "Analyze project architecture in @mix.exs"
+yoke "Analyze project architecture in @mix.exs"
 
 # Specify model alias for execution
-dsh -m deepseek-coder "Fix syntax error in @lib/worker.ex"
-dsh --model deepseek-reasoner "Diagnose deadlock in @lib/session.ex"
+yoke -m deepseek-coder "Fix syntax error in @lib/worker.ex"
+yoke --model deepseek-reasoner "Diagnose deadlock in @lib/session.ex"
 
 # Run background release update to latest commit
-dsh --update
+yoke --update
 
 # Display CLI help
-dsh --help
+yoke --help
 ```
 
 ### CLI Flag Reference
@@ -84,7 +84,7 @@ dsh --help
 
 # !! Pure Console Mode (Flip-Flop)
 !!                       # Enter pure shell passthrough mode (cd persists)
-!!                       # Exit pure shell passthrough mode, return to DSH
+!!                       # Exit pure shell passthrough mode, return to Yoke
 ```
 
 ---
@@ -201,7 +201,7 @@ all: <text>             # Applied to ALL prompt turns
 
 ---
 
-## Configuration Settings (`.dsh/config.json`)
+## Configuration Settings (`.yoke/config.json`)
 
 ```json
 {

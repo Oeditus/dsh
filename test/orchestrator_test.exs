@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.TaskEngine.OrchestratorTest do
+defmodule Yoke.TaskEngine.OrchestratorTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.TaskEngine.Orchestrator
+  alias Yoke.TaskEngine.Orchestrator
 
   describe "get_lock_resource/2" do
     test "returns a fixed shared key for every ask_question call, regardless of arguments" do
@@ -37,7 +37,7 @@ defmodule DeepSeekHarness.TaskEngine.OrchestratorTest do
 
   describe "execute_batch/3" do
     test "ask_question tool calls are never cut off by the batch execution timeout" do
-      session_state = %{hands: %DeepSeekHarness.Hands.Executor{mode: :local}}
+      session_state = %{hands: %Yoke.Hands.Executor{mode: :local}}
 
       tool_calls = [
         # Invalid arguments resolve near-instantly via a fast error path,

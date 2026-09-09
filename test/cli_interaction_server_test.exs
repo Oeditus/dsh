@@ -1,19 +1,19 @@
-defmodule DeepSeekHarness.CLI.InteractionServerTest do
+defmodule Yoke.CLI.InteractionServerTest do
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.CLI.InteractionServer
-  alias DeepSeekHarness.CLI.QuestionPrompt
-  alias DeepSeekHarness.TaskEngine.PackageTracker
+  alias Yoke.CLI.InteractionServer
+  alias Yoke.CLI.QuestionPrompt
+  alias Yoke.TaskEngine.PackageTracker
 
   setup do
-    prior = Application.get_env(:deep_seek_harness, :god_mode)
-    Application.put_env(:deep_seek_harness, :god_mode, true)
+    prior = Application.get_env(:yoke, :god_mode)
+    Application.put_env(:yoke, :god_mode, true)
 
     on_exit(fn ->
       if prior == nil do
-        Application.delete_env(:deep_seek_harness, :god_mode)
+        Application.delete_env(:yoke, :god_mode)
       else
-        Application.put_env(:deep_seek_harness, :god_mode, prior)
+        Application.put_env(:yoke, :god_mode, prior)
       end
     end)
 

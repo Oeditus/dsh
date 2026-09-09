@@ -1,10 +1,10 @@
-defmodule DeepSeekHarness.CLI.QuestionPromptTest do
+defmodule Yoke.CLI.QuestionPromptTest do
   # Not async: tests capture global :user IO device output
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias DeepSeekHarness.CLI.QuestionPrompt
-  alias DeepSeekHarness.Plugin.DefaultTools
+  alias Yoke.CLI.QuestionPrompt
+  alias Yoke.Plugin.DefaultTools
 
   describe "QuestionPrompt pure state operations" do
     test "initializes fresh state with cursor at 0" do
@@ -166,14 +166,14 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
 
   describe "God Mode auto-answering" do
     setup do
-      prior = Application.get_env(:deep_seek_harness, :god_mode)
-      Application.put_env(:deep_seek_harness, :god_mode, true)
+      prior = Application.get_env(:yoke, :god_mode)
+      Application.put_env(:yoke, :god_mode, true)
 
       on_exit(fn ->
         if prior == nil do
-          Application.delete_env(:deep_seek_harness, :god_mode)
+          Application.delete_env(:yoke, :god_mode)
         else
-          Application.put_env(:deep_seek_harness, :god_mode, prior)
+          Application.put_env(:yoke, :god_mode, prior)
         end
       end)
 
@@ -215,20 +215,20 @@ defmodule DeepSeekHarness.CLI.QuestionPromptTest do
   describe "adaptive filter operations" do
     test "filter_options filters list case-insensitively using tokens" do
       opts = [
-        "󰈔 lib/deep_seek_harness/cli/line_editor.ex",
-        "󰈔 lib/deep_seek_harness/cli/question_prompt.ex",
+        "󰈔 lib/yoke/cli/line_editor.ex",
+        "󰈔 lib/yoke/cli/question_prompt.ex",
         "󰈔 test/line_editor_test.exs"
       ]
 
       assert QuestionPrompt.filter_options(opts, "") == opts
 
       assert QuestionPrompt.filter_options(opts, "line") == [
-               "󰈔 lib/deep_seek_harness/cli/line_editor.ex",
+               "󰈔 lib/yoke/cli/line_editor.ex",
                "󰈔 test/line_editor_test.exs"
              ]
 
       assert QuestionPrompt.filter_options(opts, "cli line") == [
-               "󰈔 lib/deep_seek_harness/cli/line_editor.ex"
+               "󰈔 lib/yoke/cli/line_editor.ex"
              ]
     end
 

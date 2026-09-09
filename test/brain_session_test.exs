@@ -1,9 +1,9 @@
-defmodule DeepSeekHarness.BrainSessionTest do
+defmodule Yoke.BrainSessionTest do
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.Brain.Session
-  alias DeepSeekHarness.Brain.SessionSupervisor
-  alias DeepSeekHarness.Plugin.Loader, as: PluginLoader
+  alias Yoke.Brain.Session
+  alias Yoke.Brain.SessionSupervisor
+  alias Yoke.Plugin.Loader, as: PluginLoader
 
   setup do
     session_id = "test_session_#{System.unique_integer([:positive])}"
@@ -192,7 +192,7 @@ defmodule DeepSeekHarness.BrainSessionTest do
     # Override pricing in the session's workspace config: prompt $1.00/1M,
     # completion $2.00/1M (well above the 0.14/0.28 defaults, so the test
     # clearly distinguishes the configured values from the fallbacks).
-    DeepSeekHarness.Config.save_config(
+    Yoke.Config.save_config(
       %{
         "price_per_million_prompt_tokens" => 1.0,
         "price_per_million_completion_tokens" => 2.0
@@ -265,7 +265,7 @@ defmodule DeepSeekHarness.BrainSessionTest do
     # run on the very same session process in production.
     :sys.replace_state(pid, fn state ->
       fake_task =
-        Task.Supervisor.async_nolink(DeepSeekHarness.TaskEngine.TaskSupervisor, fn ->
+        Task.Supervisor.async_nolink(Yoke.TaskEngine.TaskSupervisor, fn ->
           Process.sleep(:infinity)
         end)
 

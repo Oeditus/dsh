@@ -1,6 +1,6 @@
-defmodule DeepSeekHarness.LinterTest do
+defmodule Yoke.LinterTest do
   use ExUnit.Case, async: true
-  alias DeepSeekHarness.Linter
+  alias Yoke.Linter
 
   describe "list_tools/0" do
     test "returns list of available tools including oeditus_credo and propwise" do

@@ -1,4 +1,4 @@
-defmodule DeepSeekHarness.CLI.LogFormatterTest do
+defmodule Yoke.CLI.LogFormatterTest do
   # Not async: several tests below drive the globally-named `Spinner` and
   # `TerminalOwner` singletons, which would race against each other (or
   # against `spinner_test.exs`, itself `async: false` for the same reason)
@@ -6,10 +6,10 @@ defmodule DeepSeekHarness.CLI.LogFormatterTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias DeepSeekHarness.CLI.LineEditor
-  alias DeepSeekHarness.CLI.LogFormatter
-  alias DeepSeekHarness.CLI.Spinner
-  alias DeepSeekHarness.CLI.TerminalOwner
+  alias Yoke.CLI.LineEditor
+  alias Yoke.CLI.LogFormatter
+  alias Yoke.CLI.Spinner
+  alias Yoke.CLI.TerminalOwner
 
   setup do
     Spinner.stop()
@@ -165,13 +165,13 @@ defmodule DeepSeekHarness.CLI.LogFormatterTest do
       long_command = String.duplicate("z", 300)
       event = %{level: :info, msg: ~s|bash(command: "#{long_command}")|}
 
-      Application.put_env(:deep_seek_harness, :expand_tool_calls, true)
+      Application.put_env(:yoke, :expand_tool_calls, true)
       formatted = LogFormatter.format(event, %{})
 
       assert formatted =~ long_command
       refute formatted =~ "…"
 
-      Application.put_env(:deep_seek_harness, :expand_tool_calls, false)
+      Application.put_env(:yoke, :expand_tool_calls, false)
     end
   end
 

@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.CLI.SpinnerTest do
+defmodule Yoke.CLI.SpinnerTest do
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.CLI.Spinner
+  alias Yoke.CLI.Spinner
 
   setup do
     Spinner.stop()
@@ -37,8 +37,8 @@ defmodule DeepSeekHarness.CLI.SpinnerTest do
   end
 
   test "formats spinner line with gray tip" do
-    gray = DeepSeekHarness.CLI.Formatter.gray()
-    reset = DeepSeekHarness.CLI.Formatter.reset()
+    gray = Yoke.CLI.Formatter.gray()
+    reset = Yoke.CLI.Formatter.reset()
 
     formatted_custom = Spinner.format_line("⠋", "Thinking…", "Use /compact")
     assert formatted_custom == "⠋ Thinking…  #{gray}(Tip: Use /compact)#{reset}"
@@ -53,7 +53,7 @@ defmodule DeepSeekHarness.CLI.SpinnerTest do
     line = Spinner.current_line()
     assert line =~ "Processing task"
     assert line =~ "(Tip: Use /help for commands)"
-    assert line =~ DeepSeekHarness.CLI.Formatter.gray()
+    assert line =~ Yoke.CLI.Formatter.gray()
     Spinner.stop()
   end
 

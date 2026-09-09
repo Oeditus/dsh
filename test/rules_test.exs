@@ -1,10 +1,10 @@
-defmodule DeepSeekHarness.RulesTest do
+defmodule Yoke.RulesTest do
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.Rules
+  alias Yoke.Rules
 
   setup do
-    tmp_dir = Path.join(System.tmp_dir!(), "dsh_rules_test_#{System.unique_integer([:positive])}")
+    tmp_dir = Path.join(System.tmp_dir!(), "yoke_rules_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp_dir)
     on_exit(fn -> File.rm_rf(tmp_dir) end)
     %{tmp_dir: tmp_dir}

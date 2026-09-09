@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.NodeManagerTest do
+defmodule Yoke.NodeManagerTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Distribution.NodeManager
+  alias Yoke.Distribution.NodeManager
 
   test "lists node distribution status" do
     info = NodeManager.list_nodes()

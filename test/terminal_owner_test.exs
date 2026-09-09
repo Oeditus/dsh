@@ -1,11 +1,11 @@
-defmodule DeepSeekHarness.CLI.TerminalOwnerTest do
+defmodule Yoke.CLI.TerminalOwnerTest do
   # Not async: this module manages a single named, global registration
   # (mirroring its real single-foreground-surface usage), so concurrent
   # tests would stomp on each other's registrations.
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias DeepSeekHarness.CLI.TerminalOwner
+  alias Yoke.CLI.TerminalOwner
 
   setup do
     TerminalOwner.clear()

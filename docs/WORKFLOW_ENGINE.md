@@ -1,10 +1,10 @@
-# DeepSeek Harness (DSH) — Workflow Engine
+# Yoke (Yoke) — Workflow Engine
 
 The Workflow Engine runs named, customizable, multi-step processes on top of
 the ordinary agent loop -- branch, describe, split, execute (in parallel when
 possible), require tests + docs, lint, and commit -- with the *entire* run
 (every prompt, model response, user confirmation, and command executed)
-persisted under `.dsh/workflows/`.
+persisted under `.yoke/workflows/`.
 
 It ships with one built-in workflow, `elixir`, covering the seven steps most
 Elixir feature work needs, and is designed so you can define your own from
@@ -45,13 +45,13 @@ for this").
 
 | # | Step type | What it does |
 | :--- | :--- | :--- |
-| ① | `branch` | Creates and checks out `dsh/elixir/<run-id>` off the current branch. If the current branch isn't `main`/`master`, it warns and asks for confirmation before branching off it anyway. |
+| ① | `branch` | Creates and checks out `yoke/elixir/<run-id>` off the current branch. If the current branch isn't `main`/`master`, it warns and asks for confirmation before branching off it anyway. |
 | ② | `task_description` | Summarizes your request into a structured Markdown spec (Goal / Requirements / Acceptance Criteria), saved to the run's `task_description.md`. |
 | ③ | `task_split` | Asks the model whether the task can be split into 2-5 independent, non-clashing subtasks. If it proposes a split, you're asked to approve it before anything runs in parallel. |
 | ④ | `tests_and_docs` | After the task (or each subtask) is implemented, requires tests and documentation updates for the change, then actually runs `mix test` to verify it -- not just trusting the model's claim. |
 | ⑤ | *(ambient, not a step)* | Every prompt sent during the run is prefixed with this workflow's `elixir_workflow`-scoped rules (see [Rules](#rules-scope) below), by default nudging toward `oeditus_credo`/`propwise`/`credo` conventions. |
 | ⑥ | `lint` | Hard-gates on `mix format --check-formatted` and `mix credo diff <base>` before the workflow may proceed to `commit`, plus a richer non-gating report from `/linter` saved as an artifact. |
-| ⑦ | `commit` | Formats, stages everything except `.dsh/` itself, and commits with a comprehensive message drafted from the diff -- the same "please commit" convention DSH already follows for a manual `/commit`. |
+| ⑦ | `commit` | Formats, stages everything except `.yoke/` itself, and commits with a comprehensive message drafted from the diff -- the same "please commit" convention Yoke already follows for a manual `/commit`. |
 
 ---
 
@@ -77,10 +77,10 @@ branch -- no worktrees involved.
 
 ---
 
-## Everything is persisted under `.dsh/workflows/`
+## Everything is persisted under `.yoke/workflows/`
 
 ```
-.dsh/workflows/
+.yoke/workflows/
   definitions/
     elixir.json              # materialized on first use -- edit freely
     <your-custom-workflow>.json
@@ -98,10 +98,10 @@ branch -- no worktrees involved.
       artifacts/                 # lint_report.txt, etc.
 ```
 
-`workflow.json` is a frozen snapshot: editing `.dsh/workflows/definitions/elixir.json`
+`workflow.json` is a frozen snapshot: editing `.yoke/workflows/definitions/elixir.json`
 later never changes how an already-started run is interpreted, including on
-resume. Like the rest of `.dsh/`, this directory should stay gitignored (DSH's
-own commit step explicitly excludes `.dsh/` from staging as a safety net even
+resume. Like the rest of `.yoke/`, this directory should stay gitignored (Yoke's
+own commit step explicitly excludes `.yoke/` from staging as a safety net even
 if your `.gitignore` doesn't).
 
 ---
@@ -117,7 +117,7 @@ A workflow definition is a small JSON document:
   "rules_scope": "my_team_flow",
   "base_branch_prefixes": ["main"],
   "steps": [
-    { "type": "branch", "branch_prefix": "dsh/my-team-flow" },
+    { "type": "branch", "branch_prefix": "yoke/my-team-flow" },
     { "type": "task_description" },
     { "type": "prompt", "template": "Before writing any code for: {{task_description}}, check docs/ADRs/ for a relevant architecture decision record and follow it." },
     { "type": "task_split" },
@@ -136,9 +136,9 @@ instruction to a session on the workflow's branch, with `{{task_description}}`,
 
 Definitions are discovered in priority order:
 
-1. Workspace: `.dsh/workflows/definitions/<name>.json`
-2. Global (shared across projects): `~/.dsh/workflows/definitions/<name>.json`
-3. Bundled with DSH (currently just `elixir`), materialized into the
+1. Workspace: `.yoke/workflows/definitions/<name>.json`
+2. Global (shared across projects): `~/.yoke/workflows/definitions/<name>.json`
+3. Bundled with Yoke (currently just `elixir`), materialized into the
    workspace tier the first time you use it.
 
 Use `/workflow init <name> [--from <template>]` to scaffold a new one from an
@@ -148,7 +148,7 @@ by hand.
 ### Rules scope
 
 Set `"rules_scope"` to whatever scope name you like; every prompt the
-workflow sends is prefixed with that scope's rules from `.dsh/rules.json`
+workflow sends is prefixed with that scope's rules from `.yoke/rules.json`
 (see `/rules`). A bundled workflow's `default_rules` are seeded under its
 scope the first time it's materialized (skipping any rule whose exact text
 is already present, so re-running `/workflow init` from the same template
@@ -170,14 +170,14 @@ Ctrl+C, or `/workflow abort` never loses the run:
   resumed and will simply retry the step it failed on.
 
 Resuming is best-effort for work already *in flight*: like a regular agent
-turn, DSH cannot forcibly interrupt synchronous work that's actively
+turn, Yoke cannot forcibly interrupt synchronous work that's actively
 running -- `/workflow abort` only prevents a *future* resume.
 
 ---
 
 ## Design notes
 
-- The engine is a plain module, not a `GenServer`: DSH's actual concurrency
+- The engine is a plain module, not a `GenServer`: Yoke's actual concurrency
   model is "one thing happens at a time in the interactive TTY, with real
   BEAM concurrency only where it's genuinely needed" (subagents, the task
   engine's tool-call batches). A workflow run is no exception -- it blocks
@@ -190,7 +190,7 @@ running -- `/workflow abort` only prevents a *future* resume.
   visible message history, so they don't pollute your own conversation's
   context window with plumbing.
 - The `lint` step calls `mix format`/`mix credo` directly (for a hard
-  pass/fail signal) rather than only `DeepSeekHarness.Linter.run/2`, which
+  pass/fail signal) rather than only `Yoke.Linter.run/2`, which
   always returns `{:ok, output}` even when the underlying tool reports
   issues -- it's designed for interactive `/linter` display, not automated
   gating.
@@ -203,5 +203,5 @@ The Workflow Engine seamlessly integrates with the **Idea Lifecycle Pipeline**:
 
 1. **Idea Triage & Sparring:** Capture ideas with `/thought <Title>`, search prior art with `/sweep <tokens>`, and pressure-test designs using `/spar [soc|adv] <topic>`.
 2. **Backlog Promotion:** Refine raw thoughts into backlog items using `/promote <slug> [code|initiative] [Must Have|Should Have|Nice to Have]`.
-3. **Automated Activation:** When `/workflow run <definition> <slug_or_prompt>` is executed, DSH automatically matches the task against `project/workflow/backlog/`, promotes it to `project/workflow/active/`, and enriches the workflow context with frontmatter metadata & acceptance criteria.
-4. **Close-Out Verification Gate:** When the workflow finishes committing, DSH automatically moves the active item from `active/` to `completed/`, records a close-out lesson entry in `project/lessons.md`, and regenerates `_MAP.md` and `_DEPS.md` derived index maps.
+3. **Automated Activation:** When `/workflow run <definition> <slug_or_prompt>` is executed, Yoke automatically matches the task against `project/workflow/backlog/`, promotes it to `project/workflow/active/`, and enriches the workflow context with frontmatter metadata & acceptance criteria.
+4. **Close-Out Verification Gate:** When the workflow finishes committing, Yoke automatically moves the active item from `active/` to `completed/`, records a close-out lesson entry in `project/lessons.md`, and regenerates `_MAP.md` and `_DEPS.md` derived index maps.

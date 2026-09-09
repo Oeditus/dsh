@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.FormatterTest do
+defmodule Yoke.FormatterTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.CLI.Formatter
+  alias Yoke.CLI.Formatter
 
   test "renders ANSI color shortcuts" do
     assert Formatter.reset() == IO.ANSI.reset()
@@ -28,10 +28,10 @@ defmodule DeepSeekHarness.FormatterTest do
     assert random_tip in tips
   end
 
-  test "renders ASCII banner with DSH RAGE title" do
+  test "renders ASCII banner with YOKE RAGE title" do
     banner = Formatter.banner()
-    assert String.contains?(banner, "DSH RAGE")
-    assert String.contains?(banner, "DeepSeek Agentic CLI Harness")
+    assert String.contains?(banner, "YOKE RAGE")
+    assert String.contains?(banner, "Yoke Agentic CLI")
   end
 
   test "renders help menu with all slash commands" do

@@ -1,9 +1,9 @@
-defmodule DeepSeekHarness.MixProject do
+defmodule Yoke.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :deep_seek_harness,
+      app: :yoke,
       version: "0.8.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
@@ -15,21 +15,21 @@ defmodule DeepSeekHarness.MixProject do
         ignore_warnings: ".dialyzer_ignore.exs"
       ],
       releases: [
-        dsh: [
+        yoke: [
           include_executables_for: [:unix],
-          applications: [deep_seek_harness: :permanent],
+          applications: [yoke: :permanent],
           steps: [:assemble]
         ]
       ],
-      # NOTE: intentionally NOT named "dsh" -- `mix escript.build` writes its
+      # NOTE: intentionally NOT named "yoke" -- `mix escript.build` writes its
       # output to a file at the project root with this name, which would
-      # silently overwrite the tracked `dsh` launcher bash script (same
-      # filename). The release workflow renames the built escript to `dsh`
+      # silently overwrite the tracked `yoke` launcher bash script (same
+      # filename). The release workflow renames the built escript to `yoke`
       # only when packaging the release asset, after the checkout is done.
       escript: [
-        main_module: DeepSeekHarness.CLI.Main,
-        name: "dsh_escript",
-        app: :deep_seek_harness
+        main_module: Yoke.CLI.Main,
+        name: "yoke_escript",
+        app: :yoke
       ],
       deps: deps()
     ]
@@ -39,7 +39,7 @@ defmodule DeepSeekHarness.MixProject do
   def application do
     [
       extra_applications: [:logger, :crypto, :inets],
-      mod: {DeepSeekHarness.Application, []}
+      mod: {Yoke.Application, []}
     ]
   end
 
@@ -72,7 +72,7 @@ defmodule DeepSeekHarness.MixProject do
   # declare them directly to pull them into the standard `mix release` /
   # dev / test dependency tree and keep embeddings-based semantic search and
   # image tools working there. They're deliberately omitted under the
-  # dedicated `escript` Mix env used to build the standalone `dsh` escript,
+  # dedicated `escript` Mix env used to build the standalone `yoke` escript,
   # so that build stays free of anything that can't load from an archive.
   defp embeddings_deps do
     if Mix.env() == :escript do

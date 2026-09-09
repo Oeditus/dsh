@@ -1,15 +1,15 @@
-defmodule DeepSeekHarness.Workflow.EngineTest do
+defmodule Yoke.Workflow.EngineTest do
   # Not async: tests capture global :user IO device output
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias DeepSeekHarness.Workflow.Definition
-  alias DeepSeekHarness.Workflow.Engine
-  alias DeepSeekHarness.Workflow.Store
+  alias Yoke.Workflow.Definition
+  alias Yoke.Workflow.Engine
+  alias Yoke.Workflow.Store
 
   setup do
     cwd =
-      Path.join(System.tmp_dir!(), "dsh_workflow_engine_#{System.unique_integer([:positive])}")
+      Path.join(System.tmp_dir!(), "yoke_workflow_engine_#{System.unique_integer([:positive])}")
 
     File.mkdir_p!(cwd)
     {_, 0} = System.cmd("git", ["init", "-q", "-b", "main"], cd: cwd)
@@ -27,7 +27,7 @@ defmodule DeepSeekHarness.Workflow.EngineTest do
     dir = Definition.definitions_dir(cwd)
     File.mkdir_p!(dir)
     raw = %{"name" => name, "steps" => steps}
-    File.write!(Path.join(dir, "#{name}.json"), DeepSeekHarness.Workflow.Json.encode_pretty!(raw))
+    File.write!(Path.join(dir, "#{name}.json"), Yoke.Workflow.Json.encode_pretty!(raw))
   end
 
   describe "run/2 with a single branch step" do
@@ -35,8 +35,8 @@ defmodule DeepSeekHarness.Workflow.EngineTest do
       define!("just-branch", [%{"type" => "branch"}], cwd)
 
       assert {:ok, context} = Engine.run("just-branch", cwd: cwd, seed_prompt: "do the thing")
-      assert context.branch =~ "dsh/just-branch/"
-      assert DeepSeekHarness.Git.current_branch(cwd) == context.branch
+      assert context.branch =~ "yoke/just-branch/"
+      assert Yoke.Git.current_branch(cwd) == context.branch
 
       assert {:ok, state} = Engine.status(context.run_id, cwd)
       assert state["status"] == "completed"
@@ -47,7 +47,7 @@ defmodule DeepSeekHarness.Workflow.EngineTest do
     test "halts (does not raise) when the current branch isn't a base branch and the user declines",
          %{cwd: cwd} do
       define!("just-branch-2", [%{"type" => "branch"}], cwd)
-      {:ok, _} = DeepSeekHarness.Git.create_branch("some-feature", cwd)
+      {:ok, _} = Yoke.Git.create_branch("some-feature", cwd)
 
       test_pid = self()
 
@@ -59,13 +59,13 @@ defmodule DeepSeekHarness.Workflow.EngineTest do
       # outside this specific capture, previously hung for the full 60s
       # test timeout when the suite's own stdin was still open.
       capture_io(:user, "2\n", fn ->
-        Application.put_env(:deep_seek_harness, :god_mode, false)
+        Application.put_env(:yoke, :god_mode, false)
 
         try do
           result = Engine.run("just-branch-2", cwd: cwd, seed_prompt: "x")
           send(test_pid, {:workflow_result, result})
         after
-          Application.put_env(:deep_seek_harness, :god_mode, true)
+          Application.put_env(:yoke, :god_mode, true)
         end
       end)
 
@@ -76,7 +76,7 @@ defmodule DeepSeekHarness.Workflow.EngineTest do
       assert {:ok, state} = Engine.status(run_meta.run_id, cwd)
       assert state["status"] == "halted"
       # The branch step never actually created a branch on the halt path.
-      assert DeepSeekHarness.Git.current_branch(cwd) == "some-feature"
+      assert Yoke.Git.current_branch(cwd) == "some-feature"
     end
   end
 
@@ -85,7 +85,7 @@ defmodule DeepSeekHarness.Workflow.EngineTest do
       cwd =
         Path.join(
           System.tmp_dir!(),
-          "dsh_workflow_engine_bad_#{System.unique_integer([:positive])}"
+          "yoke_workflow_engine_bad_#{System.unique_integer([:positive])}"
         )
 
       File.mkdir_p!(cwd)

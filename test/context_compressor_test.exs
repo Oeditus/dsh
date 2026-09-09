@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.ContextCompressorTest do
+defmodule Yoke.ContextCompressorTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Brain.ContextCompressor
+  alias Yoke.Brain.ContextCompressor
 
   test "returns unchanged messages when history is empty or system-only" do
     messages = [%{"role" => "system", "content" => "You are an assistant"}]

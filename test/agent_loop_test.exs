@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.Brain.AgentLoopTest do
+defmodule Yoke.Brain.AgentLoopTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Brain.AgentLoop
+  alias Yoke.Brain.AgentLoop
 
   describe "AgentLoop duplicate tool call detection" do
     test "returns true when identical tool calls with identical arguments repeat" do

@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.DeepSeekAPITest do
+defmodule Yoke.DeepSeekAPITest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Client.DeepSeekAPI
+  alias Yoke.Client.DeepSeekAPI
 
   test "returns mock chat completion in offline mode" do
     messages = [%{"role" => "user", "content" => "Hello DeepSeek"}]

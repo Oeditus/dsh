@@ -1,11 +1,11 @@
-defmodule DeepSeekHarness.Workflow.DefinitionTest do
+defmodule Yoke.Workflow.DefinitionTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Rules
-  alias DeepSeekHarness.Workflow.Definition
+  alias Yoke.Rules
+  alias Yoke.Workflow.Definition
 
   setup do
-    cwd = Path.join(System.tmp_dir!(), "dsh_workflow_def_#{System.unique_integer([:positive])}")
+    cwd = Path.join(System.tmp_dir!(), "yoke_workflow_def_#{System.unique_integer([:positive])}")
     File.mkdir_p!(cwd)
     on_exit(fn -> File.rm_rf(cwd) end)
     %{cwd: cwd}

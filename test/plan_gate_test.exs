@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.PlanGateTest do
+defmodule Yoke.PlanGateTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.PlanGate
+  alias Yoke.PlanGate
 
   describe "modifier_tool?/2" do
     test "returns true for file-modifying tools regardless of args" do
@@ -124,7 +124,7 @@ defmodule DeepSeekHarness.PlanGateTest do
       plan = %{
         "summary" => "Refactor the module",
         "steps" => ["Add PlanGate", "Write tests"],
-        "files" => ["lib/deep_seek_harness/plan_gate.ex"]
+        "files" => ["lib/yoke/plan_gate.ex"]
       }
 
       rendered = PlanGate.render_plan(plan)

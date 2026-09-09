@@ -1,6 +1,6 @@
-defmodule DeepSeekHarness.ClipboardTest do
+defmodule Yoke.ClipboardTest do
   use ExUnit.Case, async: true
-  alias DeepSeekHarness.Clipboard
+  alias Yoke.Clipboard
 
   test "fetch_image/0 returns ok or error without crashing" do
     result = Clipboard.fetch_image()

@@ -1,12 +1,12 @@
-defmodule DeepSeekHarness.PracticesTest do
+defmodule Yoke.PracticesTest do
   use ExUnit.Case, async: false
-  alias DeepSeekHarness.Practices
+  alias Yoke.Practices
 
   setup do
     tmp_dir =
       Path.join(
         System.tmp_dir!(),
-        "dsh_practices_test_#{System.unique_integer([:positive])}"
+        "yoke_practices_test_#{System.unique_integer([:positive])}"
       )
 
     global_dir = Path.join(tmp_dir, "global_practices")

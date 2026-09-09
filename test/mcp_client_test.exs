@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.MCPClientTest do
+defmodule Yoke.MCPClientTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.MCP.Client
+  alias Yoke.MCP.Client
 
   test "starts MCP client port and handles initialize request" do
     # Launch cat as mock stdio port process

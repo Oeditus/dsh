@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.PluginLoaderTest do
+defmodule Yoke.PluginLoaderTest do
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.Plugin.Loader, as: PluginLoader
+  alias Yoke.Plugin.Loader, as: PluginLoader
 
   test "lists built-in default tools" do
     tools = PluginLoader.list_tools()
@@ -19,7 +19,7 @@ defmodule DeepSeekHarness.PluginLoaderTest do
 
   test "read_files reads several files in parallel and returns delimited content" do
     tmp_dir =
-      Path.join(System.tmp_dir!(), "dsh_read_files_#{System.unique_integer([:positive])}")
+      Path.join(System.tmp_dir!(), "yoke_read_files_#{System.unique_integer([:positive])}")
 
     File.mkdir_p!(tmp_dir)
     on_exit(fn -> File.rm_rf(tmp_dir) end)
@@ -40,7 +40,7 @@ defmodule DeepSeekHarness.PluginLoaderTest do
 
   test "read_files reports a missing file inline without failing the others" do
     tmp_dir =
-      Path.join(System.tmp_dir!(), "dsh_read_files_missing_#{System.unique_integer([:positive])}")
+      Path.join(System.tmp_dir!(), "yoke_read_files_missing_#{System.unique_integer([:positive])}")
 
     File.mkdir_p!(tmp_dir)
     on_exit(fn -> File.rm_rf(tmp_dir) end)
@@ -76,7 +76,7 @@ defmodule DeepSeekHarness.PluginLoaderTest do
 
     code = """
     defmodule CustomMathPlugin do
-      @behaviour DeepSeekHarness.Plugin.Behaviour
+      @behaviour Yoke.Plugin.Behaviour
 
       def name, do: "CustomMathPlugin"
       def description, do: "Custom math tools plugin"

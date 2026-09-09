@@ -1,17 +1,17 @@
-defmodule DeepSeekHarness.PlanGateIntegrationTest do
+defmodule Yoke.PlanGateIntegrationTest do
   @moduledoc """
   Integration tests for the hardcoded "plan -> approve -> execute" gate wiring
-  inside `DeepSeekHarness.Brain.Session`.
+  inside `Yoke.Brain.Session`.
 
   These verify the session actor arms the gate from config and exposes its
   state, and that subagent/workflow sessions are excluded by the scope guard.
   The interactive approval modal itself is exercised manually; the pure
-  decision logic lives in `DeepSeekHarness.PlanGate` (see plan_gate_test.exs).
+  decision logic lives in `Yoke.PlanGate` (see plan_gate_test.exs).
   """
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.Brain.Session
-  alias DeepSeekHarness.Brain.SessionSupervisor
+  alias Yoke.Brain.Session
+  alias Yoke.Brain.SessionSupervisor
 
   setup do
     session_id = "test_plangate_#{System.unique_integer([:positive])}"

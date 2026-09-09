@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.SkillManagerTest do
+defmodule Yoke.SkillManagerTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Skill.Manager, as: SkillManager
+  alias Yoke.Skill.Manager, as: SkillManager
 
   test "parses SKILL.md file with frontmatter" do
     tmp_dir = Path.join(System.tmp_dir!(), "skill_test_#{System.unique_integer([:positive])}")

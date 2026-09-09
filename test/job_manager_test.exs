@@ -1,8 +1,8 @@
-defmodule DeepSeekHarness.TaskEngine.JobManagerTest do
+defmodule Yoke.TaskEngine.JobManagerTest do
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.Plugin.DefaultTools
-  alias DeepSeekHarness.TaskEngine.JobManager
+  alias Yoke.Plugin.DefaultTools
+  alias Yoke.TaskEngine.JobManager
 
   setup do
     JobManager.ensure_started()

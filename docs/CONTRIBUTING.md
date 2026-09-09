@@ -1,16 +1,16 @@
-# Contributing to DeepSeek Harness (DSH)
+# Contributing to Yoke (Yoke)
 
-Thank you for contributing to DeepSeek Harness! This guide outlines how to create custom plugins, skills, MCP tools, and tests.
+Thank you for contributing to Yoke! This guide outlines how to create custom plugins, skills, MCP tools, and tests.
 
 ---
 
 ## 1. Creating Custom Plugin Tools
 
-Plugins in DSH implement `DeepSeekHarness.Plugin.Behaviour`:
+Plugins in Yoke implement `Yoke.Plugin.Behaviour`:
 
 ```elixir
 defmodule MyCustomPlugin do
-  @behaviour DeepSeekHarness.Plugin.Behaviour
+  @behaviour Yoke.Plugin.Behaviour
 
   @impl true
   def name, do: "MyCustomPlugin"
@@ -44,14 +44,14 @@ end
 
 Load plugins at startup or via `/plugins reload` live without dropping state:
 ```bash
-dsh --plugin path/to/my_custom_plugin.exs
+yoke --plugin path/to/my_custom_plugin.exs
 ```
 
 ---
 
 ## 2. Creating Custom Skills
 
-Skills are instruction folders placed in `.dsh/skills/<skill_name>/SKILL.md`:
+Skills are instruction folders placed in `.yoke/skills/<skill_name>/SKILL.md`:
 
 ```markdown
 ---

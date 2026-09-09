@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.HandsSandboxTest do
+defmodule Yoke.HandsSandboxTest do
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.Hands.Executor, as: HandsExecutor
+  alias Yoke.Hands.Executor, as: HandsExecutor
 
   test "executes local file operations cleanly" do
     config = %HandsExecutor{mode: :local}
@@ -13,14 +13,14 @@ defmodule DeepSeekHarness.HandsSandboxTest do
     {:ok, write_res} =
       HandsExecutor.execute(config, "write_file", %{
         "path" => tmp_file,
-        "content" => "Hello DeepSeek Harness!"
+        "content" => "Hello Yoke!"
       })
 
     assert write_res =~ "Successfully wrote"
 
     # Read file
     {:ok, read_res} = HandsExecutor.execute(config, "read_file", %{"path" => tmp_file})
-    assert read_res == "Hello DeepSeek Harness!"
+    assert read_res == "Hello Yoke!"
 
     # Replace file content
     {:ok, rep_res} =
@@ -34,7 +34,7 @@ defmodule DeepSeekHarness.HandsSandboxTest do
 
     # Verify replacement
     {:ok, read_res2} = HandsExecutor.execute(config, "read_file", %{"path" => tmp_file})
-    assert read_res2 == "Greetings DeepSeek Harness!"
+    assert read_res2 == "Greetings Yoke!"
 
     File.rm(tmp_file)
   end
@@ -43,8 +43,8 @@ defmodule DeepSeekHarness.HandsSandboxTest do
     config = %HandsExecutor{mode: :local}
 
     {:ok, out} =
-      HandsExecutor.execute(config, "bash", %{"command" => "echo 'DSH Hands Execution Test'"})
+      HandsExecutor.execute(config, "bash", %{"command" => "echo 'Yoke Hands Execution Test'"})
 
-    assert String.trim(out) == "DSH Hands Execution Test"
+    assert String.trim(out) == "Yoke Hands Execution Test"
   end
 end

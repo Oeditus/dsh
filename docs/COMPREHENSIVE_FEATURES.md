@@ -1,8 +1,8 @@
-# DeepSeek Harness (DSH) — Comprehensive Features & Architecture Guide
+# Yoke (Yoke) — Comprehensive Features & Architecture Guide
 
-DeepSeek Harness (**DSH**) is an open-source, production-grade agentic AI coding harness for DeepSeek models (`deepseek-chat` V3, `deepseek-coder` V2.5, and `deepseek-reasoner` R1), constructed on the **Erlang/OTP** virtual machine and **Elixir**.
+Yoke (**Yoke**) is an open-source, production-grade agentic AI coding harness for DeepSeek models (`deepseek-chat` V3, `deepseek-coder` V2.5, and `deepseek-reasoner` R1), constructed on the **Erlang/OTP** virtual machine and **Elixir**.
 
-Designed around **José Valim’s actor-driven agent harness framework**, **Google Antigravity UI patterns**, and **Warp Terminal TUI design**, DSH provides developer-controlled, fault-tolerant execution, concurrent subagent orchestration, spatiotemporal state checkpoints, and deep code intelligence.
+Designed around **José Valim’s actor-driven agent harness framework**, **Google Antigravity UI patterns**, and **Warp Terminal TUI design**, Yoke provides developer-controlled, fault-tolerant execution, concurrent subagent orchestration, spatiotemporal state checkpoints, and deep code intelligence.
 
 ---
 
@@ -25,11 +25,11 @@ Designed around **José Valim’s actor-driven agent harness framework**, **Goog
 
 ## 1. Architectural Overview & Actor Model
 
-In traditional single-threaded agent runtimes (Node.js/Python), an uncaught tool exception or network timeout can terminate the process, discarding conversation history and active state. DSH solves this by leveraging the Erlang BEAM actor model:
+In traditional single-threaded agent runtimes (Node.js/Python), an uncaught tool exception or network timeout can terminate the process, discarding conversation history and active state. Yoke solves this by leveraging the Erlang BEAM actor model:
 
 ### Decoupled Brain & Hands Architecture
-- **The Brain (`DeepSeekHarness.Brain.Session`)**: A dedicated `GenServer` actor maintaining conversation memory, active model parameters, system rules, token accounting, and temporal snapshots.
-- **The Hands (`DeepSeekHarness.Hands.Executor`)**: Cleanly decoupled tool execution service capable of targeting the local host, a remote Erlang node, or an isolated Docker container.
+- **The Brain (`Yoke.Brain.Session`)**: A dedicated `GenServer` actor maintaining conversation memory, active model parameters, system rules, token accounting, and temporal snapshots.
+- **The Hands (`Yoke.Hands.Executor`)**: Cleanly decoupled tool execution service capable of targeting the local host, a remote Erlang node, or an isolated Docker container.
 - **Fault-Tolerant OTP Supervision**: The session actor runs under a `DynamicSupervisor`. If a tool execution or sub-task crashes, the OTP supervision tree isolates the failure, preventing interactive session collapse.
 
 ```
@@ -53,7 +53,7 @@ In traditional single-threaded agent runtimes (Node.js/Python), an uncaught tool
 └───────────────────┘     └───────────────────┘     └───────────────────┘
 ```
 
-### Key BEAM Features in DSH
+### Key BEAM Features in Yoke
 - **Live Hot-Code Tool Reloading**: Compile and hot-swap custom Elixir tools live (`/plugins reload`) without restarting the session actor or losing context memory.
 - **Spatiotemporal State Checkpoints**: Automatic or manual snapshots (`/checkpoint`) record state before tool iterations, enabling instant rollbacks (`/undo`).
 - **Parallel BEAM Process Monitoring**: Real-time rendering of active serving BEAM processes and background task workers directly on the status bar ruler.
@@ -62,7 +62,7 @@ In traditional single-threaded agent runtimes (Node.js/Python), an uncaught tool
 
 ## 2. DeepSeek Model Integration & Reasoning Streaming
 
-DSH natively supports official DeepSeek models, local Ollama endpoints, and third-party aggregators (OpenRouter):
+Yoke natively supports official DeepSeek models, local Ollama endpoints, and third-party aggregators (OpenRouter):
 
 | Model Alias | DeepSeek Model ID | Purpose & Strengths |
 | :--- | :--- | :--- |
@@ -73,7 +73,7 @@ DSH natively supports official DeepSeek models, local Ollama endpoints, and thir
 | `ollama-r1` | `ollama/deepseek-r1` | Local offline reasoning execution via Ollama API. |
 
 ### Features
-- **Live Reasoning Stream**: For `deepseek-reasoner` (R1), DSH extracts and streams thinking logs live to the console before executing tool calls.
+- **Live Reasoning Stream**: For `deepseek-reasoner` (R1), Yoke extracts and streams thinking logs live to the console before executing tool calls.
 - **Max Tokens Cap**: Configurable completion token caps forwarded to DeepSeek API requests (`max_tokens` config setting).
 
 ---
@@ -100,8 +100,8 @@ Built with custom ANSI color rendering, line editing, and fuzzy file pickers:
   ```
 
 ### 4. Pure Console Mode (`!!`)
-- Type `!!` on its own line to flip `dsh` into **Pure Console Mode**: a plain shell passthrough bypassing Brain/Hands actors and LLM calls.
-- Directory changes (`cd`) apply directly to `dsh`'s main OS process, persisting when returning to the REPL.
+- Type `!!` on its own line to flip `yoke` into **Pure Console Mode**: a plain shell passthrough bypassing Brain/Hands actors and LLM calls.
+- Directory changes (`cd`) apply directly to `yoke`'s main OS process, persisting when returning to the REPL.
 - Type `!!` again to flip back into the interactive harness REPL.
 
 ---
@@ -109,13 +109,13 @@ Built with custom ANSI color rendering, line editing, and fuzzy file pickers:
 ## 4. Session Management & Persistence (LMML & Transcripts)
 
 ### 1. LMML Conversation Persistence
-Sessions are persisted to `.dsh/sessions/<session_id>.lmml` using **LMML** (a Markdown-superset markup format for LLM conversations).
+Sessions are persisted to `.yoke/sessions/<session_id>.lmml` using **LMML** (a Markdown-superset markup format for LLM conversations).
 - Plain, self-contained Markdown readable by standard viewers.
 - Round-trips multi-turn assistant tool calls, tool results, system preambles, and image attachments losslessly.
 - Supports transparent backward compatibility with legacy `.json` session files.
 
 ### 2. Dual JSONL Transcripts Logging
-Every session automatically maintains audit transcripts in `.dsh/sessions/<session_id>/`:
+Every session automatically maintains audit transcripts in `.yoke/sessions/<session_id>/`:
 - `transcript_full.jsonl`: Complete, untruncated log of all turns, prompts, tool calls, and model outputs.
 - `transcript_compact.jsonl`: Token-efficient log with truncated payload content for rapid searching and grepping.
 
@@ -128,7 +128,7 @@ Every session automatically maintains audit transcripts in `.dsh/sessions/<sessi
 
 ## 5. Scoped Prompt Rule Engine (`/rules`)
 
-The Rule Engine manages persistent prompt preambles saved in `.dsh/rules.json`:
+The Rule Engine manages persistent prompt preambles saved in `.yoke/rules.json`:
 
 ### Rule Scopes
 - **`all:`**: Injected into the prompt preamble of every user turn (e.g. `all: typographic quotes “” mean exact quote`).
@@ -183,7 +183,7 @@ Spawns child session actors (`DynamicSupervisor`) to execute sub-tasks concurren
 ## 8. Model Context Protocol (MCP) & Ragex Integration
 
 ### 1. Model Context Protocol (MCP) Client
-Connect external MCP servers via `stdio` (JSON-RPC) or HTTP/SSE using `/mcp add <name> <command> [args...]` or `.dsh/config.json`.
+Connect external MCP servers via `stdio` (JSON-RPC) or HTTP/SSE using `/mcp add <name> <command> [args...]` or `.yoke/config.json`.
 
 ### 2. Native Ragex Integration (`/ragex`)
 First-class integration with **Ragex** (`@../ragex`) and database server **`dllb`**:
@@ -202,7 +202,7 @@ First-class integration with **Ragex** (`@../ragex`) and database server **`dllb
 
 ## 9. Native Elixir Linters (`/linter`, `/lint`)
 
-Run native Elixir static analysis tools directly from `dsh`:
+Run native Elixir static analysis tools directly from `yoke`:
 - **`oeditus_credo`**: Enforces Oeditus coding standards.
 - **`credo`**: Strict style and code consistency checks.
 - **`propwise`**: Property-based test generator and contract checker.
@@ -237,7 +237,7 @@ Executes multi-step automated workflows built on isolated Git Worktrees:
 ```
 
 - **Isolated Git Worktrees**: Parallel workflow sub-tasks execute in isolated `git worktrees` and branches to prevent disk collisions.
-- **Workflow State Persistence**: Runs persist state in `.dsh/workflows/<run_id>.json`, allowing status inspection (`/workflow status`) and resumption after failure (`/workflow resume`).
+- **Workflow State Persistence**: Runs persist state in `.yoke/workflows/<run_id>.json`, allowing status inspection (`/workflow status`) and resumption after failure (`/workflow resume`).
 - **Scaffolding**: Create custom workflows via `/workflow init <name>`.
 
 ---
@@ -253,7 +253,7 @@ Decouples where the Brain actor thinks from where the Hands executor operates:
 
 ## 12. Configuration & Prompt Customization (`/config`)
 
-Managed via `~/.dsh/config.json` or project-local `.dsh/config.json`:
+Managed via `~/.yoke/config.json` or project-local `.yoke/config.json`:
 
 ```json
 {

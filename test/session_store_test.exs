@@ -1,8 +1,8 @@
-defmodule DeepSeekHarness.Brain.SessionStoreTest do
+defmodule Yoke.Brain.SessionStoreTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Brain.SessionLmml
-  alias DeepSeekHarness.Brain.SessionStore
+  alias Yoke.Brain.SessionLmml
+  alias Yoke.Brain.SessionStore
 
   setup do
     tmp_dir =
@@ -39,7 +39,7 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
 
     # The saved file is a valid lmml narrative (Markdown-superset).
     content = File.read!(file_path)
-    assert String.contains?(content, "# DSH Conversation: test_sess_1")
+    assert String.contains?(content, "# Yoke Conversation: test_sess_1")
     assert String.contains?(content, "@@@manifest.json")
     assert String.contains?(content, "@@@message.0.json")
 
@@ -78,7 +78,7 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
     assert String.ends_with?(file_path, ".lmmlz")
 
     # Ensures legacy .lmml file is not present when zipped
-    refute File.exists?(Path.join(tmp_dir, ".dsh/sessions/test_sess_zipped.lmml"))
+    refute File.exists?(Path.join(tmp_dir, ".yoke/sessions/test_sess_zipped.lmml"))
 
     assert {:ok, loaded} = SessionStore.load_session("test_sess_zipped", tmp_dir)
     assert loaded["session_id"] == "test_sess_zipped"
@@ -155,10 +155,10 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
       "snapshots" => []
     }
 
-    File.mkdir_p!(Path.join(tmp_dir, ".dsh/sessions"))
+    File.mkdir_p!(Path.join(tmp_dir, ".yoke/sessions"))
 
     File.write!(
-      Path.join(tmp_dir, ".dsh/sessions/legacy_json.json"),
+      Path.join(tmp_dir, ".yoke/sessions/legacy_json.json"),
       Jason.encode!(legacy)
     )
 
@@ -386,7 +386,7 @@ defmodule DeepSeekHarness.Brain.SessionStoreTest do
     assert File.exists?(log_path)
 
     log_content = File.read!(log_path)
-    assert log_content =~ "DSH LMML Persistence Error Report"
+    assert log_content =~ "Yoke LMML Persistence Error Report"
     assert log_content =~ "Simulated Md.Parser match error"
     assert log_content =~ "err_test_sess"
     assert log_content =~ "SUCCESS (JSON Fallback Saved)"

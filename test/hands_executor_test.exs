@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.HandsExecutorTest do
+defmodule Yoke.HandsExecutorTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Hands.Executor
+  alias Yoke.Hands.Executor
 
   test "executes local tool call" do
     config = %Executor{mode: :local}
@@ -46,7 +46,7 @@ defmodule DeepSeekHarness.HandsExecutorTest do
   end
 
   test "toggles tool call argument expansion mode" do
-    Application.put_env(:deep_seek_harness, :expand_tool_calls, false)
+    Application.put_env(:yoke, :expand_tool_calls, false)
 
     collapsed =
       Executor.format_tool_call("write_file", %{
@@ -56,7 +56,7 @@ defmodule DeepSeekHarness.HandsExecutorTest do
 
     assert String.contains?(collapsed, "…") or String.contains?(collapsed, "payload")
 
-    Application.put_env(:deep_seek_harness, :expand_tool_calls, true)
+    Application.put_env(:yoke, :expand_tool_calls, true)
 
     expanded =
       Executor.format_tool_call("write_file", %{
@@ -67,6 +67,6 @@ defmodule DeepSeekHarness.HandsExecutorTest do
     refute String.contains?(expanded, "payload")
     assert String.contains?(expanded, String.duplicate("a", 100))
 
-    Application.put_env(:deep_seek_harness, :expand_tool_calls, false)
+    Application.put_env(:yoke, :expand_tool_calls, false)
   end
 end

@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.ContextExpanderTest do
+defmodule Yoke.ContextExpanderTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.CLI.ContextExpander
+  alias Yoke.CLI.ContextExpander
 
   test "expands local relative path file reference" do
     tmp_path = Path.join(System.tmp_dir!(), "test_ref_#{System.unique_integer([:positive])}.txt")

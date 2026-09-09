@@ -36,8 +36,8 @@ jobs:
         run: mix deps.get
       - name: Run tests
         run: mix test --exclude ragex
-      - name: Run dsh launcher tests
-        run: bash test/dsh_release_test.sh
+      - name: Run yoke launcher tests
+        run: bash test/yoke_release_test.sh
 
   linters:
     name: Static Analysis
@@ -135,18 +135,18 @@ jobs:
               end
           '
 
-      - name: Build dsh escript
+      - name: Build yoke escript
         run: |
           mix escript.build
-          mv dsh_escript dsh
+          mv yoke_escript yoke
 
       - name: Compute checksum
-        run: sha256sum dsh > dsh.sha256
+        run: sha256sum yoke > yoke.sha256
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dsh
-            dsh.sha256
+            yoke
+            yoke.sha256
           generate_release_notes: true

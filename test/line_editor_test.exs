@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.LineEditorTest do
+defmodule Yoke.LineEditorTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.CLI.LineEditor
+  alias Yoke.CLI.LineEditor
 
   describe "prompt building" do
     test "builds prompt string with configurable interpolation" do
@@ -10,14 +10,14 @@ defmodule DeepSeekHarness.LineEditorTest do
     end
 
     test "supports extended prompt style" do
-      # `prompt_style` is read from `.dsh/config.json` (via DeepSeekHarness.Config),
+      # `prompt_style` is read from `.yoke/config.json` (via Yoke.Config),
       # not from Application env, so exercise the real config-file mechanism
       # against an isolated temp workspace instead of the user's real config.
       tmp_dir =
-        Path.join(System.tmp_dir!(), "dsh_test_cfg_#{System.unique_integer([:positive])}")
+        Path.join(System.tmp_dir!(), "yoke_test_cfg_#{System.unique_integer([:positive])}")
 
-      File.mkdir_p!(Path.join(tmp_dir, ".dsh"))
-      File.write!(Path.join(tmp_dir, ".dsh/config.json"), ~s({"prompt_style": "extended"}))
+      File.mkdir_p!(Path.join(tmp_dir, ".yoke"))
+      File.write!(Path.join(tmp_dir, ".yoke/config.json"), ~s({"prompt_style": "extended"}))
       on_exit(fn -> File.rm_rf(tmp_dir) end)
 
       prompt =
@@ -177,7 +177,7 @@ defmodule DeepSeekHarness.LineEditorTest do
 
   describe "reverse-incremental search" do
     test "finds items in history by substring" do
-      history = ["git status", "mix test", "dsh review"]
+      history = ["git status", "mix test", "yoke review"]
       assert LineEditor.find_in_history("git", history) == "git status"
       assert LineEditor.find_in_history("xyz", history) == ""
       assert LineEditor.find_in_history("", history) == ""
@@ -634,9 +634,9 @@ defmodule DeepSeekHarness.LineEditorTest do
 
   describe "file picker modal integration" do
     test "inserts @ when enable_file_picker is false" do
-      tmp_dir = Path.join(System.tmp_dir!(), "dsh_test_fp_#{System.unique_integer([:positive])}")
-      File.mkdir_p!(Path.join(tmp_dir, ".dsh"))
-      File.write!(Path.join(tmp_dir, ".dsh/config.json"), ~s({"enable_file_picker": false}))
+      tmp_dir = Path.join(System.tmp_dir!(), "yoke_test_fp_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(tmp_dir, ".yoke"))
+      File.write!(Path.join(tmp_dir, ".yoke/config.json"), ~s({"enable_file_picker": false}))
       on_exit(fn -> File.rm_rf(tmp_dir) end)
 
       state = LineEditor.new_state("prompt> ", [], %{cwd: tmp_dir})

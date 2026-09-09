@@ -1,8 +1,8 @@
-defmodule DeepSeekHarness.TaskEngineTest do
+defmodule Yoke.TaskEngineTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Hands.Executor, as: HandsExecutor
-  alias DeepSeekHarness.TaskEngine.Orchestrator
+  alias Yoke.Hands.Executor, as: HandsExecutor
+  alias Yoke.TaskEngine.Orchestrator
 
   setup do
     session_state = %{

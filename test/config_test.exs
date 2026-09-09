@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.ConfigTest do
+defmodule Yoke.ConfigTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Config
+  alias Yoke.Config
 
   test "loads config with default values" do
     config = Config.load_config()

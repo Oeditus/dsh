@@ -9,7 +9,7 @@ config :dllb,
   timeout: :infinity
 
 # Configure ragex knowledge graph store backend to use per-project dllb server daemon
-# Disable stdio server when embedded in dsh to prevent raw JSON-RPC dumps
+# Disable stdio server when embedded in yoke to prevent raw JSON-RPC dumps
 config :ragex,
   store_backend: :dllb,
   dllb_mode: :per_project,
@@ -18,14 +18,14 @@ config :ragex,
 # Configure EXLA to disable log sink when NIF is uncompiled/unavailable.
 # Skipped entirely under the `escript` Mix env, which deliberately excludes
 # exla/nx/bumblebee/image from the dependency tree (see mix.exs) so the
-# standalone `dsh` escript doesn't try to load an unloadable NIF.
+# standalone `yoke` escript doesn't try to load an unloadable NIF.
 if config_env() != :escript do
   config :exla, start_log_sink: false
   config :nx, :default_backend, Nx.BinaryBackend
 end
 
 if config_env() == :test do
-  config :deep_seek_harness, auto_start_ragex: false
+  config :yoke, auto_start_ragex: false
   config :dllb, enabled: false
   config :nx, :default_backend, Nx.BinaryBackend
   config :exla, start_log_sink: false

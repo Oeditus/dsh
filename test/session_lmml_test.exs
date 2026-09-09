@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.Brain.SessionLmmlTest do
+defmodule Yoke.Brain.SessionLmmlTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Brain.SessionLmml
+  alias Yoke.Brain.SessionLmml
 
   describe "encode/2" do
     test "produces a valid lmml narrative with manifest and message embeds" do
@@ -20,7 +20,7 @@ defmodule DeepSeekHarness.Brain.SessionLmmlTest do
       }
 
       assert {:ok, narrative} = SessionLmml.encode(session_state, "abc")
-      assert String.contains?(narrative, "# DSH Conversation: abc")
+      assert String.contains?(narrative, "# Yoke Conversation: abc")
       assert String.contains?(narrative, "@@@manifest.json")
       assert String.contains?(narrative, "@@@message.0.json")
       assert String.contains?(narrative, "@@@message.1.json")
@@ -185,7 +185,7 @@ defmodule DeepSeekHarness.Brain.SessionLmmlTest do
 
     test "defaults missing manifest fields" do
       narrative = """
-      # DSH Conversation: minimal
+      # Yoke Conversation: minimal
 
       @@@manifest.json
       {}
@@ -208,7 +208,7 @@ defmodule DeepSeekHarness.Brain.SessionLmmlTest do
 
     test "rejects an invalid message embed" do
       narrative = """
-      # DSH Conversation: bad
+      # Yoke Conversation: bad
 
       @@@manifest.json
       {}

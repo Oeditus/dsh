@@ -1,11 +1,11 @@
-defmodule DeepSeekHarness.Workflow.StoreTest do
+defmodule Yoke.Workflow.StoreTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Workflow.Definition
-  alias DeepSeekHarness.Workflow.Store
+  alias Yoke.Workflow.Definition
+  alias Yoke.Workflow.Store
 
   setup do
-    cwd = Path.join(System.tmp_dir!(), "dsh_workflow_store_#{System.unique_integer([:positive])}")
+    cwd = Path.join(System.tmp_dir!(), "yoke_workflow_store_#{System.unique_integer([:positive])}")
     File.mkdir_p!(cwd)
     on_exit(fn -> File.rm_rf(cwd) end)
 
@@ -98,12 +98,12 @@ defmodule DeepSeekHarness.Workflow.StoreTest do
     run_id = Store.new_run_id("elixir")
     {:ok, _} = Store.init_run!(run_id, definition, cwd)
 
-    Store.write_subtask_field!(run_id, "a", "branch", "dsh/elixir/subtask-a", cwd)
+    Store.write_subtask_field!(run_id, "a", "branch", "yoke/elixir/subtask-a", cwd)
     Store.write_subtask_field!(run_id, "a", "worktree", "/tmp/worktree-a", cwd)
     Store.write_subtask_result!(run_id, "a", "## Done\nAll good.", cwd)
 
     dir = Store.subtask_dir(run_id, "a", cwd)
-    assert File.read!(Path.join(dir, "branch.txt")) == "dsh/elixir/subtask-a"
+    assert File.read!(Path.join(dir, "branch.txt")) == "yoke/elixir/subtask-a"
     assert File.read!(Path.join(dir, "worktree.txt")) == "/tmp/worktree-a"
     assert File.read!(Path.join(dir, "result.md")) =~ "All good."
   end

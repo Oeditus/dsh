@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.GitTest do
+defmodule Yoke.GitTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Git
+  alias Yoke.Git
 
   test "returns git status and diff" do
     assert {:ok, _status} = Git.status()
@@ -46,7 +46,7 @@ defmodule DeepSeekHarness.GitTest do
 
     test "creates an isolated worktree on a new branch", %{repo: repo} do
       worktree_path =
-        Path.join(System.tmp_dir!(), "dsh_worktree_#{System.unique_integer([:positive])}")
+        Path.join(System.tmp_dir!(), "yoke_worktree_#{System.unique_integer([:positive])}")
 
       assert {:ok, _} = Git.add_worktree(worktree_path, "subtask/a", repo)
       assert File.dir?(worktree_path)
@@ -68,7 +68,7 @@ defmodule DeepSeekHarness.GitTest do
       worktree_path =
         Path.join(
           System.tmp_dir!(),
-          "dsh_worktree_existing_#{System.unique_integer([:positive])}"
+          "yoke_worktree_existing_#{System.unique_integer([:positive])}"
         )
 
       assert {:ok, _} = Git.add_worktree(worktree_path, "subtask/existing", repo)
@@ -109,7 +109,7 @@ defmodule DeepSeekHarness.GitTest do
   end
 
   defp tmp_repo(_context) do
-    repo = Path.join(System.tmp_dir!(), "dsh_git_test_#{System.unique_integer([:positive])}")
+    repo = Path.join(System.tmp_dir!(), "yoke_git_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(repo)
     {_, 0} = System.cmd("git", ["init", "-q", "-b", "main"], cd: repo)
     {_, 0} = System.cmd("git", ["config", "user.email", "test@example.com"], cd: repo)

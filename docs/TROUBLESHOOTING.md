@@ -1,16 +1,16 @@
-# DeepSeek Harness — Troubleshooting Guide
+# Yoke — Troubleshooting Guide
 
-Common diagnostic procedures for DeepSeek Harness CLI and runtime issues.
+Common diagnostic procedures for Yoke CLI and runtime issues.
 
 ---
 
 ## 1. DeepSeek API Key Issues
 **Symptom**: `AI configuration validation failed: API key not set`
 **Resolution**:
-Export your DeepSeek API Key before launching DSH:
+Export your DeepSeek API Key before launching Yoke:
 ```bash
 export DEEPSEEK_API_KEY="sk-..."
-dsh
+yoke
 ```
 
 ---
@@ -28,10 +28,10 @@ This occurs when `line_start` or `line_end` in `edit_file` extends past block bo
 Ensure both nodes share the exact same Erlang cookie and host configuration:
 ```bash
 # On Hands host:
-elixir --sname hands@127.0.0.1 --cookie secret_dsh_cookie -S mix run --no-halt
+elixir --sname hands@127.0.0.1 --cookie secret_yoke_cookie -S mix run --no-halt
 
 # On CLI Brain host:
-dsh --node brain@127.0.0.1 --connect hands@127.0.0.1
+yoke --node brain@127.0.0.1 --connect hands@127.0.0.1
 ```
 
 ---
@@ -39,4 +39,4 @@ dsh --node brain@127.0.0.1 --connect hands@127.0.0.1
 ## 4. MCP Server Stdio Timeouts
 **Symptom**: `Failed to fetch tools/list from MCP server`
 **Resolution**:
-Check that the MCP server binary is executable and installed in system `$PATH`. Test manual execution via `/mcp list` or inspect `.dsh/config.json`.
+Check that the MCP server binary is executable and installed in system `$PATH`. Test manual execution via `/mcp list` or inspect `.yoke/config.json`.

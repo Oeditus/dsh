@@ -1,8 +1,8 @@
-# DSH Launcher — Automatic Release Rebuild
+# Yoke Launcher — Automatic Release Rebuild
 
-The `./dsh` executable is a thin Bash launcher that boots the DeepSeek Harness
+The `./yoke` executable is a thin Bash launcher that boots the Yoke
 OTP release. Unlike a static launcher that merely invokes an existing release,
-`dsh` **keeps the release in sync with the working tree** by re-assembling it
+`yoke` **keeps the release in sync with the working tree** by re-assembling it
 with `mix release --overwrite` whenever the sources have changed.
 
 ---
@@ -10,17 +10,17 @@ with `mix release --overwrite` whenever the sources have changed.
 ## Why auto-rebuild?
 
 OTP releases are immutable snapshots of your application. If you edit Elixir
-source files but the release is not rebuilt, `./dsh` silently runs the **old**
+source files but the release is not rebuilt, `./yoke` silently runs the **old**
 code. This is a common source of confusion during development:
 
 ```bash
 # 1. Build a release once
-./dsh --env dev
+./yoke --env dev
 
-# 2. Edit lib/deep_seek_harness/cli/repl.ex
+# 2. Edit lib/yoke/cli/repl.ex
 
-# 3. Without auto-rebuild, ./dsh would keep running the OLD compiled code
-./dsh --env dev   # <-- now re-assembles with --overwrite automatically
+# 3. Without auto-rebuild, ./yoke would keep running the OLD compiled code
+./yoke --env dev   # <-- now re-assembles with --overwrite automatically
 ```
 
 ## When does the launcher rebuild?
@@ -34,7 +34,7 @@ The launcher rebuilds the selected release when **any** of the following is true
    - `priv/**/*`
    - `mix.exs`
    - `mix.lock`
-3. **`DSH_REBUILD=1` is set** — forces a rebuild regardless of timestamps.
+3. **`YOKE_REBUILD=1` is set** — forces a rebuild regardless of timestamps.
 
 The comparison uses file modification timestamps. If the newest source file's
 mtime is strictly greater than the release binary's mtime, the release needs a
@@ -49,7 +49,7 @@ Two helper functions are defined in the script:
 Returns exit code `0` (rebuild needed) or `1` (up to date). It checks:
 
 - whether the release binary `rel_bin` is executable;
-- the `DSH_REBUILD` environment variable;
+- the `YOKE_REBUILD` environment variable;
 - whether the newest watched source file is newer than `rel_bin`.
 
 ```bash
@@ -64,34 +64,34 @@ Assembles the release for the given Mix environment (e.g. `prod` or `dev`):
 
 ```bash
 build_release "prod"
-# -> rm -rf _build/prod/rel/dsh
-# -> MIX_ENV=prod mix release dsh --overwrite
+# -> rm -rf _build/prod/rel/yoke
+# -> MIX_ENV=prod mix release yoke --overwrite
 ```
 
 It always passes `--overwrite` so an existing release directory is replaced
-rather than merged, and it removes the stale `_build/<env>/rel/dsh` directory
+rather than merged, and it removes the stale `_build/<env>/rel/yoke` directory
 first to guarantee a deterministic build.
 
 ## Environment targets
 
 | Flag / Env            | Target  | Behavior                                            |
 |-----------------------|---------|-----------------------------------------------------|
-| `--env prod` / `--prod` | `prod` | Rebuild `_build/prod/rel/dsh` if stale, then exec it |
-| `--env dev` / `--dev`   | `dev`   | Rebuild `_build/dev/rel/dsh` if stale, then exec it  |
+| `--env prod` / `--prod` | `prod` | Rebuild `_build/prod/rel/yoke` if stale, then exec it |
+| `--env dev` / `--dev`   | `dev`   | Rebuild `_build/dev/rel/yoke` if stale, then exec it  |
 | *(none)*              | `auto`  | Use newest non-stale release, else rebuild it; fall back to `mix run` if none exists |
 
 ## Configuration variables
 
 | Variable       | Default | Description                                    |
 |----------------|---------|------------------------------------------------|
-| `DSH_REBUILD`  | `0`     | Set to `1` to force a release rebuild on launch |
+| `YOKE_REBUILD`  | `0`     | Set to `1` to force a release rebuild on launch |
 
 ## Testing
 
-The release freshness logic is covered by `test/dsh_release_test.sh`:
+The release freshness logic is covered by `test/yoke_release_test.sh`:
 
 ```bash
-bash test/dsh_release_test.sh
+bash test/yoke_release_test.sh
 ```
 
 The test exercises the `release_needs_build` and `build_release` functions in
@@ -100,5 +100,5 @@ isolation against temporary fixture trees, verifying:
 1. no rebuild when all sources are older than the release;
 2. rebuild when a source file is newer than the release;
 3. rebuild when the release binary is missing;
-4. `DSH_REBUILD=1` forces a rebuild;
-5. `build_release` invokes `mix release dsh --overwrite`.
+4. `YOKE_REBUILD=1` forces a rebuild;
+5. `build_release` invokes `mix release yoke --overwrite`.

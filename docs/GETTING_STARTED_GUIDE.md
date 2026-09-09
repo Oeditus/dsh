@@ -1,10 +1,10 @@
-# DeepSeek Harness (DSH) — Comprehensive Onboarding & Customization Guide
+# Yoke (Yoke) — Comprehensive Onboarding & Customization Guide
 
-Welcome to **DeepSeek Harness (DSH)** — the open-source, developer-first agentic coding CLI built on the **Erlang/BEAM Virtual Machine**.
+Welcome to **Yoke (Yoke)** — the open-source, developer-first agentic coding CLI built on the **Erlang/BEAM Virtual Machine**.
 
-This guide is designed to take you from a fresh installation to completely tailoring DSH to your exact engineering standards:
+This guide is designed to take you from a fresh installation to completely tailoring Yoke to your exact engineering standards:
 1. [Core Architecture & Quickstart](#1-core-architecture--quickstart)
-2. [Teaching DSH New Language Idiomatics (`.dsh/practices`)](#2-teaching-dsh-new-language-idiomatics-dshpractices)
+2. [Teaching Yoke New Language Idiomatics (`.yoke/practices`)](#2-teaching-yoke-new-language-idiomatics-yokepractices)
 3. [Starting & Driving Workflows (`/workflow`)](#3-starting--driving-workflows-workflow)
 4. [Tuning Workflows for Your Team's Needs](#4-tuning-workflows-for-your-teams-needs)
 5. [Writing Custom Elixir Plugins (`Plugin.Behaviour`)](#5-writing-custom-elixir-plugins-pluginbehaviour)
@@ -16,21 +16,21 @@ This guide is designed to take you from a fresh installation to completely tailo
 ## 1. Core Architecture & Quickstart
 
 ### The BEAM Actor Advantage
-Unlike single-threaded Node.js or Python coding harnesses that crash and wipe context when a tool execution fails, DSH separates reasoning (**Brain**) from execution (**Hands**):
-- **Process Isolation**: The session actor (`DeepSeekHarness.Brain.Session`) runs as an OTP GenServer. Tool executions and sub-tasks run in isolated BEAM processes. If a shell command or external script fails, the session stays 100% intact.
+Unlike single-threaded Node.js or Python coding harnesses that crash and wipe context when a tool execution fails, Yoke separates reasoning (**Brain**) from execution (**Hands**):
+- **Process Isolation**: The session actor (`Yoke.Brain.Session`) runs as an OTP GenServer. Tool executions and sub-tasks run in isolated BEAM processes. If a shell command or external script fails, the session stays 100% intact.
 - **Spatiotemporal Checkpoints**: Spatiotemporal state snapshots capture context, conversation history, and model parameters before major changes. You can roll back anytime with `/undo`.
 
 ### Basic Invocation
 ```bash
 # Launch interactive REPL mode
-dsh
+yoke
 
 # Run a one-shot command
-dsh "Implement JWT authentication in lib/auth.ex"
+yoke "Implement JWT authentication in lib/auth.ex"
 
 # Switch model or execution target
-dsh --model deepseek-reasoner
-dsh --plugin path/to/my_plugin.exs
+yoke --model deepseek-reasoner
+yoke --plugin path/to/my_plugin.exs
 ```
 
 ### Essential REPL Commands
@@ -50,16 +50,16 @@ Attach rich context directly inside prompts:
 
 ---
 
-## 2. Teaching DSH New Language Idiomatics (`.dsh/practices`)
+## 2. Teaching Yoke New Language Idiomatics (`.yoke/practices`)
 
-When DSH works on a project, it automatically injects language-specific **Good Practices** into the system prompt context. You can teach DSH new languages, domain-specific conventions, or architectural guidelines using `.lmml` practice manifests.
+When Yoke works on a project, it automatically injects language-specific **Good Practices** into the system prompt context. You can teach Yoke new languages, domain-specific conventions, or architectural guidelines using `.lmml` practice manifests.
 
 ### Practice Storage Locations & Precedence
-1. **Project-Local**: `.dsh/practices/<language>.lmml` (takes highest precedence, specific to this repository).
-2. **Global**: `~/.dsh/practices/<language>.lmml` (applies to all projects in that language on your system).
-3. **Built-in Defaults**: Fallback guidelines shipped with DSH.
+1. **Project-Local**: `.yoke/practices/<language>.lmml` (takes highest precedence, specific to this repository).
+2. **Global**: `~/.yoke/practices/<language>.lmml` (applies to all projects in that language on your system).
+3. **Built-in Defaults**: Fallback guidelines shipped with Yoke.
 
-When both global and project-local files exist, DSH merges them seamlessly.
+When both global and project-local files exist, Yoke merges them seamlessly.
 
 ### Practice Manifest Structure (`.lmml`)
 Practice manifests use **LMML** (a human-readable Markdown superset with inline `@@@manifest.json` metadata):
@@ -87,30 +87,30 @@ Practice manifests use **LMML** (a human-readable Markdown superset with inline 
 ```
 
 ### Interactive Training Workflow: Squeezing Exemplary Codebases
-If you start working on a project in a new language (e.g., Rust, Go, TypeScript), DSH will detect the language and prompt you to point to exemplary repositories:
+If you start working on a project in a new language (e.g., Rust, Go, TypeScript), Yoke will detect the language and prompt you to point to exemplary repositories:
 
 1. Type `/practices teach <language>` or answer the initialization prompt.
 2. Provide paths to 1-3 exemplary, well-written codebases.
-3. DSH will inspect the project structure, extract idiomatic design patterns, and squeeze out a human-editable `.lmml` file saved directly to `.dsh/practices/<language>.lmml`.
-4. Edit `.dsh/practices/<language>.lmml` anytime to add or refine team-specific coding rules.
+3. Yoke will inspect the project structure, extract idiomatic design patterns, and squeeze out a human-editable `.lmml` file saved directly to `.yoke/practices/<language>.lmml`.
+4. Edit `.yoke/practices/<language>.lmml` anytime to add or refine team-specific coding rules.
 
 ---
 
 ## 3. Starting & Driving Workflows (`/workflow`)
 
-DSH features a built-in **Workflow Engine** that executes multi-step engineering pipelines on top of the agent loop — from branching to parallel task splitting, testing, linting, and committing.
+Yoke features a built-in **Workflow Engine** that executes multi-step engineering pipelines on top of the agent loop — from branching to parallel task splitting, testing, linting, and committing.
 
 ### The Bundled `elixir` Workflow Pipeline
 
 | Phase | Step Type | Action |
 | :--- | :--- | :--- |
-| ① | `branch` | Creates and checks out `dsh/elixir/<run-id>` off your active branch. |
+| ① | `branch` | Creates and checks out `yoke/elixir/<run-id>` off your active branch. |
 | ② | `task_description` | Summarizes your task into a structured Markdown spec (`task_description.md`). |
 | ③ | `task_split` | Evaluates if the task can be split into 2-5 non-clashing sub-tasks. |
 | ④ | `subtask execution` | Spawns isolated Git worktrees and parallel BEAM subagents for split tasks. |
 | ⑤ | `tests_and_docs` | Requires unit tests and docs, then actually executes `mix test` to verify. |
 | ⑥ | `lint` | Gates on `mix format --check-formatted` and `mix credo diff <base>`. |
-| ⑦ | `commit` | Stages changes (excluding `.dsh/`) and creates a git commit with a summary. |
+| ⑦ | `commit` | Stages changes (excluding `.yoke/`) and creates a git commit with a summary. |
 
 ### Workflow Execution Commands
 ```bash
@@ -135,7 +135,7 @@ DSH features a built-in **Workflow Engine** that executes multi-step engineering
 
 ### Non-Clashing Parallel Worktree Execution
 When a workflow splits a task into sub-tasks:
-1. Each sub-task is assigned its own **isolated Git worktree** at `.dsh/workflows/runs/<run-id>/subtasks/<id>`.
+1. Each sub-task is assigned its own **isolated Git worktree** at `.yoke/workflows/runs/<run-id>/subtasks/<id>`.
 2. Each worktree runs on its own branch (`<workflow-branch>/subtask/<id>`) under a dedicated `Session` GenServer.
 3. Because sub-tasks execute in separate directory trees, file write races are physically impossible.
 4. Once completed, worktree branches are merged back into the main workflow branch sequentially.
@@ -151,10 +151,10 @@ To create a new workflow definition based on the built-in template:
 ```bash
 /workflow init my-team-flow --from elixir
 ```
-This materializes a definition file at `.dsh/workflows/definitions/my-team-flow.json`.
+This materializes a definition file at `.yoke/workflows/definitions/my-team-flow.json`.
 
 ### Customizing Workflow Step Definitions (`.json`)
-Open `.dsh/workflows/definitions/my-team-flow.json` to customize the step pipeline:
+Open `.yoke/workflows/definitions/my-team-flow.json` to customize the step pipeline:
 
 ```json
 {
@@ -209,14 +209,14 @@ Open `.dsh/workflows/definitions/my-team-flow.json` to customize the step pipeli
 
 ## 5. Writing Custom Elixir Plugins (`Plugin.Behaviour`)
 
-When your team needs custom actions (e.g. querying an internal API, validating GraphQL schemas, deploying to staging, inspecting database state), write a custom **DSH Plugin**.
+When your team needs custom actions (e.g. querying an internal API, validating GraphQL schemas, deploying to staging, inspecting database state), write a custom **Yoke Plugin**.
 
-### The `DeepSeekHarness.Plugin.Behaviour` Contract
+### The `Yoke.Plugin.Behaviour` Contract
 Create a `.exs` or `.ex` file implementing the behaviour callbacks:
 
 ```elixir
 defmodule MyProject.Plugins.DatabaseValidator do
-  @behaviour DeepSeekHarness.Plugin.Behaviour
+  @behaviour Yoke.Plugin.Behaviour
 
   @impl true
   def name, do: "DatabaseValidator"
@@ -256,14 +256,14 @@ end
 ```
 
 ### Loading Plugins
-- **CLI Startup**: `dsh --plugin path/to/my_plugin.exs`
-- **Dynamic Hot-Reload**: Place the plugin file in `.dsh/plugins/` and run `/plugins reload` inside the REPL. Hot-reloading registers new tools without dropping your session state!
+- **CLI Startup**: `yoke --plugin path/to/my_plugin.exs`
+- **Dynamic Hot-Reload**: Place the plugin file in `.yoke/plugins/` and run `/plugins reload` inside the REPL. Hot-reloading registers new tools without dropping your session state!
 
 ---
 
 ## 6. Managing Scoped Rules, Custom Skills & Ragex MCP
 
-### 1. Scoped Prompt Rules (`.dsh/rules.json`)
+### 1. Scoped Prompt Rules (`.yoke/rules.json`)
 Persistent preamble rules steer agent behavior for specific scopes (`all`, `cr`, `commit`, or custom workflow scopes):
 
 ```bash
@@ -281,8 +281,8 @@ Persistent preamble rules steer agent behavior for specific scopes (`all`, `cr`,
 /rules delete 2
 ```
 
-### 2. Custom Skills (`.dsh/skills/`)
-Skills are modular instruction sets placed in `.dsh/skills/<skill_name>/SKILL.md` (or `~/.dsh/skills/`):
+### 2. Custom Skills (`.yoke/skills/`)
+Skills are modular instruction sets placed in `.yoke/skills/<skill_name>/SKILL.md` (or `~/.yoke/skills/`):
 
 ```markdown
 ---
@@ -298,10 +298,10 @@ When writing Ecto migrations:
 3. Never execute raw `execute("ALTER TABLE ...")` without safety timeouts.
 ```
 
-Invoke skills manually via `/skills ecto-migration-checker` or let DSH auto-activate them based on task context.
+Invoke skills manually via `/skills ecto-migration-checker` or let Yoke auto-activate them based on task context.
 
 ### 3. Ragex Code & Image Intelligence (`/ragex`)
-Mount **Ragex** to give DSH native AST and SCIP code intelligence:
+Mount **Ragex** to give Yoke native AST and SCIP code intelligence:
 - `mcp_ragex_grep` & `mcp_ragex_search_code`: SCIP indexed full-text & symbol code search.
 - `mcp_ragex_symbol_definition` & `mcp_ragex_symbol_references`: Exact cross-file symbol tracking.
 - `mcp_ragex_metaast_search`: AST structure pattern matching.
@@ -312,34 +312,34 @@ Mount **Ragex** to give DSH native AST and SCIP code intelligence:
 
 ## 7. The Iterative Feedback Loop: Fitting Expectations 100%
 
-To get DSH working exactly as your engineering team expects, follow this 4-step tuning cycle:
+To get Yoke working exactly as your engineering team expects, follow this 4-step tuning cycle:
 
 ```
     ┌───────────────────────────────────────────────────────────┐
     │ 1. Observe Behavior                                       │
-    │    Run DSH on real tasks. Watch tool calls and output.    │
+    │    Run Yoke on real tasks. Watch tool calls and output.    │
     └─────────────────────────────┬─────────────────────────────┘
                                   │
                                   ▼
     ┌───────────────────────────────────────────────────────────┐
     │ 2. Codify Guidelines                                      │
     │    • Add rules via `/rules add`                           │
-    │    • Refine `.dsh/practices/<lang>.lmml`                  │
+    │    • Refine `.yoke/practices/<lang>.lmml`                  │
     └─────────────────────────────┬─────────────────────────────┘
                                   │
                                   ▼
     ┌───────────────────────────────────────────────────────────┐
     │ 3. Automate Pipelines                                     │
-    │    • Tune workflow definitions (`.dsh/workflows/`)        │
-    │    • Add custom Elixir plugins (`.dsh/plugins/`)          │
+    │    • Tune workflow definitions (`.yoke/workflows/`)        │
+    │    • Add custom Elixir plugins (`.yoke/plugins/`)          │
     └─────────────────────────────┬─────────────────────────────┘
                                   │
                                   ▼
     ┌───────────────────────────────────────────────────────────┐
     │ 4. Snapshot & Replicate                                   │
-    │    Commit `.dsh/` to Git so your entire team shares       │
+    │    Commit `.yoke/` to Git so your entire team shares       │
     │    the exact same agent rules, practices, and workflows!  │
     └───────────────────────────────────────────────────────────┘
 ```
 
-By version-controlling `.dsh/` inside your git repository, every engineer on your team gets an AI agent that adheres to the exact same architectural standards, lint gates, and workflow pipelines!
+By version-controlling `.yoke/` inside your git repository, every engineer on your team gets an AI agent that adheres to the exact same architectural standards, lint gates, and workflow pipelines!

@@ -21,7 +21,7 @@ erl_crash.dump
 *.ez
 
 # Escript build output (built via "mix escript.build").
-/dsh_escript
+/yoke_escript
 
 # Ignore package tarball (built via "mix hex.build").
 oeditus_credo-*.tar
@@ -44,5 +44,5 @@ oeditus_credo-*.tar
 # Local Ragex knowledge-graph/dllb database for this project (generated data).
 /.ragex/
 
-# DeepSeek Harness local session checkpoints and config
-/.dsh/
+# Yoke local session checkpoints and config
+/.yoke/

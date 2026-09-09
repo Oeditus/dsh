@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.Workflow.PlanTest do
+defmodule Yoke.Workflow.PlanTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Workflow.Plan
+  alias Yoke.Workflow.Plan
 
   describe "draft/1,2" do
     test "returns a well-formed {:ok, plan_map} in offline/mock mode" do

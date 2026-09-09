@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.MCPServerManagerTest do
+defmodule Yoke.MCPServerManagerTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.MCP.ServerManager, as: MCPServerManager
+  alias Yoke.MCP.ServerManager, as: MCPServerManager
 
   @tag ragex: true
   test "discovers ragex directory path" do

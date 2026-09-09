@@ -1,22 +1,22 @@
-defmodule DeepSeekHarness.CLIReplTest do
+defmodule Yoke.CLIReplTest do
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.Brain.SessionSupervisor
-  alias DeepSeekHarness.CLI.Repl
+  alias Yoke.Brain.SessionSupervisor
+  alias Yoke.CLI.Repl
 
   setup do
     session_id = "repl_test_#{System.unique_integer([:positive])}"
     {:ok, session_pid} = SessionSupervisor.start_session(session_id: session_id)
-    prior_god = Application.get_env(:deep_seek_harness, :god_mode)
+    prior_god = Application.get_env(:yoke, :god_mode)
 
     on_exit(fn ->
       if prior_god != nil do
-        Application.put_env(:deep_seek_harness, :god_mode, prior_god)
+        Application.put_env(:yoke, :god_mode, prior_god)
       else
-        Application.delete_env(:deep_seek_harness, :god_mode)
+        Application.delete_env(:yoke, :god_mode)
       end
 
-      cfg_path = ".dsh/config.json"
+      cfg_path = ".yoke/config.json"
 
       if File.exists?(cfg_path) do
         case File.read(cfg_path) do
@@ -68,7 +68,7 @@ defmodule DeepSeekHarness.CLIReplTest do
   test "handles hands execution mode settings", %{session_pid: pid, session_id: id} do
     assert :continue = Repl.handle_input("/mode local", pid, id)
     assert :continue = Repl.handle_input("/mode remote hands@127.0.0.1", pid, id)
-    assert :continue = Repl.handle_input("/mode docker dsh_box", pid, id)
+    assert :continue = Repl.handle_input("/mode docker yoke_box", pid, id)
   end
 
   test "handles checkpoint and undo operations", %{session_pid: pid, session_id: id} do
@@ -109,10 +109,10 @@ defmodule DeepSeekHarness.CLIReplTest do
     session_pid: pid,
     session_id: id
   } do
-    # The /plan on|off handlers persist to the workspace .dsh/config.json
+    # The /plan on|off handlers persist to the workspace .yoke/config.json
     # (cwd "."), which would pollute the repo. Back up any existing file and
     # restore it afterwards to keep the workspace clean.
-    cfg_path = Path.join(File.cwd!(), ".dsh/config.json")
+    cfg_path = Path.join(File.cwd!(), ".yoke/config.json")
     backup_path = cfg_path <> ".repl_test_backup"
 
     existed? = File.exists?(cfg_path)
@@ -141,9 +141,9 @@ defmodule DeepSeekHarness.CLIReplTest do
     assert :continue = Repl.handle_input("/god status", pid, id)
     assert :continue = Repl.handle_input("/god", pid, id)
     assert :continue = Repl.handle_input("/god on", pid, id)
-    assert DeepSeekHarness.Config.god_mode?() == true
+    assert Yoke.Config.god_mode?() == true
     assert :continue = Repl.handle_input("/god off", pid, id)
-    assert DeepSeekHarness.Config.god_mode?() == false
+    assert Yoke.Config.god_mode?() == false
     assert :continue = Repl.handle_input("/god foo", pid, id)
     assert :continue = Repl.handle_input("/god on", pid, id)
   end

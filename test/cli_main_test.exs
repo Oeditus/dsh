@@ -1,7 +1,7 @@
-defmodule DeepSeekHarness.CLIMainTest do
+defmodule Yoke.CLIMainTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.CLI.Main
+  alias Yoke.CLI.Main
 
   test "parses --help flag without error" do
     assert :ok = Main.main(["--help"])

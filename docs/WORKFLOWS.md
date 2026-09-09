@@ -1,13 +1,13 @@
-# DeepSeek Harness (DSH) — Development Workflows
+# Yoke (Yoke) — Development Workflows
 
-DeepSeek Harness provides versatile agentic workflows for software engineering tasks.
+Yoke provides versatile agentic workflows for software engineering tasks.
 
 ---
 
 ## 1. Interactive REPL Mode
 Launch the interactive agent REPL:
 ```bash
-dsh
+yoke
 ```
 - **Slash Commands**: Use `/help`, `/stats`, `/tokens`, `/session`, `/git`, `/diff`, `/review`, `/commit`.
 - **Reference Files**: Attach context with `@file.ex`, `@file://path`, or `@https://domain.com/doc`.
@@ -18,7 +18,7 @@ dsh
 ## 2. One-Shot Command Execution
 Pass a prompt directly on the command line:
 ```bash
-dsh "Refactor lib/auth.ex to use JWT tokens"
+yoke "Refactor lib/auth.ex to use JWT tokens"
 ```
 Flags:
 - `--model deepseek-reasoner`: Switch to DeepSeek-R1 reasoning model.
@@ -58,7 +58,7 @@ Delegate complex or parallel sub-tasks to supervised background subagents:
 Run a named, customizable, multi-step process on top of the ordinary agent
 loop -- branch, describe the task, propose a non-clashing parallel split,
 require tests + docs, lint, and commit -- with the entire run persisted
-under `.dsh/workflows/`:
+under `.yoke/workflows/`:
 ```bash
 /workflow run elixir Add JWT-based session refresh to the auth module
 ```

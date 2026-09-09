@@ -1,6 +1,6 @@
-# DeepSeek Harness (DSH) — Cheat Sheet & Tactics Guide
+# Yoke (Yoke) — Cheat Sheet & Tactics Guide
 
-A comprehensive quick-reference guide for **DeepSeek Harness (`dsh`)**, covering CLI flags, REPL slash commands, prompt syntax (`@`, `!`), rule engine scoping, branch code reviews, local transcripts, and execution tactics. For a complete walkthrough of onboarding and customization, see the **[Getting Started Guide](GETTING_STARTED_GUIDE.md)**.
+A comprehensive quick-reference guide for **Yoke (`yoke`)**, covering CLI flags, REPL slash commands, prompt syntax (`@`, `!`), rule engine scoping, branch code reviews, local transcripts, and execution tactics. For a complete walkthrough of onboarding and customization, see the **[Getting Started Guide](GETTING_STARTED_GUIDE.md)**.
 
 ---
 
@@ -21,28 +21,28 @@ A comprehensive quick-reference guide for **DeepSeek Harness (`dsh`)**, covering
 
 ## 1. CLI Invocation & Command Line Flags
 
-Launch `dsh` from any directory in interactive REPL mode, one-shot mode, or resume mode:
+Launch `yoke` from any directory in interactive REPL mode, one-shot mode, or resume mode:
 
 ```bash
 # Launch interactive REPL mode (generates new UUID session)
-dsh
+yoke
 
 # Resume specific conversation ID across CLI restarts
-dsh -c df97eb34-cb33-4f21-bada-2e9c3cf75d46
-dsh --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
+yoke -c df97eb34-cb33-4f21-bada-2e9c3cf75d46
+yoke --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
 
 # One-shot mode with inline prompt
-dsh "Analyze project architecture in @mix.exs"
+yoke "Analyze project architecture in @mix.exs"
 
 # Specify model alias for one-shot execution
-dsh -m deepseek-coder "Write a binary search algorithm in @lib/search.ex"
-dsh --model deepseek-reasoner "Diagnose race condition in @lib/worker.ex"
+yoke -m deepseek-coder "Write a binary search algorithm in @lib/search.ex"
+yoke --model deepseek-reasoner "Diagnose race condition in @lib/worker.ex"
 
 # Run in background self-update mode
-dsh --update
+yoke --update
 
 # Display CLI help menu
-dsh --help
+yoke --help
 ```
 
 ### Supported Flags & Aliases
@@ -63,7 +63,7 @@ dsh --help
 
 ### `@` File & Context Reference Syntax
 Type `@` anywhere in user prompts to attach contents:
-- **File references**: `@mix.exs`, `@lib/deep_seek_harness/cli/line_editor.ex`
+- **File references**: `@mix.exs`, `@lib/yoke/cli/line_editor.ex`
 - **URI references**: `@https://raw.githubusercontent.com/...`
 - **Interactive File Picker**: Typing `@` in REPL triggers an interactive fuzzy file picker modal. It respects `.gitignore` rules (`git ls-files`) and strictly excludes `_build/`, `deps/`, `.elixir_ls/`, and `.git/`.
 
@@ -76,14 +76,14 @@ Prefix any line with `!` to execute a shell command directly without sending it 
 ```
 
 ### `!!` Pure Console Mode (Flip-Flop)
-Type `!!` on its own to flip `dsh` into **pure console mode**: a bare shell passthrough with no Brain/Hands actors, no LLM turns, and no slash-command dispatch in between. Every line you type executes directly via `sh -c`, with output streamed live and `cd` applied to `dsh`'s own working directory (like a real shell builtin). Type `!!` again (or `Ctrl+D`) to flip back into the normal harness REPL, picking up right where you left off -- no need to spawn a second terminal tab just to run a few plain commands:
+Type `!!` on its own to flip `yoke` into **pure console mode**: a bare shell passthrough with no Brain/Hands actors, no LLM turns, and no slash-command dispatch in between. Every line you type executes directly via `sh -c`, with output streamed live and `cd` applied to `yoke`'s own working directory (like a real shell builtin). Type `!!` again (or `Ctrl+D`) to flip back into the normal harness REPL, picking up right where you left off -- no need to spawn a second terminal tab just to run a few plain commands:
 ```
 my_app deepseek-chat > !!
-Flipped into pure console mode -- plain shell passthrough, no AI/tooling in between. Type !! again to return to DSH.
+Flipped into pure console mode -- plain shell passthrough, no AI/tooling in between. Type !! again to return to Yoke.
 console my_app $ cd ..
 console Proyectos $ ls
 console Proyectos $ !!
-Back to DSH -- pure console mode OFF.
+Back to Yoke -- pure console mode OFF.
 my_app deepseek-chat >
 ```
 
@@ -108,7 +108,7 @@ my_app deepseek-chat >
 | `/mcp [list\|add]` | Mount or inspect Model Context Protocol (MCP) servers | `/mcp list` |
 | `/ragex` | Mount Ragex MCP server for AST refactoring & SCIP semantic search | `/ragex` |
 | `/skills [name]` | List available skills or execute a skill instruction file | `/skills` |
-| `/update` | Refresh production OTP release in background (`dsh --update`) | `/update` |
+| `/update` | Refresh production OTP release in background (`yoke --update`) | `/update` |
 | `/commit <msg>` | Auto-stage all modified workspace files and create git commit | `/commit "feat: add user login"` |
 | `/cost` \| `/tokens` | Display token usage breakdown and cumulative session cost | `/cost` |
 | `/permissions` | Set tool execution safety mode (`auto` or `ask`) | `/permissions ask` |
@@ -118,7 +118,7 @@ my_app deepseek-chat >
 | `/clear` | Clear terminal output screen | `/clear` |
 | `/reset` | Reset conversation context, history, checkpoints, and clear screen | `/reset` |
 | `/help` | Print REPL help menu | `/help` |
-| `/exit` \| `/quit` | Exit DeepSeek Harness and print conversation resume banner | `/exit` |
+| `/exit` \| `/quit` | Exit Yoke and print conversation resume banner | `/exit` |
 
 ### Keyboard Shortcuts & Hotkeys
 - **`Ctrl+P`**: Toggle tool execution safety mode (`ask_confirm` ⇄ `auto_approve`)
@@ -131,7 +131,7 @@ my_app deepseek-chat >
 
 ## 4. Rule Engine & Scoping Tactics (`/rules`)
 
-The Rule Engine allows defining persistent prompt preambles and formatting constraints saved in `.dsh/rules.json`.
+The Rule Engine allows defining persistent prompt preambles and formatting constraints saved in `.yoke/rules.json`.
 
 ### Rule Scope Syntax
 - `all: <text>` — Injected into system preamble for **every** prompt turn.
@@ -193,22 +193,22 @@ Stages all workspace modifications and creates a git commit:
 ## 6. Session Management & Persistence (`-c`, `/resume`, Transcripts)
 
 ### Session State Persistence
-All REPL and one-shot sessions automatically save their GenServer state, snapshots, and conversation messages to `.dsh/sessions/<session_id>.lmml` -- an `lmml` narrative (a Markdown-superset markup for LLM conversations). The file is plain, self-contained Markdown that any Markdown viewer renders sensibly, yet round-trips every structured message losslessly through its inline-embed model. Legacy `.json` session files from earlier versions are still read transparently on resume.
+All REPL and one-shot sessions automatically save their GenServer state, snapshots, and conversation messages to `.yoke/sessions/<session_id>.lmml` -- an `lmml` narrative (a Markdown-superset markup for LLM conversations). The file is plain, self-contained Markdown that any Markdown viewer renders sensibly, yet round-trips every structured message losslessly through its inline-embed model. Legacy `.json` session files from earlier versions are still read transparently on resume.
 
 ### Exit Resume Banner
-Upon exit via `/exit`, `/quit`, or `Ctrl+D`, `dsh` prints your exact conversation UUID:
+Upon exit via `/exit`, `/quit`, or `Ctrl+D`, `yoke` prints your exact conversation UUID:
 ```
 Resume with -c (or command below):
-dsh --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
+yoke --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
 ```
 
 ### Local Transcripts Log Files
-Every session maintains dual JSONL transcript logs in `.dsh/sessions/<session_id>/`:
+Every session maintains dual JSONL transcript logs in `.yoke/sessions/<session_id>/`:
 - `transcript_full.jsonl`: Complete, untruncated step-by-step logs of all user prompts, tool calls, and model responses.
 - `transcript_compact.jsonl`: Token-efficient version with large binary/text outputs truncated for rapid grepping.
 
 ### Ambiguous Context Expansion & Issue Tracking
-`dsh` automatically detects ambiguous context references in prompts (such as *"error above"*, *"the build failure"*, or `@error`):
+`yoke` automatically detects ambiguous context references in prompts (such as *"error above"*, *"the build failure"*, or `@error`):
 - Resolves previous tool execution tracebacks from session history.
 - Maintains an internal Issue Tracker categorizing issues as `:open` or `:resolved`.
 - Automatically marks issues as `:resolved` when subsequent tool calls succeed.
@@ -285,7 +285,7 @@ Control where Hands tools execute:
 Runs a named, customizable, multi-step process on top of the ordinary agent
 loop -- branch, describe the task, propose a non-clashing parallel split,
 require tests + docs, lint, and commit -- with the entire run persisted under
-`.dsh/workflows/`. Full reference: [`docs/WORKFLOW_ENGINE.md`](WORKFLOW_ENGINE.md).
+`.yoke/workflows/`. Full reference: [`docs/WORKFLOW_ENGINE.md`](WORKFLOW_ENGINE.md).
 
 ```bash
 /workflow list                          # discover built-in + custom workflows
@@ -318,4 +318,4 @@ wasn't perfectly non-overlapping.
 | `Spacebar` | Toggle checkbox option in TUI Question Modals |
 | `Enter` | Submit input / confirm modal selection |
 | `Ctrl+C` | Cancel line input |
-| `Ctrl+D` | Signal EOF and exit `dsh` |
+| `Ctrl+D` | Signal EOF and exit `yoke` |

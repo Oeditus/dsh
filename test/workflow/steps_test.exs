@@ -1,16 +1,16 @@
-defmodule DeepSeekHarness.Workflow.StepsTest do
+defmodule Yoke.Workflow.StepsTest do
   use ExUnit.Case, async: true
 
-  alias DeepSeekHarness.Workflow.Steps.Branch
-  alias DeepSeekHarness.Workflow.Steps.Commit
-  alias DeepSeekHarness.Workflow.Steps.Prompt
-  alias DeepSeekHarness.Workflow.Steps.TaskDescription
-  alias DeepSeekHarness.Workflow.Steps.TaskSplit
+  alias Yoke.Workflow.Steps.Branch
+  alias Yoke.Workflow.Steps.Commit
+  alias Yoke.Workflow.Steps.Prompt
+  alias Yoke.Workflow.Steps.TaskDescription
+  alias Yoke.Workflow.Steps.TaskSplit
 
   describe "Steps.Branch.branch_name/2" do
     test "joins the prefix and run id into a deterministic branch name" do
-      assert Branch.branch_name("dsh/elixir", "elixir-1730000000-ab12cd") ==
-               "dsh/elixir/elixir-1730000000-ab12cd"
+      assert Branch.branch_name("yoke/elixir", "elixir-1730000000-ab12cd") ==
+               "yoke/elixir/elixir-1730000000-ab12cd"
     end
   end
 
@@ -80,7 +80,7 @@ defmodule DeepSeekHarness.Workflow.StepsTest do
     test "substitutes known placeholders from the workflow context" do
       context = %{
         task_description: "Add login",
-        branch: "dsh/elixir/run-1",
+        branch: "yoke/elixir/run-1",
         workflow: %{name: "elixir"},
         run_id: "elixir-1-ab"
       }
@@ -88,7 +88,7 @@ defmodule DeepSeekHarness.Workflow.StepsTest do
       template = "Task: {{task_description}} on {{branch}} for workflow {{workflow}} ({{run_id}})"
 
       assert Prompt.interpolate(template, context) ==
-               "Task: Add login on dsh/elixir/run-1 for workflow elixir (elixir-1-ab)"
+               "Task: Add login on yoke/elixir/run-1 for workflow elixir (elixir-1-ab)"
     end
 
     test "leaves unknown placeholders untouched" do

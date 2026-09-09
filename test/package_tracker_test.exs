@@ -1,12 +1,12 @@
-defmodule DeepSeekHarness.TaskEngine.PackageTrackerTest do
+defmodule Yoke.TaskEngine.PackageTrackerTest do
   @moduledoc """
-  Tests for `DeepSeekHarness.TaskEngine.PackageTracker`, the registry that
+  Tests for `Yoke.TaskEngine.PackageTracker`, the registry that
   surfaces long-running named parallel packages (subagents, workflow
   subtasks) to the status bar.
   """
   use ExUnit.Case, async: false
 
-  alias DeepSeekHarness.TaskEngine.PackageTracker
+  alias Yoke.TaskEngine.PackageTracker
 
   setup do
     # Ensure a clean slate between tests.

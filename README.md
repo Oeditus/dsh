@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="stuff/img/logos-500x500.png" width="220" alt="DeepSeek Harness logo" />
+  <img src="stuff/img/logos-500x500.png" width="220" alt="Yoke logo" />
 </p>
-<h1 align="center">DeepSeek Harness (DSH)</h1>
+<h1 align="center">Yoke (Yoke)</h1>
 <p align="center"><b>An agentic CLI coding harness for DeepSeek models, built on Elixir &amp; Erlang/OTP</b></p>
 <p align="center">
   <img alt="Elixir" src="https://img.shields.io/badge/elixir-1.19%2B-4B275F?logo=elixir&logoColor=white" />
@@ -30,35 +30,35 @@ Derived from **José Valim's architectural framework** for process-isolated AI a
 
 ## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Architectural Foundation: José Valim's Vision & DeepSeek Model Integration
 
-DeepSeek Harness (DSH) bridges modern LLM reasoning capabilities with Erlang/OTP's battle-tested fault tolerance and process concurrency model.
+Yoke (Yoke) bridges modern LLM reasoning capabilities with Erlang/OTP's battle-tested fault tolerance and process concurrency model.
 
 ### 1. José Valim's Actor-Driven Harness Architecture
-In traditional AI harnesses (typically single-threaded Node.js or Python runtimes), a tool execution error or unhandled exception can crash the entire interactive session, wiping out conversation context and active state. DSH implements José Valim's vision for agentic harnesses on the BEAM virtual machine:
+In traditional AI harnesses (typically single-threaded Node.js or Python runtimes), a tool execution error or unhandled exception can crash the entire interactive session, wiping out conversation context and active state. Yoke implements José Valim's vision for agentic harnesses on the BEAM virtual machine:
 
-- **Decoupled Brain & Hands Architecture**: The agent's cognitive state ("Brain") runs as an isolated GenServer process (`DeepSeekHarness.Brain.Session`). Tool execution ("Hands") is cleanly separated (`DeepSeekHarness.Hands.Executor`), allowing commands to execute locally, on remote Erlang nodes, or inside isolated Docker containers.
+- **Decoupled Brain & Hands Architecture**: The agent's cognitive state ("Brain") runs as an isolated GenServer process (`Yoke.Brain.Session`). Tool execution ("Hands") is cleanly separated (`Yoke.Hands.Executor`), allowing commands to execute locally, on remote Erlang nodes, or inside isolated Docker containers.
 - **Fault-Tolerant Supervision**: If a tool execution or sub-task process fails, the OTP supervision tree isolates the failure without impacting the user's interactive REPL session.
 - **Spatiotemporal Checkpoints & Instant Rollback**: State snapshots record conversation history, model configurations, and context state before each tool execution turn, providing temporal undo capabilities (`/undo`) and state branching.
 - **Live Hot-Code Tool Reloading**: Tools and plugins can be compiled, hot-swapped, or reloaded live (`/plugins reload`) without losing conversation memory or resetting GenServer process state.
 - **Lightweight Parallel Subagents**: Sub-tasks can be delegated to child session processes (`SessionSupervisor.start_session`), running parallel agentic loops concurrently across BEAM worker threads.
-- **Concurrent OTP Task Engine**: Batches of tool calls (`DeepSeekHarness.TaskEngine.Orchestrator`) run concurrently under a `Task.Supervisor`, with per-file write locks and a real-time "N running" badge on the status bar ruler.
+- **Concurrent OTP Task Engine**: Batches of tool calls (`Yoke.TaskEngine.Orchestrator`) run concurrently under a `Task.Supervisor`, with per-file write locks and a real-time "N running" badge on the status bar ruler.
 - **Distributed Erlang Node Clustering**: Hands execution can target the local host, a remote Erlang node (`/mode remote <node>`), or a Docker container (`/mode docker <id>`), decoupling where the Brain thinks from where the Hands act.
 
 ### 2. DeepSeek Model Selection & Best Practices
 
-DeepSeek Harness supports the full suite of official DeepSeek models, local open-weights models, and third-party API aggregators. Switch models anytime via `/model <alias>` or `--model <alias>`:
+Yoke supports the full suite of official DeepSeek models, local open-weights models, and third-party API aggregators. Switch models anytime via `/model <alias>` or `--model <alias>`:
 
-| Model | ID / Alias in DSH | Best Used For | Strengths & Characteristics |
+| Model | ID / Alias in Yoke | Best Used For | Strengths & Characteristics |
 | :--- | :--- | :--- | :--- |
 | **DeepSeek-V3** | `deepseek-chat`<br>`/model chat` | **Agentic workflows & multi-tool tasks** *(Default)* | 671B MoE model. Offers high general reasoning and **highest tool-calling precision** across multi-turn agent loops. |
 | **DeepSeek-Coder-V2.5** | `deepseek-coder`<br>`/model coder` | **Direct code generation, syntax completion & refactoring** | Trained specifically on **338+ programming languages**. Produces idiomatic Elixir/C++/Rust code with high precision on syntax and language conventions. |
-| **DeepSeek-R1** | `deepseek-reasoner`<br>`/model reasoner` | **Complex debugging & architectural design** | Reinforcement Learning (RL) reasoning model. DSH captures and streams `[DeepSeek-R1 Reasoning]` Chain-of-Thought output live before tool execution. |
+| **DeepSeek-R1** | `deepseek-reasoner`<br>`/model reasoner` | **Complex debugging & architectural design** | Reinforcement Learning (RL) reasoning model. Yoke captures and streams `[DeepSeek-R1 Reasoning]` Chain-of-Thought output live before tool execution. |
 
 ### 3. OpenRouter & Local Model Integration (Ollama, LM Studio, vLLM)
 
-While `dsh` defaults to the official remote **DeepSeek API** (`https://api.deepseek.com/chat/completions` with `deepseek-chat`), it provides native support for **OpenRouter** (including free models) and **Local Open-Weights Models** running via Ollama, LM Studio, vLLM, or LocalAI.
+While `yoke` defaults to the official remote **DeepSeek API** (`https://api.deepseek.com/chat/completions` with `deepseek-chat`), it provides native support for **OpenRouter** (including free models) and **Local Open-Weights Models** running via Ollama, LM Studio, vLLM, or LocalAI.
 
 #### A. OpenRouter Configuration
-Connect `dsh` to OpenRouter endpoints (such as `meta-llama/llama-3.3-70b-instruct:free`, `qwen/qwen-2.5-coder-32b-instruct:free`, or `deepseek/deepseek-r1:free`):
+Connect `yoke` to OpenRouter endpoints (such as `meta-llama/llama-3.3-70b-instruct:free`, `qwen/qwen-2.5-coder-32b-instruct:free`, or `deepseek/deepseek-r1:free`):
 
 - **Environment Variables**:
   ```bash
@@ -66,11 +66,11 @@ Connect `dsh` to OpenRouter endpoints (such as `meta-llama/llama-3.3-70b-instruc
   export DEEPSEEK_ENDPOINT="https://openrouter.ai/api/v1/chat/completions"
   export DEEPSEEK_MODEL="meta-llama/llama-3.3-70b-instruct:free"
 
-  dsh
+  yoke
   ```
 - **CLI Flags**:
   ```bash
-  dsh -e openrouter -m meta-llama/llama-3.3-70b-instruct:free
+  yoke -e openrouter -m meta-llama/llama-3.3-70b-instruct:free
   ```
 - **Live REPL Commands**:
   ```text
@@ -79,26 +79,26 @@ Connect `dsh` to OpenRouter endpoints (such as `meta-llama/llama-3.3-70b-instruc
   ```
 
 #### B. Local Models (Ollama, LM Studio, vLLM)
-Run `dsh` completely offline against local LLM servers without requiring API keys:
+Run `yoke` completely offline against local LLM servers without requiring API keys:
 
 - **Ollama (`http://localhost:11434`)**:
   ```bash
   # 1. Start Ollama model
   ollama run qwen2.5-coder:14b
 
-  # 2. Launch dsh with local endpoint
-  dsh -e ollama -m qwen2.5-coder:14b
+  # 2. Launch yoke with local endpoint
+  yoke -e ollama -m qwen2.5-coder:14b
   
   # Or via environment variables:
   export OLLAMA_HOST="http://localhost:11434"
   export DEEPSEEK_MODEL="qwen2.5-coder:14b"
-  dsh
+  yoke
   ```
 - **LM Studio (`http://localhost:1234`) & vLLM (`http://localhost:8000`)**:
   ```bash
-  dsh -e lmstudio -m qwen2.5-coder-32b-instruct
+  yoke -e lmstudio -m qwen2.5-coder-32b-instruct
   # OR
-  dsh -e vllm -m deepseek-r1-distill-qwen-32b
+  yoke -e vllm -m deepseek-r1-distill-qwen-32b
   ```
 - **Automatic Reasoning & `<think>` Tag Extraction**:
   Local models and OpenRouter models that return reasoning inside `<think>...</think>` tags are automatically parsed into `[Reasoning]` output.
@@ -108,15 +108,15 @@ Run `dsh` completely offline against local LLM servers without requiring API key
 
 ## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Key Features & Capabilities
 
-### 1. Persistent Session Resumption (`dsh -c <id>` & `/resume`)
+### 1. Persistent Session Resumption (`yoke -c <id>` & `/resume`)
 - Every session is assigned a unique UUID (e.g. `df97eb34-cb33-4f21-bada-2e9c3cf75d46`).
-- On exit, `dsh` prints your conversation ID:
+- On exit, `yoke` prints your conversation ID:
   ```
   Resume with -c (or command below):
-  dsh --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
+  yoke --conversation=df97eb34-cb33-4f21-bada-2e9c3cf75d46
   ```
-- Resume any conversation across restarts with `dsh -c <id>` or interactively pick past sessions in the REPL via `/resume`.
-- Conversations are stored in **`lmml`** (a Markdown-superset markup for LLM conversations) as `<session_id>.lmml` narratives under `.dsh/sessions/` — plain, self-contained Markdown that any Markdown viewer renders sensibly, yet round-trips every structured message losslessly through its inline-embed model. Legacy `.json` session files from earlier versions are still read transparently on resume.
+- Resume any conversation across restarts with `yoke -c <id>` or interactively pick past sessions in the REPL via `/resume`.
+- Conversations are stored in **`lmml`** (a Markdown-superset markup for LLM conversations) as `<session_id>.lmml` narratives under `.yoke/sessions/` — plain, self-contained Markdown that any Markdown viewer renders sensibly, yet round-trips every structured message losslessly through its inline-embed model. Legacy `.json` session files from earlier versions are still read transparently on resume.
 
 ### 2. Scoped Rule Engine (`/rules`)
 - Manage prompt preambles and execution constraints.
@@ -138,17 +138,17 @@ Run `dsh` completely offline against local LLM servers without requiring API key
 - Native integration with **Ragex** for SCIP code indexing, AST refactoring, and semantic code search (`/ragex`).
 
 ### 6. One-Command Global Installation & Updates
-- Install globally to `~/.local/bin/dsh` via `mix dsh.install` or `install.sh`.
-- Run `dsh` smoothly from **any** workspace directory.
-- Perform background in-place self-updates anytime using `dsh --update` or `/update`.
+- Install globally to `~/.local/bin/yoke` via `mix yoke.install` or `install.sh`.
+- Run `yoke` smoothly from **any** workspace directory.
+- Perform background in-place self-updates anytime using `yoke --update` or `/update`.
 
 ### 7. Pure Console Mode (`!!`)
-- Type `!!` on its own line to flip `dsh` completely out of the way: no Brain/Hands actors, no LLM turns, no slash-command dispatch -- just a bare `sh -c` passthrough with live-streamed output.
-- `cd` is applied to `dsh`'s own process, exactly like a real shell builtin, so navigation persists across commands.
+- Type `!!` on its own line to flip `yoke` completely out of the way: no Brain/Hands actors, no LLM turns, no slash-command dispatch -- just a bare `sh -c` passthrough with live-streamed output.
+- `cd` is applied to `yoke`'s own process, exactly like a real shell builtin, so navigation persists across commands.
 - Type `!!` again (or `Ctrl+D`) to flip straight back into the harness REPL -- no need to open a second terminal tab for a quick burst of plain shell commands.
 
 ### 8. Concurrent OTP Task Engine
-- Tool call batches execute concurrently under `DeepSeekHarness.TaskEngine.Orchestrator`, each in its own supervised `Task`, with automatic per-file write locking to prevent concurrent edit races.
+- Tool call batches execute concurrently under `Yoke.TaskEngine.Orchestrator`, each in its own supervised `Task`, with automatic per-file write locking to prevent concurrent edit races.
 - The idle status bar surfaces a live "N running" badge with per-task summaries whenever background tool work is in flight.
 
 ### 9. Native Elixir Static Analysis (`/linter`, `/lint`)
@@ -159,7 +159,7 @@ Run `dsh` completely offline against local LLM servers without requiring API key
 - Toggle UI features (`enable_autosuggestions`, `enable_syntax_highlighting`, `enable_context_gauge`, `compact_status_bar`, and more) with `/config toggle <key>`.
 
 ### 11. Customizable Multi-Step Workflows (`/workflow`)
-- Runs a named, customizable, multi-step process on top of the ordinary agent loop: branch off `main`/`master` (with a warn/confirm gate), summarize the task, propose a non-clashing split for parallel execution, require tests + docs, lint, and commit -- with the entire run persisted under `.dsh/workflows/`.
+- Runs a named, customizable, multi-step process on top of the ordinary agent loop: branch off `main`/`master` (with a warn/confirm gate), summarize the task, propose a non-clashing split for parallel execution, require tests + docs, lint, and commit -- with the entire run persisted under `.yoke/workflows/`.
 - Parallel subtasks each get their own isolated `git worktree` and branch, so concurrent agent processes can never clash on disk.
 - Ships with a built-in `elixir` workflow; scaffold your own with `/workflow init <name> [--from <template>]`. Full reference: [`docs/WORKFLOW_ENGINE.md`](docs/WORKFLOW_ENGINE.md).
 
@@ -172,21 +172,21 @@ Run `dsh` completely offline against local LLM servers without requiring API key
 ---
 
 <p align="center">
-  <img src="stuff/img/logos-128x128.png" width="64" alt="DeepSeek Harness" />
+  <img src="stuff/img/logos-128x128.png" width="64" alt="Yoke" />
 </p>
 
 ## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Installation & Setup
 
-This guide provides step-by-step instructions to get **DeepSeek Harness (`dsh`)** up and running on your system, along with its database backend **`dllb`** (which powers **Ragex** code analysis and knowledge graph indexing).
+This guide provides step-by-step instructions to get **Yoke (`yoke`)** up and running on your system, along with its database backend **`dllb`** (which powers **Ragex** code analysis and knowledge graph indexing).
 
 ---
 
 ### Prerequisites (What You Need First)
 
-Before installing `dsh` or `dllb`, ensure your machine has the following tools installed:
+Before installing `yoke` or `dllb`, ensure your machine has the following tools installed:
 
 1. **Elixir & Erlang/OTP**: 
-   - `dsh` is built using the Elixir programming language on top of the Erlang runtime engine.
+   - `yoke` is built using the Elixir programming language on top of the Erlang runtime engine.
    - **Required versions**: Elixir `1.19+` and Erlang/OTP `27+`.
    - *How to install*: Use your system package manager (e.g. `brew install elixir` on macOS or `sudo apt install elixir` on Ubuntu) or a version manager like [`asdf`](https://asdf-vm.com/) / [`mise`](https://mise.jdx.dev/).
 2. **Git**: Required to download the project source code.
@@ -196,16 +196,16 @@ Before installing `dsh` or `dllb`, ensure your machine has the following tools i
 
 ---
 
-### 1. Installing `dsh` (DeepSeek Harness)
+### 1. Installing `yoke` (Yoke)
 
 Choose **one** of the two installation methods below:
 
 #### Option A: Quick Automated Installer (Recommended)
 
-Run this single command in your terminal to automatically clone, build, and install `dsh`:
+Run this single command in your terminal to automatically clone, build, and install `yoke`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Oeditus/dsh/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Oeditus/yoke/main/install.sh | bash
 ```
 
 #### Option B: Manual Installation from Source
@@ -214,19 +214,19 @@ If you prefer installing manually from the source code:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Oeditus/dsh.git
-cd dsh
+git clone https://github.com/Oeditus/yoke.git
+cd yoke
 
 # 2. Fetch project dependencies
 mix deps.get
 
-# 3. Compile and install dsh globally to ~/.local/bin/dsh
-mix dsh.install
+# 3. Compile and install yoke globally to ~/.local/bin/yoke
+mix yoke.install
 ```
 
 #### Adding `~/.local/bin` to Your System `$PATH`
 
-After installation, ensure `~/.local/bin` is included in your shell path so you can run `dsh` from any terminal directory:
+After installation, ensure `~/.local/bin` is included in your shell path so you can run `yoke` from any terminal directory:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -239,7 +239,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ### 2. Installing `dllb` for `ragex` Code Indexing
 
 #### What is `dllb` and why do I need it?
-`dsh` features a powerful code intelligence engine called **Ragex** (`/ragex`). To store code symbol relationship graphs, perform fast full-text code searches, and cache project metadata across restarts, Ragex uses a lightweight, high-performance database server called **`dllb-server`** (written in Rust).
+`yoke` features a powerful code intelligence engine called **Ragex** (`/ragex`). To store code symbol relationship graphs, perform fast full-text code searches, and cache project metadata across restarts, Ragex uses a lightweight, high-performance database server called **`dllb-server`** (written in Rust).
 
 Installing `dllb-server` enables persistent, per-project database indexing.
 
@@ -277,7 +277,7 @@ cp target/release/dllb-server ~/.local/bin/
 
 #### How Ragex Finds `dllb-server` (Path Resolution Precedence)
 
-When you run `/ragex` inside `dsh`, Ragex looks for the `dllb-server` executable automatically in this order:
+When you run `/ragex` inside `yoke`, Ragex looks for the `dllb-server` executable automatically in this order:
 
 1. **Custom Environment Variable**: `DLLB_SERVER_BIN=/path/to/dllb-server`
 2. **System `$PATH`**: Directories in your `$PATH` (e.g. `~/.local/bin/dllb-server` or `/usr/local/bin/dllb-server`).
@@ -287,17 +287,17 @@ When you run `/ragex` inside `dsh`, Ragex looks for the `dllb-server` executable
 
 ### 3. Verifying Your Installation
 
-1. **Check `dsh` CLI**:
+1. **Check `yoke` CLI**:
    ```bash
-   dsh --version
+   yoke --version
    ```
-2. **Start `dsh` in any project**:
+2. **Start `yoke` in any project**:
    ```bash
    cd /path/to/your/project
-   dsh
+   yoke
    ```
 3. **Test Ragex Code Indexing**:
-   Inside the `dsh` REPL session, type:
+   Inside the `yoke` REPL session, type:
    ```text
    /ragex
    ```
@@ -307,27 +307,27 @@ When you run `/ragex` inside `dsh`, Ragex looks for the `dllb-server` executable
 
 ## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Getting Started & Customization Guide
 
-For complete, step-by-step instructions on onboarding, teaching DSH language idiomatics, driving multi-step workflows, writing custom plugins, setting scoped rules, and tuning the iterative feedback loop, refer to the full **[Getting Started & Customization Guide](docs/GETTING_STARTED_GUIDE.md)** (also accessible inside the REPL via `/guide` or `/docs`).
+For complete, step-by-step instructions on onboarding, teaching Yoke language idiomatics, driving multi-step workflows, writing custom plugins, setting scoped rules, and tuning the iterative feedback loop, refer to the full **[Getting Started & Customization Guide](docs/GETTING_STARTED_GUIDE.md)** (also accessible inside the REPL via `/guide` or `/docs`).
 
 ### Onboarding & Customization Summary
 
 1. **[Core Architecture & Quickstart](docs/GETTING_STARTED_GUIDE.md#1-core-architecture--quickstart)**
    - BEAM actor isolation (Brain GenServer decoupled from Hands executor).
-   - Basic CLI invocation (`dsh`, `dsh "prompt"`), inline `@file` / `@url` context references, and spatiotemporal `/checkpoint` & `/undo`.
-2. **[Teaching DSH New Language Idiomatics (`.dsh/practices`)](docs/GETTING_STARTED_GUIDE.md#2-teaching-dsh-new-language-idiomatics-dshpractices)**
-   - LMML practice manifests in `.dsh/practices/<language>.lmml`.
+   - Basic CLI invocation (`yoke`, `yoke "prompt"`), inline `@file` / `@url` context references, and spatiotemporal `/checkpoint` & `/undo`.
+2. **[Teaching Yoke New Language Idiomatics (`.yoke/practices`)](docs/GETTING_STARTED_GUIDE.md#2-teaching-yoke-new-language-idiomatics-yokepractices)**
+   - LMML practice manifests in `.yoke/practices/<language>.lmml`.
    - Run `/practices teach <language>` to automatically inspect exemplary codebases and extract team-specific coding conventions.
 3. **[Starting & Driving Workflows (`/workflow`)](docs/GETTING_STARTED_GUIDE.md#3-starting--driving-workflows-workflow)**
    - Run built-in engineering pipelines (`/workflow run elixir "<task>"`).
-   - Parallel subtasks execute in physically isolated Git worktrees under `.dsh/workflows/`.
+   - Parallel subtasks execute in physically isolated Git worktrees under `.yoke/workflows/`.
 4. **[Tuning Workflows for Your Team's Needs](docs/GETTING_STARTED_GUIDE.md#4-tuning-workflows-for-your-teams-needs)**
    - Scaffold custom JSON workflow definitions via `/workflow init my-team-flow --from elixir`.
 5. **[Writing Custom Elixir Plugins (`Plugin.Behaviour`)](docs/GETTING_STARTED_GUIDE.md#5-writing-custom-elixir-plugins-pluginbehaviour)**
-   - Expose domain-specific tools by implementing `DeepSeekHarness.Plugin.Behaviour` and hot-reloading live with `/plugins reload`.
+   - Expose domain-specific tools by implementing `Yoke.Plugin.Behaviour` and hot-reloading live with `/plugins reload`.
 6. **[Managing Scoped Rules, Custom Skills & Ragex MCP](docs/GETTING_STARTED_GUIDE.md#6-managing-scoped-rules-custom-skills--ragex-mcp)**
-   - Set prompt preambles via `/rules add <scope>:<text>`, add modular skill packages in `.dsh/skills/`, and mount `/ragex` for SCIP/AST symbol graph search.
+   - Set prompt preambles via `/rules add <scope>:<text>`, add modular skill packages in `.yoke/skills/`, and mount `/ragex` for SCIP/AST symbol graph search.
 7. **[The Iterative Feedback Loop: Fitting Expectations 100%](docs/GETTING_STARTED_GUIDE.md#7-the-iterative-feedback-loop-fitting-expectations-100)**
-   - 4-step tuning cycle: Observe → Codify (`.dsh/practices`) → Automate (`.dsh/workflows`) → Snapshot & Replicate (version control `.dsh/`).
+   - 4-step tuning cycle: Observe → Codify (`.yoke/practices`) → Automate (`.yoke/workflows`) → Snapshot & Replicate (version control `.yoke/`).
 
 ---
 
@@ -385,7 +385,7 @@ The full reference lives in [`docs/cheat_sheet.md`](docs/cheat_sheet.md); the es
 | `/workflow [list\|run\|status\|resume\|abort\|init]` | Run customizable multi-step workflows (branch, describe, split & parallelize, test/docs, lint, commit) |
 | `/config [style\|prompt\|toggle]` | Manage prompt styles and UI toggles |
 | `/env` | Show runtime environment (Elixir/OTP version, model, workspace) |
-| `/update` | Background self-update `dsh` release to latest code |
+| `/update` | Background self-update `yoke` release to latest code |
 
 #### Utility
 | Command | Action |
@@ -393,13 +393,13 @@ The full reference lives in [`docs/cheat_sheet.md`](docs/cheat_sheet.md); the es
 | `/cb` \| `/clipboard` | Copy latest assistant response to system clipboard |
 | `/clear` | Clear terminal output |
 | `/help` | Display help menu |
-| `/exit` \| `/quit` | Exit DeepSeek Harness and print conversation resume banner |
+| `/exit` \| `/quit` | Exit Yoke and print conversation resume banner |
 
 ---
 
 ## Configuration
 
-`dsh` reads settings from `~/.dsh/config.json` (global) merged with `.dsh/config.json` (per-workspace override, taking precedence). Notable keys:
+`yoke` reads settings from `~/.yoke/config.json` (global) merged with `.yoke/config.json` (per-workspace override, taking precedence). Notable keys:
 
 | Key | Default | Purpose |
 | :--- | :--- | :--- |
@@ -432,7 +432,7 @@ Manage most of these live from the REPL with `/config style <name>`, `/config pr
 MIT, see [`LICENSE`](LICENSE) -- with one additional restriction: this project may **not** be used, modified, or distributed as a harness, adapter, or integration layer for proprietary third-party models from OpenAI, Anthropic, or Google (e.g. GPT, Claude, Gemini), whether accessed directly or through an intermediary API, proxy, or aggregator.
 
 <p align="center">
-  <img src="stuff/img/logos-128x128.png" width="48" alt="DeepSeek Harness" />
+  <img src="stuff/img/logos-128x128.png" width="48" alt="Yoke" />
   <br />
-  <sub>DeepSeek Harness (DSH) -- Actors, Hot-Code Reloading, Distributed Brain/Hands, Spatiotemporal Checkpoints.</sub>
+  <sub>Yoke (Yoke) -- Actors, Hot-Code Reloading, Distributed Brain/Hands, Spatiotemporal Checkpoints.</sub>
 </p>
