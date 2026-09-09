@@ -5,6 +5,7 @@ defmodule DeepSeekHarness.Config do
 
   @default_config %{
     "model" => "deepseek-chat",
+    "endpoint" => "https://api.deepseek.com/chat/completions",
     # "auto_approve" | "ask_confirm"
     "permission_mode" => "ask_confirm",
     # Per-tool overrides: e.g. %{"bash" => "confirm", "read_file" => "allow"}

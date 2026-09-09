@@ -30,7 +30,7 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
   def chat_completion(messages, tools, opts \\ []) do
     config = build_config(opts)
 
-    if is_nil(config.api_key) or config.api_key == "" or config.mock == true do
+    if ((is_nil(config.api_key) or config.api_key == "") and not local_endpoint?(config.endpoint)) or config.mock == true do
       mock_response(messages, tools, config.model)
     else
       real_chat_completion(messages, tools, config)
@@ -52,10 +52,33 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
           false
       end
 
+    raw_endpoint =
+      opts[:endpoint] ||
+        System.get_env("DEEPSEEK_ENDPOINT") ||
+        System.get_env("OPENROUTER_BASE_URL") ||
+        System.get_env("OLLAMA_HOST") ||
+        @default_endpoint
+
+    normalized_endpoint = normalize_endpoint(raw_endpoint)
+
+    api_key =
+      cond do
+        opts[:api_key] ->
+          opts[:api_key]
+
+        local_endpoint?(normalized_endpoint) ->
+          "not-needed"
+
+        true ->
+          System.get_env("DEEPSEEK_API_KEY") ||
+            System.get_env("OPENROUTER_API_KEY") ||
+            System.get_env("LLM_API_KEY")
+      end
+
     %ClientConfig{
       model: opts[:model] || System.get_env("DEEPSEEK_MODEL") || @default_model,
-      api_key: opts[:api_key] || System.get_env("DEEPSEEK_API_KEY"),
-      endpoint: opts[:endpoint] || @default_endpoint,
+      api_key: api_key,
+      endpoint: normalized_endpoint,
       temperature: opts[:temperature] || 0.7,
       max_tokens: opts[:max_tokens],
       stream: opts[:stream] || false,
@@ -89,10 +112,23 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
         Map.put(body, "tools", formatted_tools)
       end
 
-    headers = [
-      {"Authorization", "Bearer #{config.api_key}"},
-      {"Content-Type", "application/json"}
-    ]
+    headers =
+      if is_binary(config.api_key) and config.api_key != "" and config.api_key != "not-needed" do
+        [{"Authorization", "Bearer #{config.api_key}"}, {"Content-Type", "application/json"}]
+      else
+        [{"Content-Type", "application/json"}]
+      end
+
+    headers =
+      if String.contains?(config.endpoint, "openrouter.ai") do
+        headers ++
+          [
+            {"HTTP-Referer", "https://github.com/dsh"},
+            {"X-Title", "dsh"}
+          ]
+      else
+        headers
+      end
 
     req_opts = [
       json: body,
@@ -152,9 +188,15 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
   end
 
   defp parse_choice(%{"message" => msg}, usage) do
-    content = Map.get(msg, "content")
-    reasoning_content = Map.get(msg, "reasoning_content")
+    raw_content = Map.get(msg, "content")
     tool_calls = Map.get(msg, "tool_calls") || []
+
+    {content, thinking_from_tags} = extract_thinking_tags(raw_content)
+
+    reasoning_content =
+      Map.get(msg, "reasoning_content") ||
+        Map.get(msg, "reasoning") ||
+        thinking_from_tags
 
     parsed_tool_calls =
       Enum.map(tool_calls, fn tc ->
@@ -189,6 +231,55 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
        usage: usage_map
      }}
   end
+
+  @doc "Normalizes an LLM API endpoint URL to ensure valid full chat completions path."
+  def normalize_endpoint(endpoint) when is_binary(endpoint) do
+    trimmed = String.trim(endpoint)
+
+    cond do
+      String.ends_with?(trimmed, "/chat/completions") ->
+        trimmed
+
+      String.ends_with?(trimmed, "/v1") or String.ends_with?(trimmed, "/v1/") ->
+        trimmed |> String.trim_trailing("/") |> Kernel.<>("/chat/completions")
+
+      String.contains?(trimmed, "api.deepseek.com") ->
+        trimmed |> String.trim_trailing("/") |> Kernel.<>("/chat/completions")
+
+      true ->
+        trimmed |> String.trim_trailing("/") |> Kernel.<>("/v1/chat/completions")
+    end
+  end
+
+  def normalize_endpoint(endpoint), do: endpoint
+
+  @doc "Returns true if an endpoint target URL is a local or loopback address."
+  def local_endpoint?(endpoint) when is_binary(endpoint) do
+    uri = URI.parse(endpoint)
+    host = uri.host || ""
+
+    host in ["localhost", "127.0.0.1", "0.0.0.0", "::1"] or
+      String.starts_with?(host, "192.168.") or
+      String.starts_with?(host, "10.") or
+      String.starts_with?(host, "172.") or
+      String.ends_with?(host, ".local")
+  end
+
+  def local_endpoint?(_), do: false
+
+  defp extract_thinking_tags(content) when is_binary(content) do
+    case Regex.run(~r/<think>(.*?)<\/think>/s, content) do
+      [full_match, think_body] ->
+        clean_content = String.replace(content, full_match, "") |> String.trim()
+        clean_think = String.trim(think_body)
+        {clean_content, if(clean_think == "", do: nil, else: clean_think)}
+
+      _ ->
+        {content, nil}
+    end
+  end
+
+  defp extract_thinking_tags(content), do: {content, nil}
 
   # Mock lookup patterns table (eliminates deep cond nesting)
   @mock_handlers [

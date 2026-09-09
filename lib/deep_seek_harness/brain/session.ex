@@ -92,6 +92,11 @@ defmodule DeepSeekHarness.Brain.Session do
     GenServer.call(pid, {:set_model, model}, :infinity)
   end
 
+  @doc "Sets the API endpoint URL for the session."
+  def set_endpoint(pid, endpoint) do
+    GenServer.call(pid, {:set_endpoint, endpoint}, :infinity)
+  end
+
   @doc "Sets permission mode (:auto_approve | :ask_confirm)."
   def set_permission_mode(pid, mode) do
     GenServer.call(pid, {:set_permission_mode, mode}, :infinity)
@@ -199,10 +204,21 @@ defmodule DeepSeekHarness.Brain.Session do
     state = %{
       session_id: session_id,
       model: opts[:model] || System.get_env("DEEPSEEK_MODEL") || "deepseek-chat",
+      endpoint:
+        opts[:endpoint] ||
+          System.get_env("DEEPSEEK_ENDPOINT") ||
+          System.get_env("OPENROUTER_BASE_URL") ||
+          System.get_env("OLLAMA_HOST") ||
+          Map.get(Config.load_config(cwd), "endpoint", "https://api.deepseek.com/chat/completions"),
       permission_mode: opts[:permission_mode] || :ask_confirm,
       sandbox_workspace: opts[:sandbox_workspace] || false,
       session_tool_permissions: %{},
-      api_key: opts[:api_key] || System.get_env("DEEPSEEK_API_KEY"),
+      api_key:
+        opts[:api_key] ||
+          System.get_env("DEEPSEEK_API_KEY") ||
+          System.get_env("OPENROUTER_API_KEY") ||
+          System.get_env("LLM_API_KEY") ||
+          Map.get(Config.load_config(cwd), "api_key"),
       hands: %HandsExecutor{mode: :local},
       messages: initial_messages,
       tools: tools,
@@ -354,6 +370,12 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   @impl true
+  def handle_call({:set_endpoint, endpoint}, _from, state) do
+    new_state = %{state | endpoint: endpoint}
+    {:reply, {:ok, endpoint}, new_state}
+  end
+
+  @impl true
   def handle_call({:set_permission_mode, mode}, _from, state) do
     new_state = %{state | permission_mode: mode}
     {:reply, {:ok, mode}, new_state}
@@ -374,7 +396,7 @@ defmodule DeepSeekHarness.Brain.Session do
 
   @impl true
   def handle_call(:compact_context, _from, state) do
-    opts = [model: state.model, api_key: state.api_key]
+    opts = [model: state.model, api_key: state.api_key, endpoint: state.endpoint]
 
     opts =
       if is_integer(state.max_tokens) and state.max_tokens > 0 do
@@ -916,7 +938,7 @@ defmodule DeepSeekHarness.Brain.Session do
   end
 
   defp run_agent_loop(state, depth) do
-    opts = [model: state.model, api_key: state.api_key]
+    opts = [model: state.model, api_key: state.api_key, endpoint: state.endpoint]
 
     opts =
       if is_integer(state.max_tokens) and state.max_tokens > 0 do

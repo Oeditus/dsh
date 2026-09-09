@@ -52,6 +52,57 @@ DeepSeek Harness supports the full suite of official DeepSeek models, local open
 | **DeepSeek-Coder-V2.5** | `deepseek-coder`<br>`/model coder` | **Direct code generation, syntax completion & refactoring** | Trained specifically on **338+ programming languages**. Produces idiomatic Elixir/C++/Rust code with high precision on syntax and language conventions. |
 | **DeepSeek-R1** | `deepseek-reasoner`<br>`/model reasoner` | **Complex debugging & architectural design** | Reinforcement Learning (RL) reasoning model. DSH captures and streams `[DeepSeek-R1 Reasoning]` Chain-of-Thought output live before tool execution. |
 
+### 3. OpenRouter & Local Model Integration (Ollama, LM Studio, vLLM)
+
+While `dsh` defaults to the official remote **DeepSeek API** (`https://api.deepseek.com/chat/completions` with `deepseek-chat`), it provides native support for **OpenRouter** (including free models) and **Local Open-Weights Models** running via Ollama, LM Studio, vLLM, or LocalAI.
+
+#### A. OpenRouter Configuration
+Connect `dsh` to OpenRouter endpoints (such as `meta-llama/llama-3.3-70b-instruct:free`, `qwen/qwen-2.5-coder-32b-instruct:free`, or `deepseek/deepseek-r1:free`):
+
+- **Environment Variables**:
+  ```bash
+  export OPENROUTER_API_KEY="sk-or-v1-..."
+  export DEEPSEEK_ENDPOINT="https://openrouter.ai/api/v1/chat/completions"
+  export DEEPSEEK_MODEL="meta-llama/llama-3.3-70b-instruct:free"
+
+  dsh
+  ```
+- **CLI Flags**:
+  ```bash
+  dsh -e openrouter -m meta-llama/llama-3.3-70b-instruct:free
+  ```
+- **Live REPL Commands**:
+  ```text
+  /endpoint openrouter
+  /model openrouter-free
+  ```
+
+#### B. Local Models (Ollama, LM Studio, vLLM)
+Run `dsh` completely offline against local LLM servers without requiring API keys:
+
+- **Ollama (`http://localhost:11434`)**:
+  ```bash
+  # 1. Start Ollama model
+  ollama run qwen2.5-coder:14b
+
+  # 2. Launch dsh with local endpoint
+  dsh -e ollama -m qwen2.5-coder:14b
+  
+  # Or via environment variables:
+  export OLLAMA_HOST="http://localhost:11434"
+  export DEEPSEEK_MODEL="qwen2.5-coder:14b"
+  dsh
+  ```
+- **LM Studio (`http://localhost:1234`) & vLLM (`http://localhost:8000`)**:
+  ```bash
+  dsh -e lmstudio -m qwen2.5-coder-32b-instruct
+  # OR
+  dsh -e vllm -m deepseek-r1-distill-qwen-32b
+  ```
+- **Automatic Reasoning & `<think>` Tag Extraction**:
+  Local models and OpenRouter models that return reasoning inside `<think>...</think>` tags are automatically parsed into `[Reasoning]` output.
+- **API Key Bypass**: Local loopback endpoints (`localhost`, `127.0.0.1`, `::1`, `192.168.*`) do not require API keys and automatically bypass offline mock mode.
+
 ---
 
 ## <img src="stuff/img/logos-48x48.png" width="20" valign="middle" /> Key Features & Capabilities
@@ -314,7 +365,8 @@ The full reference lives in [`docs/cheat_sheet.md`](docs/cheat_sheet.md); the es
 #### Model, Execution & Rules
 | Command | Action |
 | :--- | :--- |
-| `/model [chat\|coder\|reasoner]` | Switch active model (`deepseek-chat`, `deepseek-coder`, `deepseek-reasoner`) |
+| `/model [chat\|coder\|reasoner\|openrouter-free\|ollama-qwen]` | Switch active model (`deepseek-chat`, `deepseek-coder`, `deepseek-reasoner`, OpenRouter/Ollama shortcuts, or custom model string) |
+| `/endpoint [url\|default\|openrouter\|ollama\|lmstudio]` | Switch API base endpoint URL dynamically |
 | `/mode [local\|remote\|docker]` | Set Hands execution target |
 | `/sandbox [on\|off]` | Restrict file references & tools to the workspace directory |
 | `/permissions [auto\|ask]` | Set tool execution safety mode |
@@ -350,6 +402,8 @@ The full reference lives in [`docs/cheat_sheet.md`](docs/cheat_sheet.md); the es
 
 | Key | Default | Purpose |
 | :--- | :--- | :--- |
+| `model` | `"deepseek-chat"` | Default LLM model identifier |
+| `endpoint` | `"https://api.deepseek.com/chat/completions"` | LLM API base endpoint URL (DeepSeek, OpenRouter, Ollama, etc.) |
 | `prompt_style` | `"starship"` | Prompt layout: `starship`, `extended`, `compact`, or `minimal` |
 | `permission_mode` | `"ask_confirm"` | Tool execution safety mode (`ask_confirm` or `auto_approve`) |
 | `sandbox_workspace` | `false` | Restrict file references & tools to the workspace directory |

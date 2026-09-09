@@ -23,6 +23,7 @@ defmodule DeepSeekHarness.CLI.Main do
         switches: [
           prompt: :string,
           model: :string,
+          endpoint: :string,
           conversation: :string,
           resume: :string,
           node: :string,
@@ -34,6 +35,7 @@ defmodule DeepSeekHarness.CLI.Main do
         aliases: [
           p: :prompt,
           m: :model,
+          e: :endpoint,
           c: :conversation,
           r: :resume,
           u: :update,
@@ -110,7 +112,16 @@ defmodule DeepSeekHarness.CLI.Main do
     model = opts[:model] || "deepseek-chat"
     session_id = opts[:conversation] || opts[:resume] || generate_uuid()
 
-    {:ok, session_pid} = SessionSupervisor.start_session(session_id: session_id, model: model)
+    session_opts = [session_id: session_id, model: model]
+
+    session_opts =
+      if opts[:endpoint] do
+        Keyword.put(session_opts, :endpoint, opts[:endpoint])
+      else
+        session_opts
+      end
+
+    {:ok, session_pid} = SessionSupervisor.start_session(session_opts)
 
     if opts[:plugin] do
       DeepSeekHarness.Plugin.Loader.load_file(opts[:plugin])

@@ -42,4 +42,30 @@ defmodule DeepSeekHarness.DeepSeekAPITest do
       assert is_binary(content)
     end
   end
+
+  describe "OpenRouter and local model helpers" do
+    test "normalize_endpoint/1 appends /chat/completions or /v1/chat/completions correctly" do
+      assert DeepSeekAPI.normalize_endpoint("https://api.deepseek.com/chat/completions") ==
+               "https://api.deepseek.com/chat/completions"
+
+      assert DeepSeekAPI.normalize_endpoint("https://openrouter.ai/api/v1") ==
+               "https://openrouter.ai/api/v1/chat/completions"
+
+      assert DeepSeekAPI.normalize_endpoint("http://localhost:11434") ==
+               "http://localhost:11434/v1/chat/completions"
+    end
+
+    test "local_endpoint?/1 identifies localhost and local IP addresses" do
+      assert DeepSeekAPI.local_endpoint?("http://localhost:11434/v1/chat/completions") == true
+      assert DeepSeekAPI.local_endpoint?("http://127.0.0.1:1234/v1/chat/completions") == true
+      assert DeepSeekAPI.local_endpoint?("https://openrouter.ai/api/v1/chat/completions") == false
+      assert DeepSeekAPI.local_endpoint?("https://api.deepseek.com/chat/completions") == false
+    end
+
+    test "build_config/1 automatically sets dummy api_key for local endpoints" do
+      cfg = DeepSeekAPI.build_config(endpoint: "http://localhost:11434")
+      assert cfg.endpoint == "http://localhost:11434/v1/chat/completions"
+      assert cfg.api_key == "not-needed"
+    end
+  end
 end

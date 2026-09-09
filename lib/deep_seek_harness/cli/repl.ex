@@ -24,11 +24,19 @@ defmodule DeepSeekHarness.CLI.Repl do
       opts[:conversation] || opts[:resume] || opts[:session_id] ||
         DeepSeekHarness.CLI.Main.generate_uuid()
 
-    {:ok, session_pid} =
-      SessionSupervisor.start_session(
-        session_id: session_id,
-        model: opts[:model] || "deepseek-chat"
-      )
+    session_opts = [
+      session_id: session_id,
+      model: opts[:model] || "deepseek-chat"
+    ]
+
+    session_opts =
+      if opts[:endpoint] do
+        Keyword.put(session_opts, :endpoint, opts[:endpoint])
+      else
+        session_opts
+      end
+
+    {:ok, session_pid} = SessionSupervisor.start_session(session_opts)
 
     IO.puts(Formatter.format_info("Brain actor spawned for session '#{session_id}'"))
     IO.puts(Formatter.format_success(DeepSeekHarness.report_serving_processes()))
@@ -1077,15 +1085,48 @@ defmodule DeepSeekHarness.CLI.Repl do
         "v4" -> "deepseek-v4-flash-vision-exp"
         "openrouter-r1" -> "deepseek/deepseek-r1"
         "openrouter-v3" -> "deepseek/deepseek-chat"
+        "openrouter-free" -> "meta-llama/llama-3.3-70b-instruct:free"
+        "openrouter-llama" -> "meta-llama/llama-3.3-70b-instruct:free"
+        "openrouter-qwen" -> "qwen/qwen-2.5-coder-32b-instruct:free"
+        "openrouter-gemini" -> "google/gemini-2.0-flash-lite-preview-02-05:free"
         "siliconflow-r1" -> "deepseek-ai/DeepSeek-R1"
         "siliconflow-v3" -> "deepseek-ai/DeepSeek-V3"
         "together-r1" -> "deepseek-ai/DeepSeek-R1"
         "ollama-r1" -> "deepseek-r1:70b"
+        "ollama-qwen" -> "qwen2.5-coder:14b"
+        "ollama-llama" -> "llama3.3"
         other -> other
       end
 
     {:ok, current} = Session.set_model(session_pid, target_model)
     IO.puts(Formatter.format_success("Switched model to '#{current}'"))
+    :continue
+  end
+
+  def handle_input("/endpoint " <> target, session_pid, _session_id) do
+    target_endpoint =
+      case String.trim(target) do
+        "default" -> "https://api.deepseek.com/chat/completions"
+        "deepseek" -> "https://api.deepseek.com/chat/completions"
+        "openrouter" -> "https://openrouter.ai/api/v1/chat/completions"
+        "ollama" -> "http://localhost:11434/v1/chat/completions"
+        "lmstudio" -> "http://localhost:1234/v1/chat/completions"
+        "vllm" -> "http://localhost:8000/v1/chat/completions"
+        other -> other
+      end
+
+    {:ok, current} = Session.set_endpoint(session_pid, target_endpoint)
+    IO.puts(Formatter.format_success("Switched endpoint to '#{current}'"))
+    :continue
+  end
+
+  def handle_input("/endpoint", _session_pid, _session_id) do
+    IO.puts(
+      Formatter.format_error(
+        "Usage: /endpoint <url|default|deepseek|openrouter|ollama|lmstudio|vllm>"
+      )
+    )
+
     :continue
   end
 

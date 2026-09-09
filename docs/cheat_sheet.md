@@ -215,21 +215,30 @@ Every session maintains dual JSONL transcript logs in `.dsh/sessions/<session_id
 
 ---
 
-## 7. Model Selection Strategy (`/model`)
+## 7. Model & Endpoint Selection Strategy (`/model`, `/endpoint`)
 
-Switch model architectures on the fly during a session:
+Switch model architectures or LLM providers on the fly during a session:
 
 ```bash
 /model chat       # Switch to DeepSeek-V3 (Default agentic model)
 /model coder      # Switch to DeepSeek-Coder-V2.5 (Idiomatic code writing)
 /model reasoner   # Switch to DeepSeek-R1 (Deep chain-of-thought debugging)
+
+# OpenRouter & Local Model shortcuts
+/endpoint openrouter    # Switch endpoint to OpenRouter API
+/model openrouter-free  # Switch to meta-llama/llama-3.3-70b-instruct:free
+
+/endpoint ollama        # Switch endpoint to local Ollama (http://localhost:11434)
+/model ollama-qwen      # Switch to local qwen2.5-coder:14b
 ```
 
-| Scenario | Recommended Model | Rationale |
+| Scenario | Recommended Model / Provider | Rationale |
 | :--- | :--- | :--- |
 | **Multi-turn file editing & bash commands** | `deepseek-chat` | Highest tool call precision and execution reliability |
 | **Writing complex algorithms & tests** | `deepseek-coder` | Trained on 338+ languages; idiomatic syntax generation |
 | **Diagnosing stack traces & deadlocks** | `deepseek-reasoner` | Streams live `[DeepSeek-R1 Reasoning]` thoughts before execution |
+| **Open-source & Free AI Models** | OpenRouter (`/endpoint openrouter`) | Free tier access to Llama 3.3, Qwen 2.5 Coder, Gemini 2.0 |
+| **Offline & Air-gapped Execution** | Local Ollama / LM Studio (`/endpoint ollama`) | Complete privacy, offline tool execution without API key requirements |
 
 ---
 
