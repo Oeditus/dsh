@@ -9,12 +9,12 @@ defmodule Yoke.MCP.ServerManager do
   use GenServer
   require Logger
 
-  alias Yoke.Config
-  alias Yoke.MCP.Client, as: MCPClient
-  alias Yoke.Plugin.Loader, as: PluginLoader
   alias Ragex.Dllb.ProjectManager, as: DllbPM
   alias Ragex.MCP.Handlers.Tools, as: MCPTools
   alias Ragex.Store.Backend.Dllb, as: DllbStore
+  alias Yoke.Config, as: Config
+  alias Yoke.MCP.Client, as: MCPClient
+  alias Yoke.Plugin.Loader, as: PluginLoader
 
   @name __MODULE__
 

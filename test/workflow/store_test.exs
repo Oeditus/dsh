@@ -5,7 +5,9 @@ defmodule Yoke.Workflow.StoreTest do
   alias Yoke.Workflow.Store
 
   setup do
-    cwd = Path.join(System.tmp_dir!(), "yoke_workflow_store_#{System.unique_integer([:positive])}")
+    cwd =
+      Path.join(System.tmp_dir!(), "yoke_workflow_store_#{System.unique_integer([:positive])}")
+
     File.mkdir_p!(cwd)
     on_exit(fn -> File.rm_rf(cwd) end)
 

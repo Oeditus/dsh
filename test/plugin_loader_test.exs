@@ -40,7 +40,10 @@ defmodule Yoke.PluginLoaderTest do
 
   test "read_files reports a missing file inline without failing the others" do
     tmp_dir =
-      Path.join(System.tmp_dir!(), "yoke_read_files_missing_#{System.unique_integer([:positive])}")
+      Path.join(
+        System.tmp_dir!(),
+        "yoke_read_files_missing_#{System.unique_integer([:positive])}"
+      )
 
     File.mkdir_p!(tmp_dir)
     on_exit(fn -> File.rm_rf(tmp_dir) end)

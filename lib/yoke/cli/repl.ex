@@ -560,9 +560,7 @@ defmodule Yoke.CLI.Repl do
     t = String.trim(topic)
     {:ok, sweep_fmt, prompt} = Yoke.Sparring.prepare_sparring(t, mode: :adversarial)
 
-    IO.puts(
-      "\n" <> Yoke.Sparring.format_spar_start(t, :adversarial, sweep_fmt) <> "\n"
-    )
+    IO.puts("\n" <> Yoke.Sparring.format_spar_start(t, :adversarial, sweep_fmt) <> "\n")
 
     case Session.send_user_message(session_pid, prompt) do
       {:ok, response} ->
