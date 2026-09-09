@@ -30,7 +30,8 @@ defmodule DeepSeekHarness.Client.DeepSeekAPI do
   def chat_completion(messages, tools, opts \\ []) do
     config = build_config(opts)
 
-    if ((is_nil(config.api_key) or config.api_key == "") and not local_endpoint?(config.endpoint)) or config.mock == true do
+    if ((is_nil(config.api_key) or config.api_key == "") and not local_endpoint?(config.endpoint)) or
+         config.mock == true do
       mock_response(messages, tools, config.model)
     else
       real_chat_completion(messages, tools, config)

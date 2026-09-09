@@ -209,7 +209,11 @@ defmodule DeepSeekHarness.Brain.Session do
           System.get_env("DEEPSEEK_ENDPOINT") ||
           System.get_env("OPENROUTER_BASE_URL") ||
           System.get_env("OLLAMA_HOST") ||
-          Map.get(Config.load_config(cwd), "endpoint", "https://api.deepseek.com/chat/completions"),
+          Map.get(
+            Config.load_config(cwd),
+            "endpoint",
+            "https://api.deepseek.com/chat/completions"
+          ),
       permission_mode: opts[:permission_mode] || :ask_confirm,
       sandbox_workspace: opts[:sandbox_workspace] || false,
       session_tool_permissions: %{},
