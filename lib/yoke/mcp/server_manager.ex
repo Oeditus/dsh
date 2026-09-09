@@ -586,7 +586,6 @@ defmodule Yoke.MCP.ServerManager do
         env_path,
         Path.expand("../ragex", target_start),
         Path.expand("./ragex", target_start),
-        "/opt/Proyectos/Oeditus/ragex",
         Path.expand("~/Proyectos/Oeditus/ragex", target_start),
         target_start
       ]

@@ -234,7 +234,7 @@ defmodule Yoke.Sweep do
       Enum.find_value(config_paths, fn cfg_path ->
         with true <- File.exists?(cfg_path),
              {:ok, body} <- File.read(cfg_path),
-             {:ok, json} <- Jason.decode(body),
+             {:ok, json} <- Yoke.Json.decode(body),
              vault_root when is_binary(vault_root) and vault_root != "" <- json["vault_root"] do
           if File.dir?(vault_root), do: vault_root, else: nil
         else

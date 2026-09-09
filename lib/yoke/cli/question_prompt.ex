@@ -2,7 +2,7 @@ defmodule Yoke.CLI.QuestionPrompt do
   @moduledoc """
   Interactive TUI Question Modal & User Feedback UI for Yoke.
 
-  Renders Warp / AGY styled terminal menus for asking single-choice or
+  Renders Warp-styled terminal menus for asking single-choice or
   multi-choice questions to the user during agent execution.
   """
   alias Yoke.CLI.Formatter
@@ -308,7 +308,7 @@ defmodule Yoke.CLI.QuestionPrompt do
   # ---------------------------------------------------------------------
 
   def format_answer(question, %{cancelled: true}) do
-    Jason.encode!(%{
+    Yoke.Json.encode!(%{
       "question" => question,
       "status" => "cancelled",
       "selected_options" => [],
@@ -317,7 +317,7 @@ defmodule Yoke.CLI.QuestionPrompt do
   end
 
   def format_answer(question, %{selected: selected, custom: custom}) when is_binary(custom) do
-    Jason.encode!(%{
+    Yoke.Json.encode!(%{
       "question" => question,
       "status" => "answered",
       "selected_options" => selected,
@@ -326,7 +326,7 @@ defmodule Yoke.CLI.QuestionPrompt do
   end
 
   def format_answer(question, %{selected: selected}) when is_list(selected) do
-    Jason.encode!(%{
+    Yoke.Json.encode!(%{
       "question" => question,
       "status" => "answered",
       "selected_options" => selected,

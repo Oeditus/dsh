@@ -98,7 +98,7 @@ defmodule Yoke.MCP.Client do
 
   @impl true
   def handle_info({port, {:data, {:line, line}}}, %{port: port} = state) do
-    case Jason.decode(String.trim(line)) do
+    case Yoke.Json.decode(String.trim(line)) do
       {:ok, %{"id" => id, "result" => result}} when not is_nil(id) ->
         case Map.pop(state.pending_requests, id) do
           {from, new_pending} when not is_nil(from) ->
@@ -160,7 +160,7 @@ defmodule Yoke.MCP.Client do
       "params" => params
     }
 
-    encoded = Jason.encode!(payload) <> "\n"
+    encoded = Yoke.Json.encode!(payload) <> "\n"
     Port.command(state.port, encoded)
     state
   end

@@ -70,7 +70,7 @@ defmodule Yoke.Brain.SessionLmml do
     as inline embeds below; the role headings are a human-readable view.
 
     @@@#{@manifest_name}
-    #{escape_json(Jason.encode!(manifest, pretty: true))}
+    #{escape_json(Yoke.Json.encode!(manifest, pretty: true))}
     @@@
     """
 
@@ -87,7 +87,7 @@ defmodule Yoke.Brain.SessionLmml do
         #{text}
 
         @@@#{@message_prefix}#{idx}#{@message_suffix}
-        #{escape_json(Jason.encode!(msg))}
+        #{escape_json(Yoke.Json.encode!(msg))}
         @@@
         """
       end)
@@ -141,8 +141,9 @@ defmodule Yoke.Brain.SessionLmml do
   # Fix: before a JSON payload is written into an embed, escape every literal
   # `@@@` as `\u0040\u0040\u0040` (the valid JSON unicode escape for `@`). The
   # embed content then contains no delimiter, so parsing is safe; and because
-  # `Jason.decode/1` resolves `\u0040` back to `@` automatically, a
-  # decode/load round-trip is lossless with NO decode-side change needed.
+  # `JSON.decode/1` (via `Yoke.Json.decode/1`) resolves `\u0040` back to `@`
+  # automatically, a decode/load round-trip is lossless with NO decode-side
+  # change needed.
   defp escape_json(json) when is_binary(json) do
     String.replace(json, "@@@", "\\u0040\\u0040\\u0040")
   end
@@ -214,7 +215,7 @@ defmodule Yoke.Brain.SessionLmml do
         end
       end)
       |> Enum.map(fn [_, _name, content] ->
-        case Jason.decode(content) do
+        case Yoke.Json.decode(content) do
           {:ok, msg} -> msg
           _ -> %{}
         end
@@ -225,7 +226,7 @@ defmodule Yoke.Brain.SessionLmml do
         {:error, "Regex fallback failed: no manifest.json embed found in narrative."}
 
       json_str ->
-        case Jason.decode(json_str) do
+        case Yoke.Json.decode(json_str) do
           {:ok, manifest} ->
             {:ok, Map.merge(manifest, %{"messages" => messages})}
 
@@ -353,7 +354,7 @@ defmodule Yoke.Brain.SessionLmml do
     |> Enum.reduce_while({:ok, []}, fn embed, {:ok, acc} ->
       case Bundle.embed(bundle, embed.name) do
         {:ok, content} ->
-          case Jason.decode(content) do
+          case Yoke.Json.decode(content) do
             {:ok, msg} when is_map(msg) -> {:cont, {:ok, acc ++ [msg]}}
             _ -> {:halt, {:error, {:invalid_message_embed, embed.name}}}
           end

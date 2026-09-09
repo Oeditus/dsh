@@ -280,7 +280,7 @@ defmodule Yoke.Practices do
   defp extract_manifest_json(content) do
     case Regex.run(~r/@@@manifest\.json\s*\n(.*?)\n\s*@@@/s, content) do
       [_, json_str] ->
-        case Jason.decode(json_str) do
+        case Yoke.Json.decode(json_str) do
           {:ok, map} when is_map(map) -> map
           _ -> %{}
         end
@@ -365,7 +365,7 @@ defmodule Yoke.Practices do
     lang_title = String.capitalize(language)
     items_text = Enum.map_join(items, "\n", fn item -> "- #{item}" end)
 
-    manifest_json = Jason.encode!(manifest, pretty: true)
+    manifest_json = Yoke.Json.encode!(manifest, pretty: true)
 
     """
     # Good Practices for #{lang_title}

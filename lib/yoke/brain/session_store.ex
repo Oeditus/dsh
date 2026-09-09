@@ -76,7 +76,7 @@ defmodule Yoke.Brain.SessionStore do
   def fallback_save(session_state, dir, session_id, primary_error) do
     json_path = Path.join(dir, "#{session_id}.json")
 
-    case Jason.encode(session_state, pretty: true) do
+    case Yoke.Json.encode(session_state, pretty: true) do
       {:ok, json_data} ->
         case File.write(json_path, json_data) do
           :ok ->
@@ -218,11 +218,11 @@ defmodule Yoke.Brain.SessionStore do
     }
 
     full_path = Path.join(dir, "transcript_full.jsonl")
-    line = Jason.encode!(entry) <> "\n"
+    line = Yoke.Json.encode!(entry) <> "\n"
     File.write!(full_path, line, [:append])
 
     compact_path = Path.join(dir, "transcript_compact.jsonl")
-    compact_line = Jason.encode!(%{entry | "payload" => compact_payload(payload)}) <> "\n"
+    compact_line = Yoke.Json.encode!(%{entry | "payload" => compact_payload(payload)}) <> "\n"
     File.write!(compact_path, compact_line, [:append])
   rescue
     _ -> :ok
@@ -299,7 +299,7 @@ defmodule Yoke.Brain.SessionStore do
 
   defp load_legacy_json(json_path) do
     with {:ok, content} <- File.read(json_path),
-         {:ok, data} when is_map(data) <- Jason.decode(content) do
+         {:ok, data} when is_map(data) <- Yoke.Json.decode(content) do
       {:ok, data}
     else
       err -> {:error, "Failed to decode legacy session file '#{json_path}': #{inspect(err)}"}
@@ -392,7 +392,7 @@ defmodule Yoke.Brain.SessionStore do
   end
 
   defp parse_import_json(content, source_path) do
-    case Jason.decode(content) do
+    case Yoke.Json.decode(content) do
       {:ok, data} when is_list(data) ->
         {:ok, data, %{}}
 
@@ -408,7 +408,7 @@ defmodule Yoke.Brain.SessionStore do
          "Source JSON must be either a top-level array of messages, or an object with a 'messages' array."}
 
       {:error, err} ->
-        {:error, "Invalid JSON in '#{source_path}': #{Exception.message(err)}"}
+        {:error, "Invalid JSON in '#{source_path}': #{inspect(err)}"}
     end
   end
 
@@ -552,7 +552,7 @@ defmodule Yoke.Brain.SessionStore do
         _ -> nil
       end
     else
-      case Jason.decode(content) do
+      case Yoke.Json.decode(content) do
         {:ok, map} when is_map(map) -> build_metadata(map)
         _ -> nil
       end

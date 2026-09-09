@@ -88,13 +88,12 @@ defmodule Yoke.Config do
     Map.merge(@default_config, Map.merge(global_cfg, local_cfg))
   end
 
-  @doc "Discovers project rule files (.yokerules, .yoke/rules.md, AGYRULES) in current workspace."
+  @doc "Discovers project rule files (.yokerules, .yoke/rules.md, .yoke/SYSTEM.md) in current workspace."
   def discover_project_rules(cwd \\ ".") do
     rule_files = [
       Path.join(cwd, ".yokerules"),
       Path.join(cwd, ".yoke/rules.md"),
-      Path.join(cwd, ".yoke/SYSTEM.md"),
-      Path.join(cwd, "AGYRULES")
+      Path.join(cwd, ".yoke/SYSTEM.md")
     ]
 
     file_rules =
@@ -121,7 +120,7 @@ defmodule Yoke.Config do
     global_path = Path.expand("~/.yoke/config.json")
 
     with :ok <- global_path |> Path.dirname() |> File.mkdir_p(),
-         {:ok, json} <- Jason.encode(new_config, pretty: true),
+         {:ok, json} <- Yoke.Json.encode(new_config, pretty: true),
          :ok <- File.write(global_path, json) do
       {:ok, global_path}
     else
@@ -134,7 +133,7 @@ defmodule Yoke.Config do
     local_path = Path.join(cwd, ".yoke/config.json")
 
     with :ok <- local_path |> Path.dirname() |> File.mkdir_p(),
-         {:ok, json} <- Jason.encode(config, pretty: true),
+         {:ok, json} <- Yoke.Json.encode(config, pretty: true),
          :ok <- File.write(local_path, json) do
       :ok
     else
@@ -155,7 +154,7 @@ defmodule Yoke.Config do
     if File.exists?(path) do
       case File.read(path) do
         {:ok, content} ->
-          case Jason.decode(content) do
+          case Yoke.Json.decode(content) do
             {:ok, map} when is_map(map) -> map
             _ -> %{}
           end

@@ -8,7 +8,7 @@ defmodule Yoke.CLI.Main do
   alias Yoke.Distribution.NodeManager
 
   def main(args) do
-    # Ensure custom agy-style LogFormatter is installed
+    # Ensure custom Yoke-style LogFormatter is installed
     Yoke.CLI.LogFormatter.install()
 
     # Ensure application dependencies are started

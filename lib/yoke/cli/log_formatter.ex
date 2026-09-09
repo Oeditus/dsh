@@ -1,6 +1,6 @@
 defmodule Yoke.CLI.LogFormatter do
   @moduledoc """
-  Custom Erlang/Elixir Logger formatter producing clean, compact agy-style status lines.
+  Custom Erlang/Elixir Logger formatter producing clean, compact Yoke-style status lines.
   Formats log events with colored geometric circles (blue/yellow/red) without timestamp clutter.
   Suppresses noisy low-level socket transport chatter and handles raw mode CRLF formatting.
   """
@@ -11,7 +11,7 @@ defmodule Yoke.CLI.LogFormatter do
 
   @noisy_patterns ~r/(\[HANDLER\]|\[ACCEPT LOOP\]|Client connected|Client disconnected|Client connection|connection timeout|Waiting for data|Processing message|Sending response|Response sent|AI Cache)/i
 
-  @doc "Formats Erlang/Elixir log events into agy-style single lines."
+  @doc "Formats Erlang/Elixir log events into Yoke-style single lines."
   def format(%{level: level, msg: msg}, _config) do
     formatted_msg = format_message(msg) |> String.trim()
 

@@ -741,7 +741,7 @@ defmodule Yoke.Brain.Session do
 
   defp export_session_content(:json, state, export_path) do
     content =
-      Jason.encode!(
+      Yoke.Json.encode!(
         %{
           "session_id" => state.session_id,
           "model" => state.model,
@@ -1229,7 +1229,7 @@ defmodule Yoke.Brain.Session do
             "type" => "function",
             "function" => %{
               "name" => tc.name,
-              "arguments" => Jason.encode!(tc.arguments)
+              "arguments" => Yoke.Json.encode!(tc.arguments)
             }
           }
         end)
@@ -1496,10 +1496,23 @@ defmodule Yoke.Brain.Session do
   defp in_workspace?(path, cwd) do
     abs_path = Path.expand(path, cwd)
     abs_cwd = Path.expand(cwd)
-    String.starts_with?(abs_path, abs_cwd)
+    # `String.starts_with?/2` alone is a classic prefix bug: a workspace root
+    # of "/home/u/project" would incorrectly accept "/home/u/project-evil"
+    # since the latter's text starts with the former. Requiring an exact
+    # match OR a match followed by a path separator closes that sibling-
+    # directory escape.
+    abs_path == abs_cwd or String.starts_with?(abs_path, abs_cwd <> "/")
   end
 
-  defp destructive_bash_command?("bash", %{"command" => cmd}) when is_binary(cmd) do
+  # Tool names that execute an arbitrary shell command string, whether
+  # registered directly by `Yoke.Plugin.DefaultTools` ("bash") or exposed
+  # under an alias by another plugin/MCP server -- see
+  # `format_tool_confirmation_summary/2` below, which already treats all of
+  # these as shell-execution tools for confirmation-summary purposes.
+  @shell_exec_tool_names ~w(bash cmd run_command shell exec)
+
+  defp destructive_bash_command?(tool_name, %{"command" => cmd})
+       when tool_name in @shell_exec_tool_names and is_binary(cmd) do
     c = String.downcase(cmd)
 
     String.contains?(c, "rm -rf") or String.contains?(c, "git push --force") or

@@ -750,8 +750,8 @@ defmodule Yoke.Plugin.DefaultTools do
   end
 
   def yaml_format(%{"text" => text}) do
-    case Jason.decode(text) do
-      {:ok, data} -> {:ok, Jason.encode!(data, pretty: true)}
+    case Yoke.Json.decode(text) do
+      {:ok, data} -> {:ok, Yoke.Json.encode!(data, pretty: true)}
       {:error, _} -> {:ok, String.trim(text)}
     end
   end

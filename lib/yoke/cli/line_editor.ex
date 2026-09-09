@@ -3,7 +3,7 @@ defmodule Yoke.CLI.LineEditor do
   Modern TUI Line Editor & Readline Engine for Yoke (YOKE RAGE).
 
   Features:
-    - Fixed bottom command bar with horizontal ruler (agy style), redrawn in
+    - Fixed bottom command bar with horizontal ruler (Yoke style), redrawn in
       place on every keystroke instead of scrolling the terminal
     - Buffer managed as a list of Unicode graphemes with an explicit
       0-indexed cursor position, so combining marks and multi-byte

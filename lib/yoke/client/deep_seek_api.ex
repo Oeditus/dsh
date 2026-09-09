@@ -205,7 +205,7 @@ defmodule Yoke.Client.DeepSeekAPI do
         args_raw = Map.get(fn_data, "arguments", "{}")
 
         args =
-          case Jason.decode(args_raw) do
+          case Yoke.Json.decode(args_raw) do
             {:ok, parsed} -> parsed
             _ -> %{}
           end

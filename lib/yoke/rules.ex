@@ -45,7 +45,7 @@ defmodule Yoke.Rules do
     if File.exists?(file_path) do
       case File.read(file_path) do
         {:ok, content} ->
-          case Jason.decode(content) do
+          case Yoke.Json.decode(content) do
             {:ok, rules} when is_list(rules) -> rules
             _ -> @default_rules
           end
@@ -64,7 +64,7 @@ defmodule Yoke.Rules do
     file_path = rules_file_path(cwd)
     file_path |> Path.dirname() |> File.mkdir_p!()
 
-    case Jason.encode(rules, pretty: true) do
+    case Yoke.Json.encode(rules, pretty: true) do
       {:ok, json} ->
         File.write(file_path, json)
         {:ok, file_path}

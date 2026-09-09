@@ -1,0 +1,101 @@
+name: Ragex CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze:
+    name: Code Quality & Security Audit (Ragex dogfooding)
+    runs-on: ubuntu-latest
+    env:
+      EXLA_TARGET: cpu
+      EXLA_BUILD: "false"
+      NX_DEFAULT_BACKEND: Nx.BinaryBackend
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for diff-based analysis
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.20"
+          otp-version: "29"
+      - name: Install system dependencies (libgit2)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgit2-dev build-essential
+      - name: Restore dependencies cache
+        uses: actions/cache@v3
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Install dependencies
+        run: mix deps.get
+      - name: Compile codebase
+        run: mix compile
+
+      - name: Run Ragex CI audit (diff-based, blocking)
+        # Uses the PR base branch when running on PRs, otherwise compares
+        # with HEAD~1 on push. This only sees issues touched by the current
+        # diff, so it can miss pre-existing debt in files the PR doesn't
+        # modify -- see the non-blocking full self-analysis step below.
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
+            mix ragex.ci --base ${{ github.base_ref }} --format github
+          else
+            mix ragex.ci --base HEAD~1 --format github
+          fi
+
+      - name: Dogfood full-codebase self-analysis (non-blocking)
+        # Ragex analyzing yoke itself, whole-tree (not diff-scoped), using
+        # its own duplication/dead-code/quality/complexity/god-module
+        # tools. Runs without --ci/--strict so it always exits 0 and never
+        # blocks the build; it exists to surface pre-existing debt (like
+        # god modules no single diff ever touches at once) as GitHub
+        # annotations for triage.
+        if: always()
+        run: mix ragex.analyze --path lib --format github --verbose
+
+  advisory-linters:
+    name: Advisory Linters (non-blocking)
+    runs-on: ubuntu-latest
+    env:
+      EXLA_TARGET: cpu
+      EXLA_BUILD: "false"
+      NX_DEFAULT_BACKEND: Nx.BinaryBackend
+    steps:
+      - uses: actions/checkout@v3
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.20"
+          otp-version: "29"
+      - name: Install system dependencies (libgit2)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgit2-dev build-essential
+      - name: Restore dependencies cache
+        uses: actions/cache@v3
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Install dependencies
+        run: mix deps.get
+      - name: Compile codebase
+        run: mix compile
+      # These three run in strict/`--all` mode, which currently surfaces a
+      # substantial backlog of pre-existing findings (mostly path-handling
+      # heuristics expected for a local CLI agent, plus a handful of
+      # genuine refactor candidates). They're intentionally non-blocking
+      # (`|| true`) until that backlog is triaged; see the code review that
+      # introduced this workflow for the initial findings.
+      - name: MetaCredo (advisory)
+        run: mix metacredo || true
+      - name: OeditusCredo (advisory)
+        run: mix oeditus_credo --all || true
+      - name: Propwise (advisory)
+        run: mix propwise || true

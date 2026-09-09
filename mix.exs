@@ -8,6 +8,7 @@ defmodule Yoke.MixProject do
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
+      test_coverage: [tool: ExCoveralls],
       dialyzer: [
         plt_add_apps: [:mix, :ex_unit],
         plt_core_path: "priv/plts",
@@ -35,6 +36,19 @@ defmodule Yoke.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "coveralls.json": :test,
+        "coveralls.github": :test
+      ]
+    ]
+  end
+
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
@@ -47,7 +61,6 @@ defmodule Yoke.MixProject do
   defp deps do
     [
       {:req, "~> 0.7"},
-      {:jason, "~> 1.4"},
       {:marcli, "~> 0.3"},
       {:md, "~> 0.13", override: true},
       {:lmml, "~> 0.2"},
@@ -61,7 +74,10 @@ defmodule Yoke.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:oeditus_credo, "~> 0.11", only: [:dev, :test], runtime: false},
-      {:propwise, "~> 0.4", only: [:dev, :test], runtime: false}
+      {:propwise, "~> 0.4", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.18", only: :test, runtime: false},
+      # Scans mix.lock for known security vulnerabilities (`mix deps.audit`)
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
     ] ++ embeddings_deps()
   end
 
@@ -89,11 +105,12 @@ defmodule Yoke.MixProject do
 
   defp aliases do
     [
-      quality: ["format", "credo --strict", "dialyzer"],
+      quality: ["format", "credo --strict", "dialyzer", "deps.audit"],
       "quality.ci": [
         "format --check-formatted",
         "credo --strict",
-        "dialyzer"
+        "dialyzer",
+        "deps.audit"
       ]
     ]
   end

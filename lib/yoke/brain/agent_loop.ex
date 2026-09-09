@@ -25,7 +25,7 @@ defmodule Yoke.Brain.AgentLoop do
 
         new_names_and_args =
           Enum.map(new_tool_calls, fn tc ->
-            {tc.name, Jason.encode!(tc.arguments)}
+            {tc.name, Yoke.Json.encode!(tc.arguments)}
           end)
 
         prev_names_and_args == new_names_and_args and prev_names_and_args != []
