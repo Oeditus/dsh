@@ -24,6 +24,7 @@ Derived from **José Valim's architectural framework** for process-isolated AI a
 - [REPL Slash Commands & Shortcuts](#repl-slash-commands--shortcuts)
 - [Configuration](#configuration)
 - [Documentation](#documentation)
+- [License](#license)
 
 ---
 
@@ -423,6 +424,12 @@ Manage most of these live from the REPL with `/config style <name>`, `/config pr
 - [`docs/GETTING_STARTED_GUIDE.md`](docs/GETTING_STARTED_GUIDE.md) — Comprehensive Onboarding & Customization Guide (Practices, Workflows, Plugins, Rules, Skills & Ragex).
 - [`docs/WORKFLOW_ENGINE.md`](docs/WORKFLOW_ENGINE.md) — Multi-step Workflow Engine Reference (`/workflow`).
 - [`docs/cheat_sheet.md`](docs/cheat_sheet.md) — Full Slash Command & Shortcuts Cheatsheet.
+
+---
+
+## License
+
+MIT, see [`LICENSE`](LICENSE) -- with one additional restriction: this project may **not** be used, modified, or distributed as a harness, adapter, or integration layer for proprietary third-party models from OpenAI, Anthropic, or Google (e.g. GPT, Claude, Gemini), whether accessed directly or through an intermediary API, proxy, or aggregator.
 
 <p align="center">
   <img src="stuff/img/logos-128x128.png" width="48" alt="DeepSeek Harness" />
