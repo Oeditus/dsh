@@ -1,8 +1,8 @@
 <p align="center">
   <img src="stuff/img/logos-500x500.png" width="220" alt="Yoke logo" />
 </p>
-<h1 align="center">Yoke (Yoke)</h1>
-<p align="center"><b>An agentic CLI coding harness for DeepSeek models, built on Elixir &amp; Erlang/OTP</b></p>
+<h1 align="center">Yoke</h1>
+<p align="center"><b>An agentic CLI coding harness (originally built for DeepSeek models,) purely on Elixir &amp; Erlang/OTP</b></p>
 <p align="center">
   <img alt="Elixir" src="https://img.shields.io/badge/elixir-1.19%2B-4B275F?logo=elixir&logoColor=white" />
   <img alt="Erlang/OTP" src="https://img.shields.io/badge/erlang%2FOTP-27%2B-A90533?logo=erlang&logoColor=white" />
@@ -10,7 +10,7 @@
   <img alt="Architecture" src="https://img.shields.io/badge/architecture-Brain%20%2F%20Hands-teal" />
 </p>
 
-An agentic CLI coding harness for **DeepSeek** models (`deepseek-chat` V3, `deepseek-coder` V2.5, and `deepseek-reasoner` R1), built in **Elixir & Erlang/OTP**.
+An agentic CLI coding harness for **DeepSeek** models (`deepseek-chat` V3, `deepseek-coder` V2.5, and `deepseek-reasoner` R1), built in **Elixir & Erlang/OTP**. `OpenRouter` and local models are also supported.
 
 Derived from **José Valim's architectural framework** for process-isolated AI agents, **DeepSeek V3/R1 model architecture**, **Google Antigravity**, and **Warp Terminal TUI patterns**.
 
