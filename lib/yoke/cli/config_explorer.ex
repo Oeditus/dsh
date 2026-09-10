@@ -226,15 +226,58 @@ defmodule Yoke.CLI.ConfigExplorer do
               _ -> format_timestamp(stat.mtime)
             end
 
-          first_line =
+          lines =
             entry
             |> String.split("\n")
-            |> Enum.reject(&(String.starts_with?(&1, "## [") or &1 == ""))
-            |> List.first() || entry
+            |> Enum.map(&String.trim/1)
+            |> Enum.reject(fn l ->
+              l == "" or
+              String.starts_with?(l, "```") or
+              String.starts_with?(l, "<!--")
+            end)
+            |> Enum.map(fn l ->
+              if String.starts_with?(l, "##") do
+                l
+                |> String.replace(~r/^##\s*(\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*)?(Level:\s*\w+\s*)?/, "")
+                |> String.trim()
+              else
+                l
+              end
+            end)
+            |> Enum.reject(&(&1 == ""))
+
+          first_line = List.first(lines) || entry
+
+          reason_line =
+            Enum.find(lines, fn l ->
+              String.contains?(l, "Reason:") or String.contains?(l, "ArgumentError") or String.contains?(l, "RuntimeError") or String.contains?(l, "MatchError")
+            end)
+
+          title =
+            cond do
+              reason_line != nil and reason_line != first_line ->
+                cleaned_reason =
+                  reason_line
+                  |> String.replace(~r/^[●•\s]+/, "")
+                  |> String.replace(~r/^\x1b\[[0-9;]*m/, "")
+
+                cleaned_first =
+                  first_line
+                  |> String.replace(~r/^[●•\s]+/, "")
+                  |> String.replace(~r/^\x1b\[[0-9;]*m/, "")
+                  |> String.trim_trailing(":")
+
+                "#{cleaned_first} (#{cleaned_reason})"
+
+              true ->
+                first_line
+                |> String.replace(~r/^[●•\s]+/, "")
+                |> String.replace(~r/^\x1b\[[0-9;]*m/, "")
+            end
 
           %{
             timestamp: ts_str,
-            title: first_line,
+            title: title,
             raw_entry: entry
           }
         end)

@@ -38,6 +38,27 @@ defmodule Yoke.CLI.ConfigExplorerTest do
       assert hd(tree.jobs).id == "job_101"
 
       assert tree.errors.count == 1
+      assert hd(tree.errors.entries).title == "Test Error Report"
+    end
+
+    test "parses descriptive error titles from complex error entries", %{tmp_dir: tmp_dir} do
+      err_content = """
+
+      <!-- error_entry -->
+      ## [2026-09-10T06:46:02.500400Z] Level: error
+      ```
+      Task.Supervisor worker process terminating:
+        ● Function: Yoke.TaskEngine.JobManager.-start_job/2-fun-3-/0
+        ● Reason:   {%ArgumentError{message: "task %Task{...} must be queried from owner"}, []}
+      ```
+      """
+      File.write!(Path.join(tmp_dir, ".yoke/ERRORS_TO_FIX.lmml"), err_content)
+
+      log = ConfigExplorer.read_error_log(tmp_dir)
+      assert log.count == 1
+      entry = hd(log.entries)
+      assert String.contains?(entry.title, "Task.Supervisor worker process terminating")
+      assert String.contains?(entry.title, "ArgumentError")
     end
 
     test "formats non-TTY summary cleanly", %{tmp_dir: tmp_dir} do
