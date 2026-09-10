@@ -839,32 +839,41 @@ defmodule Yoke.MCP.ServerManager do
   def format_mcp_content(content), do: inspect(content, pretty: true)
 
   defp ensure_dllb_server_binary do
-    case Application.get_env(:ragex, :dllb_server_bin) || System.get_env("DLLB_SERVER_BIN") do
-      bin when is_binary(bin) and bin != "" ->
-        :ok
+    existing_bin = Application.get_env(:ragex, :dllb_server_bin) || System.get_env("DLLB_SERVER_BIN")
 
-      _ ->
-        repo_dir =
-          System.get_env("YOKE_REPO_DIR") ||
-            Application.get_env(:yoke, :repo_dir)
+    if is_binary(existing_bin) and existing_bin != "" and File.exists?(existing_bin) do
+      :ok
+    else
+      repo_dir =
+        System.get_env("YOKE_REPO_DIR") ||
+          Application.get_env(:yoke, :repo_dir)
 
-        candidates =
-          [
-            repo_dir && Path.expand("../dllb/target/release/dllb-server", repo_dir),
-            repo_dir && Path.expand("../dllb/target/debug/dllb-server", repo_dir),
-            "/opt/Proyectos/Oeditus/dllb/target/release/dllb-server",
-            "/opt/Proyectos/Oeditus/dllb/target/debug/dllb-server"
-          ]
-          |> Enum.reject(&is_nil/1)
+      user_home = System.user_home() || System.get_env("HOME") || "/home/am"
 
-        case Enum.find(candidates, &File.exists?/1) do
-          nil ->
-            :ok
+      candidates =
+        [
+          repo_dir && Path.expand("../dllb/target/release/dllb-server", repo_dir),
+          repo_dir && Path.expand("../dllb/target/debug/dllb-server", repo_dir),
+          Path.join(user_home, ".local/bin/dllb-server"),
+          Path.join(user_home, ".cargo/bin/dllb-server"),
+          "/opt/Proyectos/Oeditus/dllb/target/release/dllb-server",
+          "/opt/Proyectos/Oeditus/dllb/target/debug/dllb-server",
+          System.find_executable("dllb-server")
+        ]
+        |> Enum.reject(&is_nil/1)
 
-          found_bin ->
-            Application.put_env(:ragex, :dllb_server_bin, found_bin)
-            System.put_env("DLLB_SERVER_BIN", found_bin)
-        end
+      case Enum.find(candidates, &File.exists?/1) do
+        nil ->
+          Logger.warning(
+            "󱐋🔌 dllb-server binary not found in PATH or standard candidate locations. Per-project Ragex Knowledge Graph daemon may fail to start."
+          )
+
+          :ok
+
+        found_bin ->
+          Application.put_env(:ragex, :dllb_server_bin, found_bin)
+          System.put_env("DLLB_SERVER_BIN", found_bin)
+      end
     end
   end
 end

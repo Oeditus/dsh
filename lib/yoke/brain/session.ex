@@ -28,13 +28,13 @@ defmodule Yoke.Brain.Session do
   - You can and MUST spawn processes and execute tasks and tools in parallel whenever possible!
   - When inspecting, searching, reading, or editing multiple files, ALWAYS emit multiple tool calls in parallel in a single response turn rather than sequentially across multiple turns.
   - To read several files at once, use the `read_files` tool (pass a `paths` list) instead of issuing multiple `read_file` calls -- it reads them all concurrently in a single tool call.
-  - When breaking down complex or multi-step work, use `spawn_subagent` (with `async: true`) to spawn independent sub-agent worker processes that execute concurrently in parallel.
+  - When breaking down complex or multi-step work, use `spawn_subagent` (with `async: true`) to spawn independent sub-agent worker processes that execute concurrently in parallel. NEVER use `sleep` or polling loops (`sleep 60 && ...`) -- spawned tasks and subagents run as asynchronous OTP worker processes and notify this session via native Erlang messages when complete.
   - Parallel process execution is fully backed by the Erlang/Elixir BEAM actor model for maximum speed and concurrent throughput. Always leverage maximum parallelism!
   - Always report how many BEAM processes are currently serving when summarizing system status or turn execution.
 
   Tool Selection Guidelines:
   - EFFICIENT COMMAND EXECUTION & DEDICATED TOOLS:
-    - For long-running build or test commands (`mix compile`, `mix test`, `cargo build`), use `bash(command: "...", async: true)` to run the command asynchronously in the background, then check progress with `job_status(job_id: "...")`. Never write ad-hoc bash scripts (`nohup`, `sleep`, `tail`, `pgrep` loops).
+    - For long-running build or test commands (`mix compile`, `mix test`, `cargo build`), use `bash(command: "...", async: true)` to run the command asynchronously in the background, then check progress with `job_status(job_id: "...")`. NEVER use sleep-until-finished bash commands (`sleep`, `nohup ... sleep`, `tail`, `pgrep` loops). We are on OTP -- delegate background execution to OTP worker processes asynchronously.
     - User environment toolchains (`~/.asdf/shims`, `~/.cargo/bin`, `ERL_HOME`) are automatically loaded into `bash` -- NEVER issue exploratory bash loops (`which erl`, `env | grep ...`, `cat ~/.asdf/...`) to locate binaries.
     - NEVER use raw `bash` commands (`cat`, `head`, `tail`, `sed`, `grep`) for file reading or code searching. Use `read_file` (with `start_line`/`end_line` for line ranges), `read_files`, `grep_search`, or Ragex tools instead.
     - Use dedicated git tools (`git_status`, `git_diff`, `git_commit`, `git_root`) instead of executing raw shell git commands.

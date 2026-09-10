@@ -40,6 +40,7 @@ defmodule Yoke.CLI.LineEditor do
     "/diff",
     "/docs",
     "/exit",
+    "/explorer",
     "/getting-started",
     "/god",
     "/guide",
@@ -1893,8 +1894,17 @@ defmodule Yoke.CLI.LineEditor do
     end
   end
 
+  defp read_char_with_timeout(timeout_ms) do
+    task = Task.async(fn -> read_char() end)
+
+    case Task.yield(task, timeout_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} -> result
+      _ -> nil
+    end
+  end
+
   defp read_available_escape_bytes(acc, count) when count > 0 do
-    case read_char() do
+    case read_char_with_timeout(25) do
       char when is_binary(char) and char != "" ->
         new_acc = acc <> char
 

@@ -136,6 +136,7 @@ defmodule Yoke.CLI.Formatter do
       #{cyan()}/clear#{reset()}                  Clear terminal output
       #{cyan()}/reset#{reset()}                  Reset conversation context, history, and clear screen
       #{cyan()}/god [on|off|status]#{reset()}    Toggle God mode (auto-answer all model questions/confirmations)
+      #{cyan()}/explorer#{reset()}               Launch interactive TUI for exploring & managing .yoke configs, rules, history & jobs
       #{cyan()}/exit#{reset()} or #{cyan()}/quit#{reset()}            Exit Yoke
 
     #{bold()}#{cyan()}HOTKEYS:#{reset()}

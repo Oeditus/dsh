@@ -359,6 +359,7 @@ defmodule Yoke.CLI.QuestionPrompt do
 
   defp prompt_tty(question, options, is_multi, custom_idx, show_numbers, progress, subagent, opts) do
     set_raw_mode()
+    drain_stale_input()
 
     state =
       new_state(question, options, is_multi, custom_idx, show_numbers, progress, subagent, opts)
@@ -884,8 +885,24 @@ defmodule Yoke.CLI.QuestionPrompt do
     end
   end
 
+  defp drain_stale_input do
+    case read_char_with_timeout(5) do
+      char when is_binary(char) and char != "" -> drain_stale_input()
+      _ -> :ok
+    end
+  end
+
+  defp read_char_with_timeout(timeout_ms) do
+    task = Task.async(fn -> read_char() end)
+
+    case Task.yield(task, timeout_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} -> result
+      _ -> nil
+    end
+  end
+
   defp read_available_escape_bytes(acc, count) when count > 0 do
-    case read_char() do
+    case read_char_with_timeout(25) do
       char when is_binary(char) and char != "" ->
         new_acc = acc <> char
 

@@ -1222,6 +1222,16 @@ defmodule Yoke.CLI.Repl do
     :continue
   end
 
+  def handle_input("/explorer", _session_pid, _session_id) do
+    Yoke.CLI.ConfigExplorer.run()
+    :continue
+  end
+
+  def handle_input("/config explorer", _session_pid, _session_id) do
+    Yoke.CLI.ConfigExplorer.run()
+    :continue
+  end
+
   def handle_input("/config toggle", _session_pid, _session_id) do
     IO.puts(
       Formatter.format_error(

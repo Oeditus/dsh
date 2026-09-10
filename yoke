@@ -68,11 +68,15 @@ done
 DLLB_DIR_DEFAULT="$(cd -- "${SCRIPT_DIR}/../dllb" >/dev/null 2>&1 && pwd || echo "${SCRIPT_DIR}/../dllb")"
 export DLLB_DIR="${DLLB_DIR:-${DLLB_DIR_DEFAULT}}"
 
-if [[ -z "${DLLB_SERVER_BIN:-}" ]]; then
+if [[ -z "${DLLB_SERVER_BIN:-}" ]] || [[ ! -f "${DLLB_SERVER_BIN}" ]]; then
   if [[ -f "${DLLB_DIR}/target/release/dllb-server" ]]; then
     export DLLB_SERVER_BIN="${DLLB_DIR}/target/release/dllb-server"
   elif [[ -f "${DLLB_DIR}/target/debug/dllb-server" ]]; then
     export DLLB_SERVER_BIN="${DLLB_DIR}/target/debug/dllb-server"
+  elif [[ -f "${HOME}/.local/bin/dllb-server" ]]; then
+    export DLLB_SERVER_BIN="${HOME}/.local/bin/dllb-server"
+  elif [[ -f "${HOME}/.cargo/bin/dllb-server" ]]; then
+    export DLLB_SERVER_BIN="${HOME}/.cargo/bin/dllb-server"
   elif command -v dllb-server >/dev/null 2>&1; then
     export DLLB_SERVER_BIN="$(command -v dllb-server)"
   fi
