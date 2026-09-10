@@ -308,7 +308,7 @@ defmodule Yoke.CLI.Formatter do
   """
   def display_width(str) when is_binary(str) do
     str
-    |> String.replace(~r/\e\[[0-9;]*[mGKH]/, "")
+    |> String.replace(~r/\e\[[0-9;?]*[a-zA-Z~]/, "")
     |> String.graphemes()
     |> Enum.reduce(0, fn grapheme, acc -> acc + grapheme_width(grapheme) end)
   end
@@ -331,6 +331,7 @@ defmodule Yoke.CLI.Formatter do
   defp codepoint_width(cp) do
     cond do
       cp in 0x1100..0x115F -> 2
+      cp == 0x26A1 -> 2
       cp in 0x2E80..0x303E -> 2
       cp in 0x3041..0x33FF -> 2
       cp in 0x3400..0x4DBF -> 2

@@ -1736,7 +1736,7 @@ defmodule Yoke.CLI.LineEditor do
 
   defp strip_ansi_length(str), do: display_width(str)
 
-  @ansi_escape_pattern ~r/(\e\[[0-9;]*[mGKH])/
+  @ansi_escape_pattern ~r/(\e\[[0-9;?]*[a-zA-Z~])/
 
   @doc """
   Truncates a possibly ANSI-colored string to at most `max_width` visible
@@ -1787,7 +1787,7 @@ defmodule Yoke.CLI.LineEditor do
     @ansi_escape_pattern
     |> Regex.split(str, include_captures: true)
     |> Enum.flat_map(fn chunk ->
-      if String.match?(chunk, ~r/^\e\[[0-9;]*[mGKH]$/) do
+      if String.match?(chunk, ~r/^\e\[[0-9;?]*[a-zA-Z~]$/) do
         [{:escape, chunk}]
       else
         chunk |> String.graphemes() |> Enum.map(&{:char, &1})
@@ -1867,6 +1867,9 @@ defmodule Yoke.CLI.LineEditor do
       String.contains?(other, "[D") or String.contains?(other, "OD") ->
         :left
 
+      String.starts_with?(other, "\e") ->
+        :other
+
       true ->
         case String.to_charlist(other) do
           [c | _] -> {:char, c}
@@ -1881,11 +1884,7 @@ defmodule Yoke.CLI.LineEditor do
   defp get_raw_input_chunk do
     case read_char() do
       "\e" ->
-        # 8 bytes comfortably covers every CSI sequence this editor cares
-        # about, including the 5-byte bracketed-paste-start marker
-        # (`[200~`) alongside the shorter arrow/Home/End/Delete sequences.
-        seq = read_available_escape_bytes("", 8)
-        "\e" <> seq
+        read_escape_sequence()
 
       :eof ->
         "\x04"
@@ -1898,6 +1897,40 @@ defmodule Yoke.CLI.LineEditor do
     end
   end
 
+  defp read_escape_sequence do
+    case read_char_with_timeout(50) do
+      char when char in ["[", "O"] ->
+        read_csi_sequence("\e" <> char, 16)
+
+      char when is_binary(char) and char != "" ->
+        "\e" <> char
+
+      _ ->
+        "\e"
+    end
+  end
+
+  defp read_csi_sequence(acc, count) when count > 0 do
+    case read_char_with_timeout(50) do
+      char when is_binary(char) and char != "" ->
+        new_acc = acc <> char
+        last_char = String.last(new_acc)
+
+        if last_char in ["A", "B", "C", "D", "H", "F", "~", "M", "Z"] or
+             (byte_size(new_acc) >= 3 and last_char >= "a" and last_char <= "z") or
+             (byte_size(new_acc) >= 3 and last_char >= "A" and last_char <= "Z") do
+          new_acc
+        else
+          read_csi_sequence(new_acc, count - 1)
+        end
+
+      _ ->
+        acc
+    end
+  end
+
+  defp read_csi_sequence(acc, _count), do: acc
+
   defp read_char_with_timeout(timeout_ms) do
     task = Task.async(fn -> read_char() end)
 
@@ -1906,24 +1939,6 @@ defmodule Yoke.CLI.LineEditor do
       _ -> nil
     end
   end
-
-  defp read_available_escape_bytes(acc, count) when count > 0 do
-    case read_char_with_timeout(25) do
-      char when is_binary(char) and char != "" ->
-        new_acc = acc <> char
-
-        if char in ["A", "B", "C", "D", "H", "F", "~"] do
-          new_acc
-        else
-          read_available_escape_bytes(new_acc, count - 1)
-        end
-
-      _ ->
-        acc
-    end
-  end
-
-  defp read_available_escape_bytes(acc, _count), do: acc
 
   @paste_end_marker "\e[201~"
   @paste_end_marker_length String.length(@paste_end_marker)
