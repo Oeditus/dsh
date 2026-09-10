@@ -5,6 +5,7 @@ defmodule Yoke.CLI.Repl do
   """
   alias Yoke.Brain.Session
   alias Yoke.Brain.SessionSupervisor
+  alias Yoke.CLI.Editor
   alias Yoke.CLI.Formatter
   alias Yoke.Client.DeepSeekAPI
   alias Yoke.Distribution.NodeManager
@@ -948,13 +949,7 @@ defmodule Yoke.CLI.Repl do
 
   def handle_input("/skills edit " <> name, _session_pid, _session_id) do
     with_skill(name, fn skill ->
-      editor = System.get_env("EDITOR") || System.get_env("VISUAL") || "vi"
-      IO.puts(Formatter.format_info("Opening #{skill.path} in #{editor}…"))
-
-      case System.cmd(editor, [skill.path], into: IO.stream(:stdio, :line)) do
-        {_, 0} -> IO.puts(Formatter.format_success("Closed #{Path.basename(skill.path)}."))
-        {_, code} -> IO.puts(Formatter.format_error("Editor exited with status #{code}."))
-      end
+      Editor.edit_file(skill.path)
     end)
 
     :continue
@@ -1174,6 +1169,48 @@ defmodule Yoke.CLI.Repl do
       IO.puts(Formatter.format_success("Switched model to '#{current}'"))
       :continue
     end
+  end
+
+  def handle_input("/edit", session_pid, _session_id) do
+    case Editor.edit_text("") do
+      {:ok, text} when byte_size(text) > 0 ->
+        IO.puts(Formatter.format_info("Sending prompt written via $EDITOR…"))
+        Session.send_user_message(session_pid, text)
+
+      {:ok, _} ->
+        IO.puts(Formatter.format_info("Prompt edit cancelled (empty text)."))
+
+      {:fallback, _} ->
+        IO.puts(
+          Formatter.format_error(
+            "No $EDITOR or $VISUAL environment variable is set. Please export $EDITOR (e.g. export EDITOR=vim) to compose prompts in editor."
+          )
+        )
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error("Editor error: #{err}"))
+    end
+
+    :continue
+  end
+
+  def handle_input("/edit " <> target, session_pid, _session_id) do
+    path = String.trim(target)
+
+    if File.exists?(path) do
+      Editor.edit_file(path)
+    else
+      case Editor.edit_text(target) do
+        {:ok, text} when byte_size(text) > 0 ->
+          IO.puts(Formatter.format_info("Sending prompt written via $EDITOR…"))
+          Session.send_user_message(session_pid, text)
+
+        _ ->
+          :ok
+      end
+    end
+
+    :continue
   end
 
   def handle_input("/endpoint " <> target, session_pid, _session_id) do
@@ -1431,16 +1468,7 @@ defmodule Yoke.CLI.Repl do
 
     IO.puts(Formatter.format_info("Practice files:\n  - Local: #{path}\n  - Global: #{g_path}"))
 
-    editor = System.get_env("EDITOR") || "nano"
-
-    if System.find_executable(editor) do
-      System.cmd(editor, [path])
-    else
-      IO.puts(
-        Formatter.format_error("No $EDITOR executable found. Please edit #{path} directly.")
-      )
-    end
-
+    Editor.edit_file(path)
     :continue
   end
 

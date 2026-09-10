@@ -466,6 +466,50 @@ defmodule Yoke.CLI.ConfigExplorer do
           state
         end
 
+      :practices ->
+        if prac = Enum.at(state.tree.practices, state.cursor) do
+          if File.exists?(prac.path) do
+            Yoke.CLI.Editor.edit_file(prac.path, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0)
+            refresh_state(state, "Edited practice file '#{prac.file}'")
+          else
+            state
+          end
+        else
+          state
+        end
+
+      :sessions ->
+        if sess = Enum.at(state.tree.sessions, state.cursor) do
+          if File.exists?(sess.path) do
+            Yoke.CLI.Editor.edit_file(sess.path, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0)
+            refresh_state(state, "Opened session log '#{sess.file}' in editor.")
+          else
+            state
+          end
+        else
+          state
+        end
+
+      :jobs ->
+        if job = Enum.at(state.tree.jobs, state.cursor) do
+          if File.exists?(job.path) do
+            Yoke.CLI.Editor.edit_file(job.path, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0)
+            refresh_state(state, "Opened job log '#{job.file}' in editor.")
+          else
+            state
+          end
+        else
+          state
+        end
+
+      :diagnostics ->
+        if File.exists?(state.tree.errors.file_path) do
+          Yoke.CLI.Editor.edit_file(state.tree.errors.file_path, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0)
+          refresh_state(state, "Opened diagnostic log ERRORS_TO_FIX.lmml in editor.")
+        else
+          state
+        end
+
       _ ->
         state
     end
@@ -504,20 +548,30 @@ defmodule Yoke.CLI.ConfigExplorer do
   end
 
   def handle_add_rule(state) do
-    restore_tty_mode()
-
-    IO.write(
-      :user,
-      "\r\n#{Formatter.cyan()}󰏫  Enter new rule (format 'scope: text' or 'text'): #{Formatter.reset()}"
-    )
-
     input =
-      case IO.gets(:user, "") do
-        s when is_binary(s) -> String.trim(s)
-        _ -> ""
-      end
+      case Yoke.CLI.Editor.edit_text("", on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0) do
+        {:ok, text} ->
+          text
 
-    set_raw_mode()
+        {:fallback, _} ->
+          restore_tty_mode()
+          IO.write(
+            :user,
+            "\r\n#{Formatter.cyan()}󰏫  Enter new rule (format 'scope: text' or 'text'): #{Formatter.reset()}"
+          )
+
+          result =
+            case IO.gets(:user, "") do
+              s when is_binary(s) -> String.trim(s)
+              _ -> ""
+            end
+
+          set_raw_mode()
+          result
+
+        _ ->
+          ""
+      end
 
     if input != "" do
       Rules.add_rule(input, state.cwd)
@@ -528,21 +582,34 @@ defmodule Yoke.CLI.ConfigExplorer do
   end
 
   defp prompt_and_update_setting(state, key, curr_val) do
-    restore_tty_mode()
-    val_type = if is_integer(curr_val), do: "integer", else: "string"
-
-    IO.write(
-      :user,
-      "\r\n#{Formatter.cyan()}󰏫  Edit setting '#{key}' (#{val_type}, current: #{inspect(curr_val)}): #{Formatter.reset()}"
-    )
+    val_str = if is_binary(curr_val), do: curr_val, else: inspect(curr_val)
 
     input =
-      case IO.gets(:user, "") do
-        s when is_binary(s) -> String.trim(s)
-        _ -> ""
-      end
+      case Yoke.CLI.Editor.edit_text(val_str, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0) do
+        {:ok, text} ->
+          text
 
-    set_raw_mode()
+        {:fallback, _} ->
+          restore_tty_mode()
+          val_type = if is_integer(curr_val), do: "integer", else: "string"
+
+          IO.write(
+            :user,
+            "\r\n#{Formatter.cyan()}󰏫  Edit setting '#{key}' (#{val_type}, current: #{inspect(curr_val)}): #{Formatter.reset()}"
+          )
+
+          result =
+            case IO.gets(:user, "") do
+              s when is_binary(s) -> String.trim(s)
+              _ -> ""
+            end
+
+          set_raw_mode()
+          result
+
+        _ ->
+          ""
+      end
 
     if input != "" do
       new_val =
@@ -559,6 +626,9 @@ defmodule Yoke.CLI.ConfigExplorer do
               _ -> curr_val
             end
 
+          is_boolean(curr_val) ->
+            input in ["true", "1", "yes"]
+
           true ->
             input
         end
@@ -572,20 +642,30 @@ defmodule Yoke.CLI.ConfigExplorer do
   end
 
   defp prompt_and_update_rule(state, rule_id, curr_text) do
-    restore_tty_mode()
-
-    IO.write(
-      :user,
-      "\r\n#{Formatter.cyan()}󰏫  Edit rule ##{rule_id} text (current: #{curr_text}): #{Formatter.reset()}"
-    )
-
     input =
-      case IO.gets(:user, "") do
-        s when is_binary(s) -> String.trim(s)
-        _ -> ""
-      end
+      case Yoke.CLI.Editor.edit_text(curr_text, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0) do
+        {:ok, text} ->
+          text
 
-    set_raw_mode()
+        {:fallback, _} ->
+          restore_tty_mode()
+          IO.write(
+            :user,
+            "\r\n#{Formatter.cyan()}󰏫  Edit rule ##{rule_id} text (current: #{curr_text}): #{Formatter.reset()}"
+          )
+
+          result =
+            case IO.gets(:user, "") do
+              s when is_binary(s) -> String.trim(s)
+              _ -> ""
+            end
+
+          set_raw_mode()
+          result
+
+        _ ->
+          ""
+      end
 
     if input != "" do
       rules = Rules.load_rules(state.cwd)

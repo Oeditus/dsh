@@ -39,6 +39,7 @@ defmodule Yoke.CLI.LineEditor do
     "/cr",
     "/diff",
     "/docs",
+    "/edit",
     "/exit",
     "/explorer",
     "/getting-started",
