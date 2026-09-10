@@ -67,6 +67,7 @@ defmodule Yoke.MixProject do
       {:makeup_elixir, ">= 0.0.0", optional: true},
       {:makeup_erlang, ">= 0.0.0", optional: true},
       {:makeup_cure, ">= 0.0.0", optional: true},
+      {:makeup_patch, ">= 0.0.0", optional: true},
       {:owl, "~> 0.13"},
       {:egit, "~> 0.2"},
       {:ragex, "~> 0.30"},
