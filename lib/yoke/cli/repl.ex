@@ -6,6 +6,7 @@ defmodule Yoke.CLI.Repl do
   alias Yoke.Brain.Session
   alias Yoke.Brain.SessionSupervisor
   alias Yoke.CLI.Formatter
+  alias Yoke.Client.DeepSeekAPI
   alias Yoke.Distribution.NodeManager
   alias Yoke.Git
   alias Yoke.MCP.ServerManager, as: MCPServerManager
@@ -1118,35 +1119,61 @@ defmodule Yoke.CLI.Repl do
     :continue
   end
 
-  def handle_input("/model " <> target, session_pid, _session_id) do
-    target_model =
-      case String.trim(target) do
-        "reasoner" -> "deepseek-reasoner"
-        "r1" -> "deepseek-reasoner"
-        "chat" -> "deepseek-chat"
-        "v3" -> "deepseek-chat"
-        "coder" -> "deepseek-coder"
-        "v2.5" -> "deepseek-coder"
-        "vision" -> "deepseek-v4-flash-vision-exp"
-        "v4" -> "deepseek-v4-flash-vision-exp"
-        "openrouter-r1" -> "deepseek/deepseek-r1"
-        "openrouter-v3" -> "deepseek/deepseek-chat"
-        "openrouter-free" -> "meta-llama/llama-3.3-70b-instruct:free"
-        "openrouter-llama" -> "meta-llama/llama-3.3-70b-instruct:free"
-        "openrouter-qwen" -> "qwen/qwen-2.5-coder-32b-instruct:free"
-        "openrouter-gemini" -> "google/gemini-2.0-flash-lite-preview-02-05:free"
-        "siliconflow-r1" -> "deepseek-ai/DeepSeek-R1"
-        "siliconflow-v3" -> "deepseek-ai/DeepSeek-V3"
-        "together-r1" -> "deepseek-ai/DeepSeek-R1"
-        "ollama-r1" -> "deepseek-r1:70b"
-        "ollama-qwen" -> "qwen2.5-coder:14b"
-        "ollama-llama" -> "llama3.3"
-        other -> other
-      end
+  def handle_input("/models", session_pid, session_id) do
+    handle_input("/model", session_pid, session_id)
+  end
 
-    {:ok, current} = Session.set_model(session_pid, target_model)
-    IO.puts(Formatter.format_success("Switched model to '#{current}'"))
+  def handle_input("/model", session_pid, _session_id) do
+    {:ok, current_model} = Session.get_model(session_pid)
+    {:ok, endpoint} = Session.get_endpoint(session_pid)
+
+    IO.puts(Formatter.format_info("Fetching available models from API endpoint (#{endpoint})…"))
+
+    case DeepSeekAPI.list_models(endpoint: endpoint) do
+      {:ok, models} ->
+        IO.puts(Formatter.format_success("Available Models from DeepSeek API:"))
+
+        Enum.each(models, fn m ->
+          if m == current_model do
+            IO.puts("  #{Formatter.green()}● #{m} (active)#{Formatter.reset()}")
+          else
+            IO.puts("  #{Formatter.cyan()}• #{m}#{Formatter.reset()}")
+          end
+        end)
+
+        IO.puts(Formatter.format_info("\nUse '/model <model_id>' to switch active model."))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error("Failed to fetch models from API: #{err}"))
+        IO.puts(Formatter.format_info("Current active model: '#{current_model}'"))
+    end
+
     :continue
+  end
+
+  def handle_input("/model " <> target, session_pid, session_id) do
+    clean_target = String.trim(target)
+
+    if clean_target in ["", "list", "ls"] do
+      handle_input("/model", session_pid, session_id)
+    else
+      target_model =
+        case clean_target do
+          "reasoner" -> "deepseek-reasoner"
+          "r1" -> "deepseek-reasoner"
+          "chat" -> "deepseek-chat"
+          "v3" -> "deepseek-chat"
+          "coder" -> "deepseek-coder"
+          "v2.5" -> "deepseek-coder"
+          "vision" -> "deepseek-v4-flash-vision-exp"
+          "v4" -> "deepseek-v4-flash-vision-exp"
+          other -> other
+        end
+
+      {:ok, current} = Session.set_model(session_pid, target_model)
+      IO.puts(Formatter.format_success("Switched model to '#{current}'"))
+      :continue
+    end
   end
 
   def handle_input("/endpoint " <> target, session_pid, _session_id) do

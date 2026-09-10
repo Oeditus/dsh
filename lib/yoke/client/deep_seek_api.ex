@@ -38,6 +38,104 @@ defmodule Yoke.Client.DeepSeekAPI do
     end
   end
 
+  @doc """
+  Fetches the full list of available model IDs dynamically from the DeepSeek API
+  (or configured OpenRouter/Ollama/custom endpoint).
+  Returns `{:ok, [model_id_string, ...]}` or `{:error, reason}`.
+  """
+  def list_models(opts \\ []) do
+    config = build_config(opts)
+
+    if ((is_nil(config.api_key) or config.api_key == "") and not local_endpoint?(config.endpoint)) or
+         config.mock == true do
+      {:ok, ["deepseek-chat", "deepseek-reasoner", "deepseek-coder", "deepseek-v4-flash-vision-exp"]}
+    else
+      fetch_real_models(config)
+    end
+  end
+
+  @doc "Derives the `/models` endpoint URL from a chat completions endpoint."
+  def models_endpoint(endpoint) when is_binary(endpoint) do
+    cond do
+      String.ends_with?(endpoint, "/chat/completions") ->
+        String.replace(endpoint, ~r|/chat/completions$|, "/models")
+
+      String.ends_with?(endpoint, "/completions") ->
+        String.replace(endpoint, ~r|/completions$|, "/models")
+
+      String.ends_with?(endpoint, "/v1") ->
+        endpoint <> "/models"
+
+      true ->
+        URI.merge(endpoint, "/models") |> to_string()
+    end
+  end
+
+  defp fetch_real_models(%ClientConfig{} = config) do
+    target_url = models_endpoint(config.endpoint)
+
+    headers =
+      if is_binary(config.api_key) and config.api_key != "" and config.api_key != "not-needed" do
+        [{"Authorization", "Bearer #{config.api_key}"}, {"Accept", "application/json"}]
+      else
+        [{"Accept", "application/json"}]
+      end
+
+    headers =
+      if String.contains?(config.endpoint, "openrouter.ai") do
+        headers ++
+          [
+            {"HTTP-Referer", "https://github.com/yoke"},
+            {"X-Title", "yoke"}
+          ]
+      else
+        headers
+      end
+
+    req_opts = [
+      headers: headers,
+      receive_timeout: 10_000
+    ]
+
+    case Req.get(target_url, req_opts) do
+      {:ok, %Req.Response{status: 200, body: %{"data" => models}}} when is_list(models) ->
+        model_ids =
+          models
+          |> Enum.map(fn
+            %{"id" => id} when is_binary(id) -> id
+            id when is_binary(id) -> id
+            _ -> nil
+          end)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.sort()
+
+        if Enum.empty?(model_ids) do
+          {:ok, ["deepseek-chat", "deepseek-reasoner"]}
+        else
+          {:ok, model_ids}
+        end
+
+      {:ok, %Req.Response{status: 200, body: models}} when is_list(models) ->
+        model_ids =
+          models
+          |> Enum.map(fn
+            %{"id" => id} when is_binary(id) -> id
+            id when is_binary(id) -> id
+            _ -> nil
+          end)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.sort()
+
+        {:ok, model_ids}
+
+      {:ok, %Req.Response{status: status, body: err_body}} ->
+        {:error, "DeepSeek API /models returned HTTP status #{status}: #{inspect(err_body)}"}
+
+      {:error, reason} ->
+        {:error, "HTTP request failed: #{inspect(reason)}"}
+    end
+  end
+
   @doc "Builds a structured ClientConfig struct from keyword options."
   def build_config(opts) when is_list(opts) do
     mock_default =

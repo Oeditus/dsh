@@ -50,6 +50,7 @@ defmodule Yoke.CLI.LineEditor do
     "/mcp",
     "/mode",
     "/model",
+    "/models",
     "/nodes",
     "/permissions",
     "/plugins",

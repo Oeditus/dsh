@@ -87,6 +87,16 @@ defmodule Yoke.Brain.Session do
     :exit, _ -> {:error, "Session process unavailable; nothing to cancel."}
   end
 
+  @doc "Gets the active model for the session."
+  def get_model(pid) do
+    GenServer.call(pid, :get_model, :infinity)
+  end
+
+  @doc "Gets the API endpoint URL for the session."
+  def get_endpoint(pid) do
+    GenServer.call(pid, :get_endpoint, :infinity)
+  end
+
   @doc "Sets the DeepSeek model ('deepseek-chat' or 'deepseek-reasoner')."
   def set_model(pid, model) do
     GenServer.call(pid, {:set_model, model}, :infinity)
@@ -365,6 +375,16 @@ defmodule Yoke.Brain.Session do
   @impl true
   def handle_call(:cancel_current_turn, _from, state) do
     {:reply, {:error, "No turn currently in progress to cancel."}, state}
+  end
+
+  @impl true
+  def handle_call(:get_model, _from, state) do
+    {:reply, {:ok, state.model}, state}
+  end
+
+  @impl true
+  def handle_call(:get_endpoint, _from, state) do
+    {:reply, {:ok, state.endpoint}, state}
   end
 
   @impl true

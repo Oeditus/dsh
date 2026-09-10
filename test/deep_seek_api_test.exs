@@ -67,5 +67,20 @@ defmodule Yoke.DeepSeekAPITest do
       assert cfg.endpoint == "http://localhost:11434/v1/chat/completions"
       assert cfg.api_key == "not-needed"
     end
+
+    test "models_endpoint/1 derives /models path correctly" do
+      assert DeepSeekAPI.models_endpoint("https://api.deepseek.com/chat/completions") ==
+               "https://api.deepseek.com/models"
+
+      assert DeepSeekAPI.models_endpoint("https://openrouter.ai/api/v1/chat/completions") ==
+               "https://openrouter.ai/api/v1/models"
+    end
+
+    test "list_models/1 returns available models list in mock mode" do
+      assert {:ok, models} = DeepSeekAPI.list_models(mock: true)
+      assert is_list(models)
+      assert "deepseek-chat" in models
+      assert "deepseek-reasoner" in models
+    end
   end
 end

@@ -38,7 +38,7 @@ defmodule Yoke.CLI.Formatter do
     "Use !command to execute shell commands directly (e.g. !git status)",
     "Use !! to flip into pure console mode -- a plain shell passthrough with no AI/tooling in between -- and !! again to flip back",
     "Use /help to view available slash commands and shortcuts",
-    "Use /model [chat|reasoner] to switch between deepseek-chat and deepseek-reasoner models",
+    "Use /model or /models to list available models dynamically from DeepSeek API, or /model <name> to switch",
     "Use /mode [local|remote|docker] to set Hands execution target",
     "Use /plugins [reload] to list tools or hot-reload plugins live without dropping state",
     "Use /mcp [list|add|load] to manage Model Context Protocol (MCP) servers and tools",
@@ -108,7 +108,7 @@ defmodule Yoke.CLI.Formatter do
       #{cyan()}!!#{reset()}                      Flip into/out of pure console mode (plain shell passthrough, no AI/tooling)
       #{cyan()}/help#{reset()}                   Show this help menu
       #{cyan()}/guide#{reset()} or #{cyan()}/docs#{reset()}        Display Getting Started & Customization Guide summary
-      #{cyan()}/model [chat|reasoner]#{reset()}   Switch model (deepseek-chat V3 or deepseek-reasoner R1)
+      #{cyan()}/model#{reset()} or #{cyan()}/models#{reset()}        List available API models dynamically or switch model (/model <id>)
       #{cyan()}/mode [local|remote|docker]#{reset()}  Set Hands execution target
       #{cyan()}/plugins [reload]#{reset()}       List tools or hot-reload plugins live without dropping state
       #{cyan()}/mcp [list|add|load]#{reset()}    Manage Model Context Protocol (MCP) servers and tools
