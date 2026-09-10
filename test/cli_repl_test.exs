@@ -56,6 +56,80 @@ defmodule Yoke.CLIReplTest do
     assert :continue = Repl.handle_input("/mcp ls", pid, id)
   end
 
+  describe "/skills command surface" do
+    setup do
+      # Scaffold a real skill in the workspace so list/show/path have something
+      # to resolve, then clean it up afterwards.
+      root = Path.join(File.cwd!(), ".yoke/skills")
+      name = "repl-test-skill-#{System.unique_integer([:positive])}"
+      dir = Path.join(root, name)
+      File.mkdir_p!(dir)
+
+      File.write!(Path.join(dir, "SKILL.md"), """
+      ---
+      name: #{name}
+      description: A skill used by the REPL tests
+      ---
+      Repl test body for {{arg}}.
+      """)
+
+      Yoke.Skill.Manager.invalidate_cache()
+
+      on_exit(fn ->
+        File.rm_rf!(dir)
+        Yoke.Skill.Manager.invalidate_cache()
+      end)
+
+      {:ok, skill_name: name}
+    end
+
+    test "lists, shows, and resolves paths for skills", %{
+      session_pid: pid,
+      session_id: id,
+      skill_name: name
+    } do
+      assert :continue = Repl.handle_input("/skills", pid, id)
+      assert :continue = Repl.handle_input("/skills show #{name}", pid, id)
+      assert :continue = Repl.handle_input("/skills path #{name}", pid, id)
+    end
+
+    test "scaffolds a new skill via /skills new", %{session_pid: pid, session_id: id} do
+      name = "repl-scaffold-#{System.unique_integer([:positive])}"
+      path = Path.join([File.cwd!(), ".yoke/skills", name, "SKILL.md"])
+
+      on_exit(fn ->
+        File.rm_rf!(Path.dirname(path))
+        Yoke.Skill.Manager.invalidate_cache()
+      end)
+
+      assert :continue = Repl.handle_input("/skills new #{name}", pid, id)
+      assert File.exists?(path)
+    end
+
+    test "suggests close matches for an unknown skill", %{
+      session_pid: pid,
+      session_id: id,
+      skill_name: name
+    } do
+      # Truncate the name slightly so it becomes a near-miss suggestion target.
+      misspelled = String.slice(name, 0..-2//1)
+      assert :continue = Repl.handle_input("/skills #{misspelled}", pid, id)
+    end
+
+    test "reports unknown skills without crashing", %{session_pid: pid, session_id: id} do
+      assert :continue = Repl.handle_input("/skills definitely-not-a-skill", pid, id)
+      assert :continue = Repl.handle_input("/skills show definitely-not-a-skill", pid, id)
+      assert :continue = Repl.handle_input("/skills --global definitely-not-a-skill", pid, id)
+    end
+
+    test "prints usage for bare subcommand keywords", %{session_pid: pid, session_id: id} do
+      assert :continue = Repl.handle_input("/skills show", pid, id)
+      assert :continue = Repl.handle_input("/skills path", pid, id)
+      assert :continue = Repl.handle_input("/skills edit", pid, id)
+      assert :continue = Repl.handle_input("/skills new", pid, id)
+    end
+  end
+
   test "handles permission and model switching", %{session_pid: pid, session_id: id} do
     assert :continue = Repl.handle_input("/permissions auto", pid, id)
     assert :continue = Repl.handle_input("/permissions ask", pid, id)

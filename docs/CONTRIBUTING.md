@@ -51,7 +51,8 @@ yoke --plugin path/to/my_custom_plugin.exs
 
 ## 2. Creating Custom Skills
 
-Skills are instruction folders placed in `.yoke/skills/<skill_name>/SKILL.md`:
+Skills are instruction folders placed in `.yoke/skills/<skill_name>/SKILL.md`.
+Scaffold one with `/skills new <name>`, or create it by hand:
 
 ```markdown
 ---
@@ -64,6 +65,16 @@ description: Runs static analysis security check
 2. Verify input sanitization in web endpoints.
 ```
 
+Manage and run skills with the unified `/skills` command:
+
+```
+/skills                 # list discovered skills (project → builtin → global)
+/skills show <name>     # print the raw SKILL.md body
+/skills path <name>     # print the resolved SKILL.md path
+/skills edit <name>     # open SKILL.md in $EDITOR
+/skills new <name>      # scaffold a new skill
+/skills <name> [args]   # execute a skill ({{arg}} / $ARGUMENTS are substituted)
+```
 ---
 
 ## 3. Running Code Quality & Test Verification

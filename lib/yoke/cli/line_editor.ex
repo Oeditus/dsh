@@ -672,8 +672,17 @@ defmodule Yoke.CLI.LineEditor do
 
   def toggle_reverse_search(%{search_mode: true} = state), do: state
 
-  @ragex_subcommands ~w(/ragex audit /ragex export /ragex help /ragex quality /ragex reindex /ragex stats /ragex url)
-  @export_subcommands ~w(/export json /export lmml /export lmmlz /export markdown)
+  @ragex_subcommands [
+    "/ragex audit",
+    "/ragex export",
+    "/ragex help",
+    "/ragex quality",
+    "/ragex reindex",
+    "/ragex stats",
+    "/ragex url"
+  ]
+  @export_subcommands ["/export json", "/export lmml", "/export lmmlz", "/export markdown"]
+  @skills_subcommands ["/skills show", "/skills path", "/skills edit", "/skills new"]
 
   @doc """
   Tab-completes slash commands and subcommands given input.
@@ -689,6 +698,9 @@ defmodule Yoke.CLI.LineEditor do
 
       String.starts_with?(input, "/export ") ->
         complete_candidates(input, @export_subcommands)
+
+      String.starts_with?(input, "/skills ") ->
+        complete_candidates(input, @skills_subcommands)
 
       String.starts_with?(input, "/") ->
         complete_candidates(input, @slash_commands)

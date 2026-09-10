@@ -43,7 +43,7 @@ defmodule Yoke.CLI.Formatter do
     "Use /plugins [reload] to list tools or hot-reload plugins live without dropping state",
     "Use /mcp [list|add|load] to manage Model Context Protocol (MCP) servers and tools",
     "Use /ragex to mount first-class Ragex code analysis & refactoring MCP tools",
-    "Use /skills [name] to list available skills or execute a skill instruction",
+    "Use /skills [list|show|path|edit|new|<name>] to list, inspect, scaffold, or execute skills",
     "Use /compact to compress conversation context to save tokens",
     "Use /diff to show colorized git diff of workspace changes",
     "Use /linter <tool> [cr|diff|project] to run native Elixir linters (oeditus_credo, propwise, credo)",
@@ -113,7 +113,7 @@ defmodule Yoke.CLI.Formatter do
       #{cyan()}/plugins [reload]#{reset()}       List tools or hot-reload plugins live without dropping state
       #{cyan()}/mcp [list|add|load]#{reset()}    Manage Model Context Protocol (MCP) servers and tools
       #{cyan()}/ragex#{reset()}                  Mount first-class Ragex code analysis & refactoring MCP tools (@../ragex)
-      #{cyan()}/skills [name]#{reset()}          List available skills or execute a skill instruction
+      #{cyan()}/skills [show|path|edit|new|<name>]#{reset()} List, inspect, scaffold, or execute skills
       #{cyan()}/compact#{reset()}                Compress conversation context to save tokens
       #{cyan()}/diff#{reset()}                   Show colorized git diff of workspace changes
       #{cyan()}/review <base> [head]#{reset()}   Compare two git branches and generate a detailed Code Review

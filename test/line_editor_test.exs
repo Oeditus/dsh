@@ -340,6 +340,19 @@ defmodule Yoke.LineEditorTest do
       assert :none = LineEditor.tab_complete("not_a_slash_cmd")
       assert :none = LineEditor.tab_complete("/zzz")
     end
+
+    test "completes /skills subcommands" do
+      assert {:ok, "/skills show"} = LineEditor.tab_complete("/skills sh")
+      assert {:ok, "/skills path"} = LineEditor.tab_complete("/skills pa")
+      assert {:ok, "/skills edit"} = LineEditor.tab_complete("/skills ed")
+      assert {:ok, "/skills new"} = LineEditor.tab_complete("/skills ne")
+    end
+
+    test "completes multi-word /ragex and /export subcommands" do
+      assert {:ok, "/ragex audit"} = LineEditor.tab_complete("/ragex au")
+      assert {:ok, "/ragex reindex"} = LineEditor.tab_complete("/ragex re")
+      assert {:ok, "/export markdown"} = LineEditor.tab_complete("/export mark")
+    end
   end
 
   describe "syntax highlighting and ghost suggestions" do

@@ -298,7 +298,29 @@ When writing Ecto migrations:
 3. Never execute raw `execute("ALTER TABLE ...")` without safety timeouts.
 ```
 
-Invoke skills manually via `/skills ecto-migration-checker` or let Yoke auto-activate them based on task context.
+Invoke skills via the unified `/skills` command:
+
+```
+/skills                          # list all discovered skills (with scope & path)
+/skills show <name>              # print the raw SKILL.md body without invoking the model
+/skills path <name>              # print the resolved SKILL.md path
+/skills edit <name>              # open the SKILL.md in $EDITOR
+/skills new <name>               # scaffold a new skill in .yoke/skills/<name>/SKILL.md
+/skills <name> [args]            # execute a skill, passing args into the body
+/skills --global <name>          # force the global (~/.yoke/skills) definition
+/skill <name>                    # back-compat alias for /skills <name>
+```
+
+Skills are resolved by exact name, then case-insensitively, then by unique
+prefix; a near-miss returns a "did you mean ...?" suggestion. Skills are
+searched in precedence order (project → builtin → global), and a shadowed
+definition is flagged in the listing.
+
+Skill bodies may reference invocation arguments with `{{arg}}` (or
+`$ARGUMENTS`), which are substituted before the skill runs. For example, a
+skill body containing `Review {{arg}} for migration safety.` invoked as
+`/skills ecto-migration-checker lib/repo/migrations/2024_add_index.exs` runs
+with the path substituted in.
 
 ### 3. Ragex Code & Image Intelligence (`/ragex`)
 Mount **Ragex** to give Yoke native AST and SCIP code intelligence:

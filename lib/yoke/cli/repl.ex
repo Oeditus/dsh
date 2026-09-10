@@ -909,50 +909,98 @@ defmodule Yoke.CLI.Repl do
     :continue
   end
 
+  # ---------------------------------------------------------------------
+  # /skills -- unified skill command surface
+  #
+  #   /skills                     list discovered skills
+  #   /skills <name> [args]       execute a skill (args substituted into body)
+  #   /skills show <name>         print the raw SKILL.md body
+  #   /skills path <name>         print the resolved SKILL.md path
+  #   /skills edit <name>         open the SKILL.md in $EDITOR
+  #   /skills new <name>          scaffold a new skill in .yoke/skills
+  #   /skills --global <name>     force the global (~/.yoke/skills) source
+  #
+  # `/skill <name>` is retained as a back-compat alias.
+  # ---------------------------------------------------------------------
+
   def handle_input("/skills", _session_pid, _session_id) do
-    skills = SkillManager.discover_skills()
-
-    skill_rows =
-      if Enum.empty?(skills) do
-        "*No skills discovered in `.yoke/skills` or `~/.yoke/skills`.*"
-      else
-        Enum.map_join(skills, "\n", fn s ->
-          "- **`#{s.name}`** [`#{Path.basename(s.path)}`]: #{s.description}"
-        end)
-      end
-
-    md = "### Discovered Skills (#{length(skills)})\n\n#{skill_rows}"
-    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    print_skills_list(SkillManager.discover_skills())
     :continue
   end
 
-  def handle_input("/skill " <> skill_name, session_pid, _session_id) do
-    name = String.trim(skill_name)
-    skills = SkillManager.discover_skills()
+  def handle_input("/skills show " <> name, _session_pid, _session_id) do
+    with_skill(name, fn skill ->
+      md = "### `#{skill.name}` (#{skill.scope})\n\n#{skill.content}"
+      IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+    end)
 
-    case Enum.find(skills, fn s -> s.name == name end) do
-      %SkillManager{content: content} ->
-        prompt = "Execute skill '#{name}':\n\n#{content}"
-        IO.puts(Formatter.format_info("Loading and executing skill '#{name}'…"))
+    :continue
+  end
 
-        case Session.send_user_message(session_pid, prompt) do
-          {:ok, %{content: out}} ->
-            IO.puts("\n" <> Formatter.format_agent_response(out) <> "\n")
-            Formatter.flush()
+  def handle_input("/skills path " <> name, _session_pid, _session_id) do
+    with_skill(name, fn skill ->
+      IO.puts(Formatter.format_info("#{skill.name} → #{skill.path}"))
+    end)
 
-          {:error, err} ->
-            IO.puts(Formatter.format_error(err))
-            Formatter.flush()
-        end
+    :continue
+  end
 
-      nil ->
-        IO.puts(
-          Formatter.format_error(
-            "Skill '#{name}' not found. Use /skills to view available skills."
-          )
-        )
+  def handle_input("/skills edit " <> name, _session_pid, _session_id) do
+    with_skill(name, fn skill ->
+      editor = System.get_env("EDITOR") || System.get_env("VISUAL") || "vi"
+      IO.puts(Formatter.format_info("Opening #{skill.path} in #{editor}…"))
+
+      case System.cmd(editor, [skill.path], into: IO.stream(:stdio, :line)) do
+        {_, 0} -> IO.puts(Formatter.format_success("Closed #{Path.basename(skill.path)}."))
+        {_, code} -> IO.puts(Formatter.format_error("Editor exited with status #{code}."))
+      end
+    end)
+
+    :continue
+  end
+
+  def handle_input("/skills new " <> name, _session_pid, _session_id) do
+    name = String.trim(name)
+    root = Path.join(File.cwd!(), ".yoke/skills")
+
+    case SkillManager.scaffold(name, root) do
+      {:ok, path} ->
+        SkillManager.invalidate_cache()
+        IO.puts(Formatter.format_success("Scaffolded skill '#{name}' at #{path}"))
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
     end
 
+    :continue
+  end
+
+  def handle_input("/skills --global " <> name, session_pid, session_id) do
+    execute_skill(String.trim(name), "",
+      global: true,
+      session_pid: session_pid,
+      session_id: session_id
+    )
+
+    :continue
+  end
+
+  def handle_input("/skills " <> rest, session_pid, session_id) do
+    {name, args} = split_skill_invocation(rest)
+
+    if name in ["show", "path", "edit", "new"] do
+      IO.puts(Formatter.format_error("Usage: /skills #{name} <skill-name>"))
+    else
+      execute_skill(name, args, session_pid: session_pid, session_id: session_id)
+    end
+
+    :continue
+  end
+
+  # Back-compat alias for the singular form.
+  def handle_input("/skill " <> rest, session_pid, session_id) do
+    {name, args} = split_skill_invocation(rest)
+    execute_skill(name, args, session_pid: session_pid, session_id: session_id)
     :continue
   end
 
@@ -2212,6 +2260,130 @@ defmodule Yoke.CLI.Repl do
       end
 
     IO.puts(Formatter.format_info("God mode: #{state}"))
+  end
+
+  # ---------------------------------------------------------------------
+  # /skills helpers
+  # ---------------------------------------------------------------------
+
+  defp split_skill_invocation(rest) do
+    case String.split(String.trim(rest), " ", parts: 2) do
+      [name, args] -> {name, args}
+      [name] -> {name, ""}
+      _ -> {"", ""}
+    end
+  end
+
+  defp print_skills_list(skills) do
+    skill_rows =
+      if Enum.empty?(skills) do
+        "*No skills discovered in `.yoke/skills`, `~/.yoke/skills`, or the builtin skills dir.*"
+      else
+        Enum.map_join(skills, "\n", &format_skill_row/1)
+      end
+
+    shadow_warning =
+      case SkillManager.shadowed(skills) do
+        [] ->
+          ""
+
+        shadowed ->
+          names =
+            Enum.map_join(shadowed, ", ", fn {n, win, lose} ->
+              "`#{n}` (#{lose} shadowed by #{win})"
+            end)
+
+          "\n\n> ⚠ Shadowed skills: #{names}"
+      end
+
+    md = """
+    ### Discovered Skills (#{length(skills)})
+
+    #{skill_rows}#{shadow_warning}
+
+    Execute one with `/skills <name>`, inspect with `/skills show <name>`, or
+    scaffold a new one with `/skills new <name>`.
+    """
+
+    IO.puts("\n" <> Formatter.format_markdown(md) <> "\n")
+  end
+
+  defp format_skill_row(%SkillManager{error: error} = s) when is_binary(error) do
+    "- ⚠ **`#{s.name}`** (#{s.scope}): #{error} — *skipped*"
+  end
+
+  defp format_skill_row(%SkillManager{} = s) do
+    shadow = if s.shadowed_by, do: " _(shadows #{s.shadowed_by})_", else: ""
+    "- **`#{s.name}`** (#{s.scope}): #{s.description}#{shadow}\n  `#{s.path}`"
+  end
+
+  defp with_skill(name, fun) do
+    name = String.trim(name)
+    skills = SkillManager.discover_skills()
+
+    case SkillManager.find_skill(skills, name) do
+      {:ok, skill} ->
+        fun.(skill)
+
+      {:error, :not_found} ->
+        IO.puts(Formatter.format_error(skill_not_found_message(skills, name)))
+    end
+  end
+
+  defp execute_skill(name, args, opts) do
+    skills = SkillManager.discover_skills()
+
+    skills =
+      if Keyword.get(opts, :global, false) do
+        Enum.filter(skills, &(&1.scope == :global))
+      else
+        skills
+      end
+
+    case SkillManager.find_skill(skills, name) do
+      {:ok, %SkillManager{error: error}} when is_binary(error) ->
+        IO.puts(Formatter.format_error("Skill '#{name}' is invalid: #{error}"))
+
+      {:ok, skill} ->
+        run_skill(skill, args, opts)
+
+      {:error, :not_found} ->
+        IO.puts(Formatter.format_error(skill_not_found_message(skills, name)))
+    end
+  end
+
+  defp run_skill(skill, args, opts) do
+    session_pid = Keyword.fetch!(opts, :session_pid)
+    body = SkillManager.render(skill, args)
+
+    prompt =
+      if args == "" do
+        "Execute skill '#{skill.name}':\n\n#{body}"
+      else
+        "Execute skill '#{skill.name}' with arguments '#{args}':\n\n#{body}"
+      end
+
+    IO.puts(Formatter.format_info("Loading and executing skill '#{skill.name}'…"))
+
+    case Session.send_user_message(session_pid, prompt) do
+      {:ok, %{content: out}} ->
+        IO.puts("\n" <> Formatter.format_agent_response(out) <> "\n")
+        Formatter.flush()
+
+      {:error, err} ->
+        IO.puts(Formatter.format_error(err))
+        Formatter.flush()
+    end
+  end
+
+  defp skill_not_found_message(skills, name) do
+    case SkillManager.suggestions(skills, name) do
+      [] ->
+        "Skill '#{name}' not found. Use /skills to view available skills."
+
+      [_ | _] = suggestions ->
+        "Skill '#{name}' not found. Did you mean: #{Enum.join(suggestions, ", ")}?"
+    end
   end
 
   defp handle_rules_delete do

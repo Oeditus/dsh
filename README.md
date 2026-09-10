@@ -380,7 +380,7 @@ The full reference lives in [`docs/cheat_sheet.md`](docs/cheat_sheet.md); the es
 | `/plugins [reload\|info]` | List tools or hot-reload plugins live without dropping state |
 | `/mcp [list\|add\|load]` | Manage Model Context Protocol (MCP) servers and tools |
 | `/ragex [stats\|reindex\|export]` | Mount and drive the first-class Ragex code analysis & refactoring MCP server |
-| `/skills` \| `/skill <name>` | List available skills or execute a skill instruction |
+| `/skills [list\|show\|path\|edit\|new\|<name>]` \| `/skill <name>` | List, inspect, scaffold, or execute skills (arguments may be passed to a skill) |
 | `/subagent <prompt>` | Spawn a background subagent worker for sub-tasks |
 | `/workflow [list\|run\|status\|resume\|abort\|init]` | Run customizable multi-step workflows (branch, describe, split & parallelize, test/docs, lint, commit) |
 | `/config [style\|prompt\|toggle]` | Manage prompt styles and UI toggles |
