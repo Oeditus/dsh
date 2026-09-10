@@ -469,7 +469,11 @@ defmodule Yoke.CLI.ConfigExplorer do
       :practices ->
         if prac = Enum.at(state.tree.practices, state.cursor) do
           if File.exists?(prac.path) do
-            Yoke.CLI.Editor.edit_file(prac.path, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0)
+            Yoke.CLI.Editor.edit_file(prac.path,
+              on_before: &restore_tty_mode/0,
+              on_after: &set_raw_mode/0
+            )
+
             refresh_state(state, "Edited practice file '#{prac.file}'")
           else
             state
@@ -481,7 +485,11 @@ defmodule Yoke.CLI.ConfigExplorer do
       :sessions ->
         if sess = Enum.at(state.tree.sessions, state.cursor) do
           if File.exists?(sess.path) do
-            Yoke.CLI.Editor.edit_file(sess.path, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0)
+            Yoke.CLI.Editor.edit_file(sess.path,
+              on_before: &restore_tty_mode/0,
+              on_after: &set_raw_mode/0
+            )
+
             refresh_state(state, "Opened session log '#{sess.file}' in editor.")
           else
             state
@@ -493,7 +501,11 @@ defmodule Yoke.CLI.ConfigExplorer do
       :jobs ->
         if job = Enum.at(state.tree.jobs, state.cursor) do
           if File.exists?(job.path) do
-            Yoke.CLI.Editor.edit_file(job.path, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0)
+            Yoke.CLI.Editor.edit_file(job.path,
+              on_before: &restore_tty_mode/0,
+              on_after: &set_raw_mode/0
+            )
+
             refresh_state(state, "Opened job log '#{job.file}' in editor.")
           else
             state
@@ -504,7 +516,11 @@ defmodule Yoke.CLI.ConfigExplorer do
 
       :diagnostics ->
         if File.exists?(state.tree.errors.file_path) do
-          Yoke.CLI.Editor.edit_file(state.tree.errors.file_path, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0)
+          Yoke.CLI.Editor.edit_file(state.tree.errors.file_path,
+            on_before: &restore_tty_mode/0,
+            on_after: &set_raw_mode/0
+          )
+
           refresh_state(state, "Opened diagnostic log ERRORS_TO_FIX.lmml in editor.")
         else
           state
@@ -549,12 +565,16 @@ defmodule Yoke.CLI.ConfigExplorer do
 
   def handle_add_rule(state) do
     input =
-      case Yoke.CLI.Editor.edit_text("", on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0) do
+      case Yoke.CLI.Editor.edit_text("",
+             on_before: &restore_tty_mode/0,
+             on_after: &set_raw_mode/0
+           ) do
         {:ok, text} ->
           text
 
         {:fallback, _} ->
           restore_tty_mode()
+
           IO.write(
             :user,
             "\r\n#{Formatter.cyan()}󰏫  Enter new rule (format 'scope: text' or 'text'): #{Formatter.reset()}"
@@ -585,7 +605,10 @@ defmodule Yoke.CLI.ConfigExplorer do
     val_str = if is_binary(curr_val), do: curr_val, else: inspect(curr_val)
 
     input =
-      case Yoke.CLI.Editor.edit_text(val_str, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0) do
+      case Yoke.CLI.Editor.edit_text(val_str,
+             on_before: &restore_tty_mode/0,
+             on_after: &set_raw_mode/0
+           ) do
         {:ok, text} ->
           text
 
@@ -643,12 +666,16 @@ defmodule Yoke.CLI.ConfigExplorer do
 
   defp prompt_and_update_rule(state, rule_id, curr_text) do
     input =
-      case Yoke.CLI.Editor.edit_text(curr_text, on_before: &restore_tty_mode/0, on_after: &set_raw_mode/0) do
+      case Yoke.CLI.Editor.edit_text(curr_text,
+             on_before: &restore_tty_mode/0,
+             on_after: &set_raw_mode/0
+           ) do
         {:ok, text} ->
           text
 
         {:fallback, _} ->
           restore_tty_mode()
+
           IO.write(
             :user,
             "\r\n#{Formatter.cyan()}󰏫  Edit rule ##{rule_id} text (current: #{curr_text}): #{Formatter.reset()}"

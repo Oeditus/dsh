@@ -37,7 +37,10 @@ defmodule Yoke.CLI.Editor do
 
     if editor && executable_exists?(editor) do
       ext = opts[:ext] || ".txt"
-      tmp_file = Path.join(System.tmp_dir!(), "yoke_edit_#{System.unique_integer([:positive])}#{ext}")
+
+      tmp_file =
+        Path.join(System.tmp_dir!(), "yoke_edit_#{System.unique_integer([:positive])}#{ext}")
+
       File.write!(tmp_file, initial_text || "")
 
       on_before = opts[:on_before]
@@ -94,13 +97,21 @@ defmodule Yoke.CLI.Editor do
         end
       rescue
         e ->
-          IO.puts(Formatter.format_error("Failed to run editor '#{editor}': #{Exception.message(e)}"))
+          IO.puts(
+            Formatter.format_error("Failed to run editor '#{editor}': #{Exception.message(e)}")
+          )
+
           {:error, Exception.message(e)}
       after
         if is_function(on_after, 0), do: on_after.()
       end
     else
-      IO.puts(Formatter.format_error("No $EDITOR executable ('#{editor}') found. Please edit #{file_path} directly."))
+      IO.puts(
+        Formatter.format_error(
+          "No $EDITOR executable ('#{editor}') found. Please edit #{file_path} directly."
+        )
+      )
+
       {:error, :no_editor}
     end
   end
