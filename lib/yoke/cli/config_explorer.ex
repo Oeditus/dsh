@@ -713,7 +713,7 @@ defmodule Yoke.CLI.ConfigExplorer do
 
     # 1. Header Box
     header_title = " ⚙ .yoke Config Directory Explorer "
-    header_fill = String.duplicate("─", max(0, cols - 2 - display_width(header_title)))
+    header_fill = String.duplicate("─", max(0, cols - 3 - display_width(header_title)))
 
     header_line =
       "#{theme.border}╭─#{theme.header_title}#{header_title}#{Formatter.reset()}#{theme.border}#{header_fill}╮#{Formatter.reset()}"
@@ -768,7 +768,7 @@ defmodule Yoke.CLI.ConfigExplorer do
           "[↑/↓/PgUp/PgDn: Scroll Detail | e: Edit | Space: Toggle | Esc/q: Back to List View]"
       end
 
-    footer_fill = String.duplicate("─", max(0, cols - 2 - display_width(footer_text)))
+    footer_fill = String.duplicate("─", max(0, cols - 3 - display_width(footer_text)))
 
     footer_line =
       "#{theme.border}╰─#{Formatter.dim()}#{footer_text}#{Formatter.reset()}#{theme.border}#{footer_fill}╯#{Formatter.reset()}"
