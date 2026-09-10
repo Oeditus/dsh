@@ -9,7 +9,7 @@ defmodule Yoke.CLI.LogFormatter do
   alias Yoke.CLI.Spinner
   alias Yoke.CLI.TerminalOwner
 
-  @noisy_patterns ~r/(\[HANDLER\]|\[ACCEPT LOOP\]|Client connected|Client disconnected|Client connection|connection timeout|Waiting for data|Processing message|Sending response|Response sent|AI Cache)/i
+  @noisy_patterns ~r/(\[HANDLER\]|\[ACCEPT LOOP\]|Client connected|Client disconnected|Client connection|connection timeout|Waiting for data|Processing message|Sending response|Response sent|AI Cache|SessionLmml)/i
 
   @doc "Formats Erlang/Elixir log events into Yoke-style single lines."
   def format(%{level: level, msg: msg}, _config) do

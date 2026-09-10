@@ -101,7 +101,7 @@ defmodule Yoke.Brain.SessionLmml do
       {:error, reason} ->
         require Logger
 
-        Logger.warning(
+        Logger.debug(
           "[SessionLmml] Bundle parser validation notice for '#{session_id}': #{inspect(reason, pretty: true, limit: :infinity)}. Saving narrative text directly."
         )
 
@@ -112,13 +112,13 @@ defmodule Yoke.Brain.SessionLmml do
       require Logger
       stacktrace = Exception.format(:error, e, __STACKTRACE__)
 
-      Logger.error(
+      Logger.debug(
         "[SessionLmml] Exception during session encoding for '#{session_id}':\n#{stacktrace}"
       )
 
       case binding() |> Keyword.get(:narrative) do
         narrative when is_binary(narrative) ->
-          Logger.info(
+          Logger.debug(
             "[SessionLmml] Recovered constructed LMML narrative despite parser validation exception."
           )
 
@@ -173,7 +173,7 @@ defmodule Yoke.Brain.SessionLmml do
       {:error, reason} ->
         require Logger
 
-        Logger.warning(
+        Logger.debug(
           "[SessionLmml] Bundle parser notice on decode: #{inspect(reason)}. Falling back to regex embed extractor."
         )
 
