@@ -8,4 +8,11 @@ defmodule YokeTest do
     {:ok, response} = Yoke.send_message(session_pid, "What tools do you have?")
     assert is_binary(response.content)
   end
+
+  test "returns non-empty version string matching configured version" do
+    vsn = Yoke.version()
+    assert is_binary(vsn)
+    assert vsn =~ ~r/^\d+\.\d+\.\d+/
+    assert vsn == Mix.Project.config()[:version]
+  end
 end

@@ -71,11 +71,13 @@ defmodule Yoke.CLI.Formatter do
 
   def banner do
     color = banner_color()
+    version = Yoke.version()
+    title_line = String.pad_trailing("  ✦ Yoke Agentic CLI (YOKE RAGE)  v#{version}", 78)
 
     """
 
     #{color}#{bold()}╭──────────────────────────────────────────────────────────────────────────────╮
-    │  ✦ Yoke Agentic CLI (YOKE RAGE)  v0.8.0                                      │
+    │#{title_line}│
     │  #{dim()}Actors • Hot-Code Reloading • Distributed Brain/Hands • Temporal Snapshots#{reset()}#{color}  │
     ╰──────────────────────────────────────────────────────────────────────────────╯#{reset()}
     """

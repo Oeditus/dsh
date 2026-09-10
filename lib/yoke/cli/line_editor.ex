@@ -1630,7 +1630,8 @@ defmodule Yoke.CLI.LineEditor do
               false,
               false,
               filterable: true,
-              initial_filter: initial_filter
+              initial_filter: initial_filter,
+              clear_on_done: true
             )
           end)
 
@@ -1657,8 +1658,9 @@ defmodule Yoke.CLI.LineEditor do
     end
   end
 
-  defp replace_or_insert_file_ref(state, clean_path, strip_count, left, right) do
-    inserted = "@" <> clean_path
+  def replace_or_insert_file_ref(state, clean_path, strip_count, left, right) do
+    clean_path = String.trim_leading(clean_path, "@")
+    inserted = "@" <> clean_path <> " "
     chars = String.graphemes(inserted)
 
     left_trimmed =

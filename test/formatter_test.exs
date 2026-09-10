@@ -28,10 +28,11 @@ defmodule Yoke.FormatterTest do
     assert random_tip in tips
   end
 
-  test "renders ASCII banner with YOKE RAGE title" do
+  test "renders ASCII banner with YOKE RAGE title and actual version" do
     banner = Formatter.banner()
     assert String.contains?(banner, "YOKE RAGE")
     assert String.contains?(banner, "Yoke Agentic CLI")
+    assert String.contains?(banner, "v#{Yoke.version()}")
   end
 
   test "renders help menu with all slash commands" do

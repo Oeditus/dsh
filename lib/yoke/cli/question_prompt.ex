@@ -264,6 +264,7 @@ defmodule Yoke.CLI.QuestionPrompt do
       subagent: subagent,
       filterable: filterable,
       filter_query: initial_filter,
+      clear_on_done: Keyword.get(opts, :clear_on_done, false),
       cursor: 0,
       selected: MapSet.new(),
       rendered_lines: 0
@@ -385,7 +386,11 @@ defmodule Yoke.CLI.QuestionPrompt do
       end
 
     restore_tty_mode()
-    IO.write(:user, "\r\n")
+
+    unless Keyword.get(opts, :clear_on_done, false) do
+      IO.write(:user, "\r\n")
+    end
+
     res
   end
 
@@ -406,6 +411,12 @@ defmodule Yoke.CLI.QuestionPrompt do
   rescue
     _ -> :ok
   end
+
+  defp erase_modal(%{rendered_lines: n}) when is_integer(n) and n > 0 do
+    IO.write(:user, "\r\e[#{n}A\e[0J")
+  end
+
+  defp erase_modal(_), do: :ok
 
   defp tui_loop(state) do
     state = render_modal(state)
@@ -434,7 +445,12 @@ defmodule Yoke.CLI.QuestionPrompt do
         end
 
       :escape ->
-        tui_loop(state)
+        if Map.get(state, :clear_on_done, false) or Map.get(state, :filterable, false) do
+          if Map.get(state, :clear_on_done, false), do: erase_modal(state)
+          %{cancelled: true, selected: []}
+        else
+          tui_loop(state)
+        end
 
       {:char, char_code} when char_code >= ?1 and char_code <= ?9 ->
         if Map.get(state, :filterable, false) do
@@ -457,14 +473,20 @@ defmodule Yoke.CLI.QuestionPrompt do
 
       :enter ->
         case handle_confirm(state) do
-          :reloop -> tui_loop(state)
-          result -> result
+          :reloop ->
+            tui_loop(state)
+
+          result ->
+            if Map.get(state, :clear_on_done, false), do: erase_modal(state)
+            result
         end
 
       :ctrl_c ->
+        if Map.get(state, :clear_on_done, false), do: erase_modal(state)
         %{cancelled: true, selected: []}
 
       :eof ->
+        if Map.get(state, :clear_on_done, false), do: erase_modal(state)
         restore_tty_mode()
 
         prompt_non_tty(

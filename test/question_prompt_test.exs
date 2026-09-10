@@ -261,5 +261,10 @@ defmodule Yoke.CLI.QuestionPromptTest do
       assert {:ok, state3} = QuestionPrompt.handle_filter_backspace(state2)
       assert state3.filter_query == ""
     end
+
+    test "stores clear_on_done option in state" do
+      state = QuestionPrompt.new_state("Pick file:", ["a.ex"], false, -1, false, nil, nil, clear_on_done: true)
+      assert state.clear_on_done == true
+    end
   end
 end

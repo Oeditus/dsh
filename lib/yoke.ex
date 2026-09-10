@@ -8,6 +8,17 @@ defmodule Yoke do
   alias Yoke.Brain.SessionSupervisor
   alias Yoke.Plugin.Loader, as: PluginLoader
 
+  @version Mix.Project.config()[:version]
+
+  @doc "Returns the version of Yoke."
+  def version do
+    case Application.spec(:yoke, :vsn) do
+      vsn when is_list(vsn) -> List.to_string(vsn)
+      vsn when is_binary(vsn) -> vsn
+      _ -> @version
+    end
+  end
+
   @doc "Starts a new session actor with given options."
   def start_session(opts \\ []) do
     SessionSupervisor.start_session(opts)

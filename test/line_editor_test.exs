@@ -657,5 +657,17 @@ defmodule Yoke.LineEditorTest do
       assert Enum.join(result.buffer) == "@"
       assert result.cursor == 1
     end
+
+    test "replaces file reference and formats inserted @file.name as simple editable text with trailing space" do
+      state = LineEditor.new_state("prompt> ")
+      state = %{state | buffer: String.graphemes("@lib/yo"), cursor: 7}
+
+      {left, right} = Enum.split(state.buffer, state.cursor)
+      result = LineEditor.replace_or_insert_file_ref(state, "lib/yoke.ex", 7, left, right)
+
+      assert Enum.join(result.buffer) == "@lib/yoke.ex "
+      assert result.cursor == 13
+      assert result.first_render == true
+    end
   end
 end
