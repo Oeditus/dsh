@@ -84,7 +84,8 @@ defmodule Yoke.CLI.ConfigExplorer do
                 file: file,
                 path: full_path,
                 size: stat.size,
-                mtime: stat.mtime
+                mtime: stat.mtime,
+                timestamp: format_timestamp(stat.mtime)
               })
             end)
 
@@ -189,7 +190,8 @@ defmodule Yoke.CLI.ConfigExplorer do
               file: file,
               path: full_path,
               size: stat.size,
-              mtime: stat.mtime
+              mtime: stat.mtime,
+              timestamp: format_timestamp(stat.mtime)
             }
           end)
           |> Enum.sort_by(& &1.mtime, :desc)
@@ -206,19 +208,66 @@ defmodule Yoke.CLI.ConfigExplorer do
     file_path = Path.join(cwd, ".yoke/ERRORS_TO_FIX.lmml")
 
     if File.exists?(file_path) do
+      stat = File.stat!(file_path)
       content = File.read!(file_path)
 
-      entries =
+      raw_entries =
         content
         |> String.split("<!-- error_entry -->", trim: true)
         |> Enum.map(&String.trim/1)
         |> Enum.reject(&(&1 == ""))
 
-      %{file_path: file_path, count: length(entries), content: content, entries: entries}
+      parsed_entries =
+        raw_entries
+        |> Enum.map(fn entry ->
+          ts_str =
+            case Regex.run(~r/\[(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}[^\]]*)\]/, entry) do
+              [_, ts] -> format_timestamp(ts)
+              _ -> format_timestamp(stat.mtime)
+            end
+
+          first_line =
+            entry
+            |> String.split("\n")
+            |> Enum.reject(&(String.starts_with?(&1, "## [") or &1 == ""))
+            |> List.first() || entry
+
+          %{
+            timestamp: ts_str,
+            title: first_line,
+            raw_entry: entry
+          }
+        end)
+        |> Enum.sort_by(& &1.timestamp, :desc)
+
+      %{file_path: file_path, count: length(parsed_entries), content: content, entries: parsed_entries}
     else
       %{file_path: file_path, count: 0, content: "", entries: []}
     end
   end
+
+  def format_timestamp({{y, m, d}, {h, i, s}}) do
+    y_s = String.pad_leading(to_string(y), 4, "0")
+    m_s = String.pad_leading(to_string(m), 2, "0")
+    d_s = String.pad_leading(to_string(d), 2, "0")
+    h_s = String.pad_leading(to_string(h), 2, "0")
+    i_s = String.pad_leading(to_string(i), 2, "0")
+    s_s = String.pad_leading(to_string(s), 2, "0")
+    "#{y_s}-#{m_s}-#{d_s} #{h_s}:#{i_s}:#{s_s}"
+  end
+
+  def format_timestamp(%DateTime{} = dt) do
+    Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S")
+  end
+
+  def format_timestamp(ts) when is_binary(ts) do
+    ts
+    |> String.replace("T", " ")
+    |> String.replace("Z", "")
+    |> String.slice(0, 19)
+  end
+
+  def format_timestamp(_), do: "unknown"
 
   # ---------------------------------------------------------------------
   # TUI State Management
@@ -694,12 +743,13 @@ defmodule Yoke.CLI.ConfigExplorer do
     model = Map.get(sess, :model, "deepseek-chat")
     msg_cnt = Map.get(sess, :msg_count, 0)
     preview = Map.get(sess, :preview, "")
+    ts = Map.get(sess, :timestamp, "")
 
     content =
       if is_selected do
-        "#{theme.bold_cursor} ❯ #{sess.id} #{Formatter.reset()}#{Formatter.cyan()}[#{model}] #{msg_cnt} msgs (#{size_kb} KB) - \"#{preview}\"#{Formatter.reset()}"
+        "#{theme.bold_cursor} ❯ #{sess.id} #{Formatter.reset()}#{Formatter.yellow()}[#{ts}]#{Formatter.reset()} #{Formatter.cyan()}[#{model}] #{msg_cnt} msgs (#{size_kb} KB) - \"#{preview}\"#{Formatter.reset()}"
       else
-        "   #{sess.id} #{Formatter.dim()}[#{model}] #{msg_cnt} msgs (#{size_kb} KB) - \"#{preview}\"#{Formatter.reset()}"
+        "   #{sess.id} #{Formatter.dim()}[#{ts}] [#{model}] #{msg_cnt} msgs (#{size_kb} KB) - \"#{preview}\"#{Formatter.reset()}"
       end
 
     format_box_row(content, cols, theme.border)
@@ -717,24 +767,27 @@ defmodule Yoke.CLI.ConfigExplorer do
   end
 
   defp format_item_row(:jobs, job, is_selected, cols, theme) do
+    ts = Map.get(job, :timestamp, "")
+
     content =
       if is_selected do
-        "#{theme.bold_cursor} ❯ Job #{job.id} (#{job.size} bytes log) - #{job.file}#{Formatter.reset()}"
+        "#{theme.bold_cursor} ❯ Job #{job.id} #{Formatter.reset()}#{Formatter.yellow()}[#{ts}]#{Formatter.reset()} #{theme.bold_cursor}(#{job.size} bytes log) - #{job.file}#{Formatter.reset()}"
       else
-        "   Job #{job.id} (#{job.size} bytes log) - #{job.file}"
+        "   Job #{job.id} #{Formatter.dim()}[#{ts}] (#{job.size} bytes log) - #{job.file}"
       end
 
     format_box_row(content, cols, theme.border)
   end
 
   defp format_item_row(:diagnostics, entry, is_selected, cols, theme) do
-    first_line = entry |> String.split("\n") |> List.first() || entry
+    ts = if is_map(entry), do: Map.get(entry, :timestamp, ""), else: ""
+    title = if is_map(entry), do: Map.get(entry, :title, ""), else: (entry |> String.split("\n") |> List.first() || entry)
 
     content =
       if is_selected do
-        "#{theme.bold_cursor} ❯ #{Formatter.red()}●#{Formatter.reset()} #{theme.bold_cursor}#{first_line}#{Formatter.reset()}"
+        "#{theme.bold_cursor} ❯ #{Formatter.red()}●#{Formatter.reset()} #{Formatter.yellow()}[#{ts}]#{Formatter.reset()} #{theme.bold_cursor}#{title}#{Formatter.reset()}"
       else
-        "   #{Formatter.red()}●#{Formatter.reset()} #{first_line}"
+        "   #{Formatter.red()}●#{Formatter.reset()} #{Formatter.dim()}[#{ts}]#{Formatter.reset()} #{title}"
       end
 
     format_box_row(content, cols, theme.border)
@@ -889,7 +942,11 @@ defmodule Yoke.CLI.ConfigExplorer do
     header ++ body
   end
 
-  defp format_item_detail(:diagnostics, entry, _state) do
+  defp format_item_detail(:diagnostics, %{raw_entry: raw}, _state) do
+    ["=== Diagnostic Report Entry ==="] ++ String.split(raw, "\n")
+  end
+
+  defp format_item_detail(:diagnostics, entry, _state) when is_binary(entry) do
     ["=== Diagnostic Report Entry ==="] ++ String.split(entry, "\n")
   end
 
