@@ -121,10 +121,17 @@ defmodule Yoke.CLI.ConfigExplorer do
                 case SessionLmml.decode(content) do
                   {:ok, data} when is_map(data) ->
                     msgs = Map.get(data, "messages") || Map.get(data, :messages) || []
-                    user_msg = Enum.find(msgs, fn m -> to_string(Map.get(m, "role") || Map.get(m, :role)) == "user" end)
+
+                    user_msg =
+                      Enum.find(msgs, fn m ->
+                        to_string(Map.get(m, "role") || Map.get(m, :role)) == "user"
+                      end)
 
                     if user_msg do
-                      cnt = Map.get(user_msg, "content") || Map.get(user_msg, :content) || Map.get(user_msg, "text")
+                      cnt =
+                        Map.get(user_msg, "content") || Map.get(user_msg, :content) ||
+                          Map.get(user_msg, "text")
+
                       to_string(cnt || "") |> String.replace(~r/[\r\n\t]+/, " ") |> String.trim()
                     else
                       "(session narrative)"
@@ -163,10 +170,12 @@ defmodule Yoke.CLI.ConfigExplorer do
     |> Enum.filter(fn {_scope, f, _path} -> String.ends_with?(f, ".lmml") end)
     |> Enum.map(fn {scope, file, path} ->
       lang = String.replace(file, ".lmml", "")
-      size = case File.stat(path) do
-        {:ok, st} -> st.size
-        _ -> 0
-      end
+
+      size =
+        case File.stat(path) do
+          {:ok, st} -> st.size
+          _ -> 0
+        end
 
       %{scope: scope, lang: lang, file: file, path: path, size: size}
     end)
@@ -232,13 +241,16 @@ defmodule Yoke.CLI.ConfigExplorer do
             |> Enum.map(&String.trim/1)
             |> Enum.reject(fn l ->
               l == "" or
-              String.starts_with?(l, "```") or
-              String.starts_with?(l, "<!--")
+                String.starts_with?(l, "```") or
+                String.starts_with?(l, "<!--")
             end)
             |> Enum.map(fn l ->
               if String.starts_with?(l, "##") do
                 l
-                |> String.replace(~r/^##\s*(\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*)?(Level:\s*\w+\s*)?/, "")
+                |> String.replace(
+                  ~r/^##\s*(\[\d{4}-\d{2}-\d{2}[^\]]*\]\s*)?(Level:\s*\w+\s*)?/,
+                  ""
+                )
                 |> String.trim()
               else
                 l
@@ -250,29 +262,28 @@ defmodule Yoke.CLI.ConfigExplorer do
 
           reason_line =
             Enum.find(lines, fn l ->
-              String.contains?(l, "Reason:") or String.contains?(l, "ArgumentError") or String.contains?(l, "RuntimeError") or String.contains?(l, "MatchError")
+              String.contains?(l, "Reason:") or String.contains?(l, "ArgumentError") or
+                String.contains?(l, "RuntimeError") or String.contains?(l, "MatchError")
             end)
 
           title =
-            cond do
-              reason_line != nil and reason_line != first_line ->
-                cleaned_reason =
-                  reason_line
-                  |> String.replace(~r/^[●•\s]+/, "")
-                  |> String.replace(~r/^\x1b\[[0-9;]*m/, "")
+            if reason_line != nil and reason_line != first_line do
+              cleaned_reason =
+                reason_line
+                |> String.replace(~r/^[●•\s]+/, "")
+                |> String.replace(~r/^\x1b\[[0-9;]*m/, "")
 
-                cleaned_first =
-                  first_line
-                  |> String.replace(~r/^[●•\s]+/, "")
-                  |> String.replace(~r/^\x1b\[[0-9;]*m/, "")
-                  |> String.trim_trailing(":")
-
-                "#{cleaned_first} (#{cleaned_reason})"
-
-              true ->
+              cleaned_first =
                 first_line
                 |> String.replace(~r/^[●•\s]+/, "")
                 |> String.replace(~r/^\x1b\[[0-9;]*m/, "")
+                |> String.trim_trailing(":")
+
+              "#{cleaned_first} (#{cleaned_reason})"
+            else
+              first_line
+              |> String.replace(~r/^[●•\s]+/, "")
+              |> String.replace(~r/^\x1b\[[0-9;]*m/, "")
             end
 
           %{
@@ -283,7 +294,12 @@ defmodule Yoke.CLI.ConfigExplorer do
         end)
         |> Enum.sort_by(& &1.timestamp, :desc)
 
-      %{file_path: file_path, count: length(parsed_entries), content: content, entries: parsed_entries}
+      %{
+        file_path: file_path,
+        count: length(parsed_entries),
+        content: content,
+        entries: parsed_entries
+      }
     else
       %{file_path: file_path, count: 0, content: "", entries: []}
     end
@@ -489,7 +505,11 @@ defmodule Yoke.CLI.ConfigExplorer do
 
   def handle_add_rule(state) do
     restore_tty_mode()
-    IO.write(:user, "\r\n#{Formatter.cyan()}󰏫  Enter new rule (format 'scope: text' or 'text'): #{Formatter.reset()}")
+
+    IO.write(
+      :user,
+      "\r\n#{Formatter.cyan()}󰏫  Enter new rule (format 'scope: text' or 'text'): #{Formatter.reset()}"
+    )
 
     input =
       case IO.gets(:user, "") do
@@ -553,7 +573,11 @@ defmodule Yoke.CLI.ConfigExplorer do
 
   defp prompt_and_update_rule(state, rule_id, curr_text) do
     restore_tty_mode()
-    IO.write(:user, "\r\n#{Formatter.cyan()}󰏫  Edit rule ##{rule_id} text (current: #{curr_text}): #{Formatter.reset()}")
+
+    IO.write(
+      :user,
+      "\r\n#{Formatter.cyan()}󰏫  Edit rule ##{rule_id} text (current: #{curr_text}): #{Formatter.reset()}"
+    )
 
     input =
       case IO.gets(:user, "") do
@@ -610,7 +634,9 @@ defmodule Yoke.CLI.ConfigExplorer do
     # 1. Header Box
     header_title = " ⚙ .yoke Config Directory Explorer "
     header_fill = String.duplicate("─", max(0, cols - 2 - display_width(header_title)))
-    header_line = "#{theme.border}╭─#{theme.header_title}#{header_title}#{Formatter.reset()}#{theme.border}#{header_fill}╮#{Formatter.reset()}"
+
+    header_line =
+      "#{theme.border}╭─#{theme.header_title}#{header_title}#{Formatter.reset()}#{theme.border}#{header_fill}╮#{Formatter.reset()}"
 
     # 2. Tab Bar Line
     tabs_rendered =
@@ -663,7 +689,9 @@ defmodule Yoke.CLI.ConfigExplorer do
       end
 
     footer_fill = String.duplicate("─", max(0, cols - 2 - display_width(footer_text)))
-    footer_line = "#{theme.border}╰─#{Formatter.dim()}#{footer_text}#{Formatter.reset()}#{theme.border}#{footer_fill}╯#{Formatter.reset()}"
+
+    footer_line =
+      "#{theme.border}╰─#{Formatter.dim()}#{footer_text}#{Formatter.reset()}#{theme.border}#{footer_fill}╯#{Formatter.reset()}"
 
     full_output =
       [header_line, tab_line, div_line] ++
@@ -679,6 +707,7 @@ defmodule Yoke.CLI.ConfigExplorer do
     truncated = truncate_ansi_line(content_str, content_width)
     vis_len = display_width(truncated)
     padding = String.duplicate(" ", max(0, content_width - vis_len))
+
     "#{border_ansi}│#{Formatter.reset()} #{truncated}#{padding} #{border_ansi}│#{Formatter.reset()}"
   end
 
@@ -699,7 +728,9 @@ defmodule Yoke.CLI.ConfigExplorer do
 
     if items == [] do
       empty_msg = "  (No items found in this section)"
-      [format_box_row(empty_msg, cols, theme.border)] ++ pad_empty_rows(height - 1, cols, theme.border)
+
+      [format_box_row(empty_msg, cols, theme.border)] ++
+        pad_empty_rows(height - 1, cols, theme.border)
     else
       total_items = length(items)
       cursor = min(state.cursor, total_items - 1)
@@ -744,12 +775,13 @@ defmodule Yoke.CLI.ConfigExplorer do
   defp fetch_tab_items(%{active_tab: :diagnostics, tree: tree}), do: tree.errors.entries
 
   defp format_item_row(:settings, {key, val}, is_selected, cols, theme) do
-    type_tag = cond do
-      is_boolean(val) -> "[bool]"
-      is_integer(val) -> "[num]"
-      is_binary(val) -> "[str]"
-      true -> "[val]"
-    end
+    type_tag =
+      cond do
+        is_boolean(val) -> "[bool]"
+        is_integer(val) -> "[num]"
+        is_binary(val) -> "[str]"
+        true -> "[val]"
+      end
 
     val_str = inspect(val)
 
@@ -769,7 +801,10 @@ defmodule Yoke.CLI.ConfigExplorer do
     text = Map.get(rule, "text", "")
     enabled? = Map.get(rule, "enabled", true)
 
-    status_mark = if enabled?, do: "#{Formatter.green()}✔ enabled#{Formatter.reset()}", else: "#{Formatter.red()}✘ disabled#{Formatter.reset()}"
+    status_mark =
+      if enabled?,
+        do: "#{Formatter.green()}✔ enabled#{Formatter.reset()}",
+        else: "#{Formatter.red()}✘ disabled#{Formatter.reset()}"
 
     content =
       if is_selected do
@@ -824,7 +859,11 @@ defmodule Yoke.CLI.ConfigExplorer do
 
   defp format_item_row(:diagnostics, entry, is_selected, cols, theme) do
     ts = if is_map(entry), do: Map.get(entry, :timestamp, ""), else: ""
-    title = if is_map(entry), do: Map.get(entry, :title, ""), else: (entry |> String.split("\n") |> List.first() || entry)
+
+    title =
+      if is_map(entry),
+        do: Map.get(entry, :title, ""),
+        else: entry |> String.split("\n") |> List.first() || entry
 
     content =
       if is_selected do
@@ -1201,7 +1240,9 @@ defmodule Yoke.CLI.ConfigExplorer do
   defp terminal_dimensions do
     cols =
       case :io.columns(:user) do
-        {:ok, c} when is_integer(c) and c > 20 -> c
+        {:ok, c} when is_integer(c) and c > 20 ->
+          c
+
         _ ->
           case :io.columns() do
             {:ok, c} when is_integer(c) and c > 20 -> c
@@ -1211,7 +1252,9 @@ defmodule Yoke.CLI.ConfigExplorer do
 
     rows =
       case :io.rows(:user) do
-        {:ok, r} when is_integer(r) and r > 5 -> r
+        {:ok, r} when is_integer(r) and r > 5 ->
+          r
+
         _ ->
           case :io.rows() do
             {:ok, r} when is_integer(r) and r > 5 -> r
@@ -1229,11 +1272,14 @@ defmodule Yoke.CLI.ConfigExplorer do
       false
     else
       case :io.columns(:user) do
-        {:ok, _} -> true
-        _ -> case :io.columns() do
-               {:ok, _} -> true
-               _ -> false
-             end
+        {:ok, _} ->
+          true
+
+        _ ->
+          case :io.columns() do
+            {:ok, _} -> true
+            _ -> false
+          end
       end
     end
   end
@@ -1285,10 +1331,18 @@ defmodule Yoke.CLI.ConfigExplorer do
 
   defp match_key(other) when is_binary(other) do
     cond do
-      String.contains?(other, "[A") or String.contains?(other, "OA") -> :up
-      String.contains?(other, "[B") or String.contains?(other, "OB") -> :down
-      String.contains?(other, "[C") or String.contains?(other, "OC") -> :right
-      String.contains?(other, "[D") or String.contains?(other, "OD") -> :left
+      String.contains?(other, "[A") or String.contains?(other, "OA") ->
+        :up
+
+      String.contains?(other, "[B") or String.contains?(other, "OB") ->
+        :down
+
+      String.contains?(other, "[C") or String.contains?(other, "OC") ->
+        :right
+
+      String.contains?(other, "[D") or String.contains?(other, "OD") ->
+        :left
+
       true ->
         case String.to_charlist(other) do
           [c | _] -> {:char, c}

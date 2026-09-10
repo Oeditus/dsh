@@ -839,7 +839,8 @@ defmodule Yoke.MCP.ServerManager do
   def format_mcp_content(content), do: inspect(content, pretty: true)
 
   defp ensure_dllb_server_binary do
-    existing_bin = Application.get_env(:ragex, :dllb_server_bin) || System.get_env("DLLB_SERVER_BIN")
+    existing_bin =
+      Application.get_env(:ragex, :dllb_server_bin) || System.get_env("DLLB_SERVER_BIN")
 
     if is_binary(existing_bin) and existing_bin != "" and File.exists?(existing_bin) do
       :ok

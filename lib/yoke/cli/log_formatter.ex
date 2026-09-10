@@ -15,7 +15,8 @@ defmodule Yoke.CLI.LogFormatter do
   def format(%{level: level, msg: msg}, _config) do
     formatted_msg = format_message(msg) |> String.trim()
 
-    if level == :error or String.contains?(formatted_msg, "Task.Supervisor") or String.contains?(formatted_msg, "terminating") do
+    if level == :error or String.contains?(formatted_msg, "Task.Supervisor") or
+         String.contains?(formatted_msg, "terminating") do
       write_error_to_lmml(level, formatted_msg)
     end
 
@@ -121,7 +122,8 @@ defmodule Yoke.CLI.LogFormatter do
 
   defp format_message({:string, chardata}), do: to_string(chardata)
 
-  defp format_message({:report, %{label: {Task.Supervisor, :terminating}, report: rep}}) when is_map(rep) do
+  defp format_message({:report, %{label: {Task.Supervisor, :terminating}, report: rep}})
+       when is_map(rep) do
     func_str = format_fun(Map.get(rep, :function))
     args_str = inspect(Map.get(rep, :args, []))
     reason_str = inspect(Map.get(rep, :reason, :normal))
@@ -162,7 +164,7 @@ defmodule Yoke.CLI.LogFormatter do
 
   defp format_fun(fun) when is_function(fun) do
     case Function.info(fun) do
-      info when is_list(info) ->
+      [_ | _] = info ->
         mod = Keyword.get(info, :module)
         name = Keyword.get(info, :name)
         arity = Keyword.get(info, :arity)

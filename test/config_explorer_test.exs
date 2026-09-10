@@ -12,11 +12,23 @@ defmodule Yoke.CLI.ConfigExplorerTest do
     File.mkdir_p!(Path.join(tmp_dir, ".yoke/jobs"))
 
     # Seed test files
-    File.write!(Path.join(tmp_dir, ".yoke/config.json"), "{\"model\": \"deepseek-chat\", \"god_mode\": false}")
-    File.write!(Path.join(tmp_dir, ".yoke/sessions/test_sess.lmml"), "@@@manifest.json\n{\"session_id\":\"test_sess\",\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"Fix async worker task engine\"}]}\n@@@\n\n# User\nFix async worker task engine")
+    File.write!(
+      Path.join(tmp_dir, ".yoke/config.json"),
+      "{\"model\": \"deepseek-chat\", \"god_mode\": false}"
+    )
+
+    File.write!(
+      Path.join(tmp_dir, ".yoke/sessions/test_sess.lmml"),
+      "@@@manifest.json\n{\"session_id\":\"test_sess\",\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"Fix async worker task engine\"}]}\n@@@\n\n# User\nFix async worker task engine"
+    )
+
     File.write!(Path.join(tmp_dir, ".yoke/practices/elixir.lmml"), "# Elixir Practice Guidelines")
     File.write!(Path.join(tmp_dir, ".yoke/jobs/job_101.log"), "Starting job output log...")
-    File.write!(Path.join(tmp_dir, ".yoke/ERRORS_TO_FIX.lmml"), "<!-- error_entry -->\n## Test Error Report")
+
+    File.write!(
+      Path.join(tmp_dir, ".yoke/ERRORS_TO_FIX.lmml"),
+      "<!-- error_entry -->\n## Test Error Report"
+    )
 
     on_exit(fn -> File.rm_rf!(tmp_dir) end)
     {:ok, tmp_dir: tmp_dir}
@@ -52,6 +64,7 @@ defmodule Yoke.CLI.ConfigExplorerTest do
         ● Reason:   {%ArgumentError{message: "task %Task{...} must be queried from owner"}, []}
       ```
       """
+
       File.write!(Path.join(tmp_dir, ".yoke/ERRORS_TO_FIX.lmml"), err_content)
 
       log = ConfigExplorer.read_error_log(tmp_dir)
@@ -98,7 +111,8 @@ defmodule Yoke.CLI.ConfigExplorerTest do
   describe "expandable detail views" do
     test "toggles into detail view mode on select", %{tmp_dir: tmp_dir} do
       state = ConfigExplorer.new_state(tmp_dir)
-      state = ConfigExplorer.switch_tab(state, 2) # :sessions tab
+      # :sessions tab
+      state = ConfigExplorer.switch_tab(state, 2)
 
       assert state.view_mode == :list
       detailed_state = ConfigExplorer.handle_select(state)

@@ -48,7 +48,8 @@ defmodule Yoke.Client.DeepSeekAPI do
 
     if ((is_nil(config.api_key) or config.api_key == "") and not local_endpoint?(config.endpoint)) or
          config.mock == true do
-      {:ok, ["deepseek-chat", "deepseek-reasoner", "deepseek-coder", "deepseek-v4-flash-vision-exp"]}
+      {:ok,
+       ["deepseek-chat", "deepseek-reasoner", "deepseek-coder", "deepseek-v4-flash-vision-exp"]}
     else
       fetch_real_models(config)
     end
