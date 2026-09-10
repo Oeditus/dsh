@@ -13,10 +13,10 @@ defmodule Yoke.CLI.ConfigExplorerTest do
 
     # Seed test files
     File.write!(Path.join(tmp_dir, ".yoke/config.json"), "{\"model\": \"deepseek-chat\", \"god_mode\": false}")
-    File.write!(Path.join(tmp_dir, ".yoke/sessions/test_sess.lmml"), "# Session Log")
-    File.write!(Path.join(tmp_dir, ".yoke/practices/elixir.lmml"), "# Elixir Practice")
-    File.write!(Path.join(tmp_dir, ".yoke/jobs/job_101.log"), "Starting job...")
-    File.write!(Path.join(tmp_dir, ".yoke/ERRORS_TO_FIX.lmml"), "<!-- error_entry -->\n## Test Error")
+    File.write!(Path.join(tmp_dir, ".yoke/sessions/test_sess.lmml"), "@@@manifest.json\n{\"session_id\":\"test_sess\",\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"Fix async worker task engine\"}]}\n@@@\n\n# User\nFix async worker task engine")
+    File.write!(Path.join(tmp_dir, ".yoke/practices/elixir.lmml"), "# Elixir Practice Guidelines")
+    File.write!(Path.join(tmp_dir, ".yoke/jobs/job_101.log"), "Starting job output log...")
+    File.write!(Path.join(tmp_dir, ".yoke/ERRORS_TO_FIX.lmml"), "<!-- error_entry -->\n## Test Error Report")
 
     on_exit(fn -> File.rm_rf!(tmp_dir) end)
     {:ok, tmp_dir: tmp_dir}
@@ -31,6 +31,8 @@ defmodule Yoke.CLI.ConfigExplorerTest do
 
       assert length(tree.sessions) == 1
       assert hd(tree.sessions).id == "test_sess"
+      assert hd(tree.sessions).model == "deepseek-chat"
+      assert hd(tree.sessions).preview == "Fix async worker task engine"
 
       assert length(tree.jobs) == 1
       assert hd(tree.jobs).id == "job_101"
@@ -44,7 +46,7 @@ defmodule Yoke.CLI.ConfigExplorerTest do
 
       assert String.contains?(summary, "Yoke Config Directory Explorer Summary")
       assert String.contains?(summary, "deepseek-chat")
-      assert String.contains?(summary, "1 files in .yoke/sessions/")
+      assert String.contains?(summary, "Saved Sessions/Conversations (1 files)")
     end
   end
 
@@ -72,10 +74,33 @@ defmodule Yoke.CLI.ConfigExplorerTest do
     end
   end
 
+  describe "expandable detail views" do
+    test "toggles into detail view mode on select", %{tmp_dir: tmp_dir} do
+      state = ConfigExplorer.new_state(tmp_dir)
+      state = ConfigExplorer.switch_tab(state, 2) # :sessions tab
+
+      assert state.view_mode == :list
+      detailed_state = ConfigExplorer.handle_select(state)
+      assert detailed_state.view_mode == :detail
+
+      back_state = ConfigExplorer.handle_select(detailed_state)
+      assert back_state.view_mode == :list
+    end
+
+    test "provides distinct color themes per tab" do
+      t_settings = ConfigExplorer.tab_theme(:settings)
+      t_rules = ConfigExplorer.tab_theme(:rules)
+      t_sessions = ConfigExplorer.tab_theme(:sessions)
+
+      assert String.contains?(t_settings.border, "39m")
+      assert String.contains?(t_rules.border, "220m")
+      assert String.contains?(t_sessions.border, "177m")
+    end
+  end
+
   describe "toggles and deletions" do
     test "toggles boolean setting in config tab", %{tmp_dir: tmp_dir} do
       state = ConfigExplorer.new_state(tmp_dir)
-      # Find index of 'god_mode' in sorted config keys
       keys = Enum.sort(Map.keys(state.tree.config))
       god_idx = Enum.find_index(keys, &(&1 == "god_mode"))
 
